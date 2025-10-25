@@ -1,0 +1,47 @@
+import { runCheck } from "./commands/check";
+import type { IO } from "./types";
+
+const defaultReadFile = async (path: string): Promise<string> => {
+  const file = Bun.file(path);
+  if (!(await file.exists())) {
+    throw new Error(`Unable to read file: ${path}`);
+  }
+  return await file.text();
+};
+
+export async function runCli(
+  argv: string[] = Bun.argv,
+  io: IO = {
+    stdin: Bun.stdin,
+    stdout: Bun.stdout,
+    stderr: Bun.stderr,
+    readFile: defaultReadFile,
+  },
+): Promise<number> {
+  const args = argv.slice(2);
+
+  if (args.length === 0) {
+    io.stderr.write("Usage: kr <command> <input>\n");
+    return 2;
+  }
+
+  const [command, ...rest] = args;
+
+  if (command !== "check") {
+    io.stderr.write(`Unknown command: ${command}\n`);
+    return 2;
+  }
+
+  if (rest.length !== 1) {
+    io.stderr.write("Usage: kr check <path | ->\n");
+    return 2;
+  }
+
+  const input = rest[0]!;
+
+  return await runCheck(input, io);
+}
+
+if (import.meta.main) {
+  runCli().then((code) => process.exit(code));
+}
