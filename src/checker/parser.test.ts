@@ -169,3 +169,58 @@ test("malformed reference emits W0303", () => {
   const result = parseDocument(input);
   expect(byCode(result.diagnostics, "W0303").length).toBe(1);
 });
+
+test("non-numbered steps emit W0401", () => {
+  const input = [
+    "# Smoothie",
+    "## Ingredients",
+    "- fruit",
+    "## Steps",
+    "Blend everything.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "W0401").length).toBe(1);
+});
+
+test("numbered steps with indented continuation lines pass", () => {
+  const input = [
+    "# Granola",
+    "## Ingredients",
+    "- oats",
+    "## Steps",
+    "1. Combine dry ingredients in a bowl,",
+    "   then stir gently to mix.",
+    "2. Bake @300F for @40m.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "W0401").length).toBe(0);
+});
+
+test("invalid timer token emits W0402", () => {
+  const input = [
+    "# Roast",
+    "## Ingredients",
+    "- chicken",
+    "## Steps",
+    "1. Rest @10mm before slicing.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "W0402").length).toBe(1);
+});
+
+test("valid timer forms are accepted", () => {
+  const input = [
+    "# Roast",
+    "## Ingredients",
+    "- chicken",
+    "## Steps",
+    "1. Rest @10min before slicing.",
+    "2. Cook @1h15min–1h30min until tender.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "W0402").length).toBe(0);
+});

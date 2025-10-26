@@ -92,3 +92,13 @@ test("check path uses provided reader", async () => {
   expect(code).toBe(0);
   expect(seen).toBe("recipes/sample.md");
 });
+
+test("default readFile reads existing recipe files", async () => {
+  const code = await runCli(["bun", "src/kr.ts", "check", "recipes/granola.md"]);
+  expect(code).toBe(0);
+});
+
+test("default readFile reports missing files", async () => {
+  const code = await runCli(["bun", "src/kr.ts", "check", "recipes/does-not-exist.md"]);
+  expect(code).toBe(2);
+});

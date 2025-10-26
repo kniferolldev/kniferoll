@@ -115,3 +115,67 @@ test("invalid also quantity raises E0206", () => {
 
   expect(diagnostics.some((diag) => diag.code === "E0206")).toBe(true);
 });
+
+test("ignores blank ingredient lines", () => {
+  const input = withRecipe(["", "- salt"]);
+  const { section, diagnostics } = getIngredientsSection(input);
+
+  expect(diagnostics.map((diag) => diag.code)).not.toContain("E0201");
+  expect(section.ingredients).toHaveLength(1);
+  expect(section.ingredients[0]?.name).toBe("salt");
+});
+
+test("errors when ingredient name missing", () => {
+  const input = withRecipe(["-  , chopped"]);
+  const { diagnostics, section } = getIngredientsSection(input);
+
+  expect(section.ingredients).toHaveLength(0);
+  expect(diagnostics.some((diag) => diag.message.includes("name is required"))).toBe(true);
+});
+
+test("errors when quantity is empty after dash", () => {
+  const input = withRecipe(["- sugar -  , finely ground"]);
+  const { diagnostics, section } = getIngredientsSection(input);
+
+  expect(section.ingredients).toHaveLength(0);
+  expect(diagnostics.some((diag) => diag.message.includes("quantity must not be empty"))).toBe(true);
+});
+
+test("attribute without value is an error", () => {
+  const input = withRecipe(['- sugar :: id=']);
+  const { diagnostics, section } = getIngredientsSection(input);
+
+  expect(section.ingredients).toHaveLength(0);
+  expect(diagnostics.some((diag) => diag.message.includes("missing a value"))).toBe(true);
+});
+
+test("attribute with unterminated quotes is an error", () => {
+  const input = withRecipe(['- sugar :: id="sweet']);
+  const { diagnostics, section } = getIngredientsSection(input);
+
+  expect(section.ingredients).toHaveLength(0);
+  expect(diagnostics.some((diag) => diag.message.includes("unterminated quotes"))).toBe(true);
+});
+
+test("noscale attribute with value is coerced to null", () => {
+  const input = withRecipe(["- salt - 1 tsp :: noscale=true"]);
+  const { diagnostics, section } = getIngredientsSection(input);
+
+  expect(diagnostics).toHaveLength(0);
+  const attr = section.ingredients[0]?.attributes.find(({ key }) => key === "noscale");
+  expect(attr).toEqual({ key: "noscale", value: null });
+});
+
+test("unknown attribute without equals errors", () => {
+  const input = withRecipe(["- sugar :: crunchy"]);
+  const { diagnostics } = getIngredientsSection(input);
+
+  expect(diagnostics.some((diag) => diag.code === "E0203")).toBe(true);
+});
+
+test("attribute delimiter without trailing value reports error", () => {
+  const input = withRecipe(["- sugar ::   "]);
+  const { diagnostics } = getIngredientsSection(input);
+
+  expect(diagnostics.some((diag) => diag.code === "E0202")).toBe(true);
+});

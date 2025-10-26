@@ -22,6 +22,82 @@ const SECTION_MAP: Record<string, SectionKind> = {
   notes: "notes",
 };
 
+const STEP_NUMBER_RE = /^\s*\d+\.\s+/;
+const TEMPERATURE_PATTERN = /^(\d+)(?:°)?([FC])$/i;
+const TOKEN_MATCHER = /@(?=\d)([0-9hms°fc\-–]+)(?=[\s),.;:!?]|$)/gi;
+
+const TIMER_SEGMENT_PATTERN = /^(?:(?<hours>\d+)(?:h|hr))?(?:(?<minutes>\d+)(?:m|min))?(?:(?<seconds>\d+)(?:s|sec))?$/i;
+
+type TimerDuration = { hours: number; minutes: number; seconds: number };
+
+type ParsedTimer = { kind: "timer"; start: TimerDuration; end?: TimerDuration };
+type ParsedTemperature = { kind: "temperature"; value: number; scale: "F" | "C" };
+type ParsedToken = ParsedTimer | ParsedTemperature;
+
+const parseTimerSegment = (segment: string): TimerDuration | null => {
+  const match = TIMER_SEGMENT_PATTERN.exec(segment);
+  if (!match) {
+    return null;
+  }
+
+  const { hours = "0", minutes = "0", seconds = "0" } = match.groups as {
+    hours?: string;
+    minutes?: string;
+    seconds?: string;
+  };
+
+  return {
+    hours: Number(hours),
+    minutes: Number(minutes),
+    seconds: Number(seconds),
+  };
+};
+
+const parseTimerBody = (body: string): ParsedTimer | null => {
+  const parts = body.split(/[-–]/);
+  if (parts.length === 0 || parts.length > 2) {
+    return null;
+  }
+
+  const start = parseTimerSegment(parts[0] ?? "");
+  if (!start) {
+    return null;
+  }
+
+  if (parts.length === 1) {
+    return { kind: "timer", start };
+  }
+
+  const end = parseTimerSegment(parts[1] ?? "");
+  if (!end) {
+    return null;
+  }
+
+  return { kind: "timer", start, end };
+};
+
+const parseTokenBody = (body: string): ParsedToken | null => {
+  const trimmed = body.trim();
+  if (trimmed === "") {
+    return null;
+  }
+
+  const tempMatch = TEMPERATURE_PATTERN.exec(trimmed);
+  if (tempMatch) {
+    const [, value, scaleRaw] = tempMatch;
+    if (!value || !scaleRaw) {
+      return null;
+    }
+    return {
+      kind: "temperature",
+      value: Number(value),
+      scale: scaleRaw.toUpperCase() as "F" | "C",
+    };
+  }
+
+  return parseTimerBody(trimmed);
+};
+
 const error = (code: string, message: string, line: number): Diagnostic => ({
   code,
   message,
@@ -282,6 +358,48 @@ export const parseDocument = (
   for (const recipe of recipes) {
     registerId(recipe.id, "recipe", recipe.line, recipe.title);
     for (const section of recipe.sections) {
+      if (section.kind === "steps") {
+        let hasNumbered = false;
+        let hasInvalid = false;
+        let lastWasNumbered = false;
+        let sawContent = false;
+
+        for (const line of section.lines) {
+          const raw = line.text;
+          const trimmed = raw.trim();
+          if (trimmed === "") {
+            continue;
+          }
+
+          sawContent = true;
+
+          if (STEP_NUMBER_RE.test(raw)) {
+            hasNumbered = true;
+            lastWasNumbered = true;
+            continue;
+          }
+
+          if (lastWasNumbered && /^\s/.test(raw)) {
+            // Continuation of the previous numbered step.
+            lastWasNumbered = false;
+            continue;
+          }
+
+          hasInvalid = true;
+          break;
+        }
+
+        if (sawContent && (!hasNumbered || hasInvalid)) {
+          diagnostics.push(
+            warning(
+              "W0401",
+              `Steps under recipe "${recipe.title}" should be a numbered list.`,
+              section.line,
+            ),
+          );
+        }
+      }
+
       if (section.kind === "ingredients") {
         for (const ingredient of section.ingredients) {
           registerId(ingredient.id, "ingredient", ingredient.line, ingredient.name);
@@ -299,6 +417,22 @@ export const parseDocument = (
       }
 
       for (const line of section.lines) {
+        for (const match of line.text.matchAll(TOKEN_MATCHER)) {
+          const fullToken = match[0];
+          const body = match[1] ?? "";
+          const parsed = parseTokenBody(body);
+
+          if (!parsed) {
+            diagnostics.push(
+              warning(
+                "W0402",
+                `Invalid timer token "${fullToken}" in steps for recipe "${recipe.title}".`,
+                line.line,
+              ),
+            );
+          }
+        }
+
         referencePattern.lastIndex = 0;
         let match: RegExpExecArray | null;
         while ((match = referencePattern.exec(line.text)) !== null) {
