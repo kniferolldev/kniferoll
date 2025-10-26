@@ -252,8 +252,8 @@ trim.
 - **Ingredient IDs**: each ingredient line gets `id = slug(<name>)` unless
   overridden (see tail attributes).
 - **Uniqueness**: IDs (recipes + ingredients) share a **single global
-  namespace** within the file. On collision, suffix `-2`, `-3`, … in appearance
-  order.
+  namespace** within the file. Duplicates are considered errors; choose distinct
+  IDs (e.g., override with `:: id=`) whenever the default slug would collide.
 
 ### 5.2 Overriding ingredient IDs
 

@@ -1,4 +1,5 @@
 import type { IO, StdinLike } from "../types";
+import { parseDocument } from "../checker/parser";
 
 const readStdin = async (stdin: StdinLike): Promise<string> => {
   if (typeof (stdin as { text?: unknown }).text === "function") {
@@ -21,8 +22,8 @@ export async function runCheck(
     const content =
       input === "-" ? await readStdin(io.stdin) : await io.readFile(input);
 
-    // Placeholder for future lint invocation: silence unused variable warning.
-    void content;
+    const parseResult = parseDocument(content);
+    void parseResult;
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown read error";

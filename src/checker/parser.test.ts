@@ -1,0 +1,171 @@
+import { expect, test } from "bun:test";
+import { parseDocument } from "./parser";
+
+const byCode = (diagnostics: ReturnType<typeof parseDocument>["diagnostics"], code: string) =>
+  diagnostics.filter((diag) => diag.code === code);
+
+test("parses single recipe without frontmatter and flags missing sections", () => {
+  const input = "# Recipe\n\nContent";
+  const result = parseDocument(input);
+
+  expect(result.frontmatter).toBeNull();
+  expect(result.body).toBe(input);
+  expect(result.recipes).toHaveLength(1);
+  expect(byCode(result.diagnostics, "E0101")).toHaveLength(2);
+});
+
+test("parses frontmatter, overall title, and recipe sections", () => {
+  const input = [
+    "---",
+    "version: 0.1.0",
+    "---",
+    "# Fancy Cake Collection",
+    "",
+    "# Chocolate Cake",
+    "## ingredients",
+    "## STEPS",
+    "## Notes",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.frontmatter?.version).toBe("0.1.0");
+  expect(result.recipes).toHaveLength(1);
+
+  const recipe = result.recipes[0];
+  expect(recipe).toBeDefined();
+  if (!recipe) {
+    throw new Error("Expected recipe to be parsed");
+  }
+  expect(recipe.title).toBe("Chocolate Cake");
+  expect(recipe.sections.map((section) => section.kind)).toEqual([
+    "ingredients",
+    "steps",
+    "notes",
+  ]);
+  expect(result.diagnostics).toHaveLength(0);
+});
+
+test("emits E0101 when recipe is missing required sections", () => {
+  const input = [
+    "# Soup",
+    "## Ingredients",
+    "",
+    "# Pie",
+    "## Steps",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const errors = byCode(result.diagnostics, "E0101");
+
+  expect(errors).toHaveLength(2);
+  const messages = errors.map((error) => error.message);
+  expect(messages.some((msg) => msg.includes("Soup") && msg.includes("Steps"))).toBe(true);
+  expect(messages.some((msg) => msg.includes("Pie") && msg.includes("Ingredients"))).toBe(true);
+});
+
+test("emits E0103 when section appears before a recipe", () => {
+  const input = [
+    "## Ingredients",
+    "# Recipe",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const errors = byCode(result.diagnostics, "E0103");
+
+  expect(errors).toHaveLength(1);
+  const [first] = errors;
+  expect(first).toBeDefined();
+  if (!first) return;
+  expect(first.line).toBe(1);
+});
+
+test("emits W0102 for unknown sections", () => {
+  const input = [
+    "# Bread",
+    "## Extras",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const warnings = byCode(result.diagnostics, "W0102");
+
+  expect(warnings).toHaveLength(1);
+  expect(result.recipes[0]?.sections[0]?.kind).toBe("unknown");
+});
+
+test("duplicate recipe ids emit E0301", () => {
+  const input = [
+    "# Classic Bread",
+    "## Ingredients",
+    "- flour",
+    "## Steps",
+    "1. Bake.",
+    "# Classic Bread",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Season.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "E0301").length).toBeGreaterThanOrEqual(1);
+});
+
+test("duplicate ingredient ids emit E0301", () => {
+  const input = [
+    "# Soup",
+    "## Ingredients",
+    "- salt",
+    "- salt",
+    "## Steps",
+    "1. Stir.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "E0301").length).toBeGreaterThanOrEqual(1);
+});
+
+test("extracts references and resolves ids", () => {
+  const input = [
+    "# Salad",
+    "## Ingredients",
+    "- lettuce",
+    "## Steps",
+    "1. Toss [[lettuce]] with dressing.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.references).toHaveLength(1);
+  const ref = result.references[0];
+  expect(ref).toBeDefined();
+  if (!ref) {
+    throw new Error("Expected reference to be collected");
+  }
+  expect(ref.target).toBe("lettuce");
+  expect(byCode(result.diagnostics, "W0302").length).toBe(0);
+});
+
+test("missing reference target emits W0302", () => {
+  const input = [
+    "# Pasta",
+    "## Ingredients",
+    "- noodles",
+    "## Steps",
+    "1. Plate [[sauce]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "W0302").length).toBe(1);
+});
+
+test("malformed reference emits W0303", () => {
+  const input = [
+    "# Cake",
+    "## Ingredients",
+    "- sugar",
+    "## Steps",
+    "1. Mix [[ -> sugar]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "W0303").length).toBe(1);
+});

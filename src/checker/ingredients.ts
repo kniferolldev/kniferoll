@@ -1,0 +1,316 @@
+import { parseQuantity } from "./quantity";
+import { slug } from "./slug";
+import type {
+  Diagnostic,
+  Ingredient,
+  IngredientAttribute,
+  IngredientsSection,
+} from "./types";
+
+const error = (code: string, message: string, line: number): Diagnostic => ({
+  code,
+  message,
+  severity: "error",
+  line,
+  column: 1,
+});
+
+const warning = (code: string, message: string, line: number): Diagnostic => ({
+  code,
+  message,
+  severity: "warning",
+  line,
+  column: 1,
+});
+
+const stripQuotes = (value: string): string => {
+  if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+    return value.slice(1, -1);
+  }
+  return value;
+};
+
+const tokenizeAttrs = (input: string): string[] => {
+  const trimmed = input.trim();
+  if (trimmed === "") {
+    return [];
+  }
+
+  const tokens: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < trimmed.length; i += 1) {
+    const char = trimmed[i] ?? "";
+
+    if (char === '"') {
+      current += char;
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === " " && !inQuotes) {
+      if (current !== "") {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current !== "") {
+    tokens.push(current);
+  }
+
+  return tokens;
+};
+
+const parseIngredientLine = (
+  lineText: string,
+  lineNumber: number,
+  diagnostics: Diagnostic[],
+): Ingredient | null => {
+  const trimmed = lineText.trim();
+  if (trimmed === "") {
+    return null;
+  }
+
+  const bulletMatch = /^-\s+(.*)$/.exec(trimmed);
+  if (!bulletMatch) {
+    diagnostics.push(
+      error(
+        "E0201",
+        "Invalid ingredient line syntax; expected '- <name>' format.",
+        lineNumber,
+      ),
+    );
+    return null;
+  }
+
+  let body = bulletMatch[1] ?? "";
+  let attrsPart: string | null = null;
+  const delimiterMatch = body.match(/^(.*\S)\s+::\s+(.*)$/);
+  if (delimiterMatch) {
+    body = delimiterMatch[1]?.trimEnd() ?? "";
+    attrsPart = delimiterMatch[2]?.trim() ?? "";
+  } else {
+    const rawIndex = body.indexOf("::");
+    if (rawIndex >= 0) {
+      const before = body[rawIndex - 1] ?? "";
+      const after = body[rawIndex + 2] ?? "";
+      if (before === " " || after === " ") {
+        diagnostics.push(
+          error(
+            "E0202",
+            "Ingredient tail delimiter '::' must include spaces on both sides.",
+            lineNumber,
+          ),
+        );
+      }
+    }
+  }
+
+  let namePart = body;
+  let quantityPart: string | null = null;
+  let modifiersPart: string | null = null;
+
+  const dashIndex = body.indexOf(" - ");
+  if (dashIndex >= 0) {
+    namePart = body.slice(0, dashIndex);
+    const remainder = body.slice(dashIndex + 3);
+    const commaIndex = remainder.indexOf(", ");
+    if (commaIndex >= 0) {
+      quantityPart = remainder.slice(0, commaIndex);
+      modifiersPart = remainder.slice(commaIndex + 2);
+    } else {
+      quantityPart = remainder;
+    }
+  } else {
+    const commaIndex = body.indexOf(", ");
+    if (commaIndex >= 0) {
+      namePart = body.slice(0, commaIndex);
+      modifiersPart = body.slice(commaIndex + 2);
+    }
+  }
+
+  const name = namePart.trim();
+  if (name === "") {
+    diagnostics.push(error("E0201", "Ingredient name is required.", lineNumber));
+    return null;
+  }
+
+  if (quantityPart !== null) {
+    quantityPart = quantityPart.trim();
+    if (quantityPart === "") {
+      diagnostics.push(
+        error("E0201", "Ingredient quantity must not be empty.", lineNumber),
+      );
+      return null;
+    }
+  }
+
+  if (modifiersPart !== null) {
+    modifiersPart = modifiersPart.trim();
+    if (modifiersPart === "") {
+      diagnostics.push(
+        error(
+          "E0201",
+          "Ingredient modifiers must not be empty when specified.",
+          lineNumber,
+        ),
+      );
+      return null;
+    }
+  }
+
+  const attributes: IngredientAttribute[] = [];
+  let hasNoscale = false;
+  let idValue: string | null = null;
+
+  if (attrsPart) {
+    const tokens = tokenizeAttrs(attrsPart);
+    for (const token of tokens) {
+      const eqIndex = token.indexOf("=");
+      if (eqIndex === -1) {
+        if (token === "noscale") {
+          hasNoscale = true;
+          attributes.push({ key: "noscale", value: null });
+          continue;
+        }
+
+        diagnostics.push(
+          error(
+            "E0203",
+            `Unknown ingredient tail attribute "${token}".`,
+            lineNumber,
+          ),
+        );
+        continue;
+      }
+
+      const key = token.slice(0, eqIndex);
+      let value = token.slice(eqIndex + 1);
+      if (value === "") {
+        diagnostics.push(
+          error(
+            "E0201",
+            `Ingredient tail attribute "${key}" is missing a value.`,
+            lineNumber,
+          ),
+        );
+        return null;
+      }
+
+      if (value.startsWith('"') && !value.endsWith('"')) {
+        diagnostics.push(
+          error(
+            "E0201",
+            `Ingredient tail attribute "${key}" has unterminated quotes.`,
+            lineNumber,
+          ),
+        );
+        return null;
+      }
+
+      value = stripQuotes(value);
+
+      const attribute: IngredientAttribute = {
+        key,
+        value,
+      };
+
+      if (key === "id") {
+        idValue = value;
+      } else if (key === "also") {
+        const result = parseQuantity(value, {
+          line: lineNumber,
+          invalid: {
+            code: "E0206",
+            message: "Alternate quantity (also=) must be a valid quantity.",
+          },
+        });
+        diagnostics.push(...result.diagnostics);
+        if (result.quantity) {
+          attribute.quantity = result.quantity;
+        }
+      } else if (key === "noscale") {
+        hasNoscale = true;
+        attribute.value = null;
+      } else {
+        diagnostics.push(
+          error(
+            "E0203",
+            `Unknown ingredient tail attribute "${key}".`,
+            lineNumber,
+          ),
+        );
+      }
+
+      attributes.push(attribute);
+    }
+  }
+
+  let parsedQuantity: Ingredient["quantity"] = null;
+  if (quantityPart !== null) {
+    const result = parseQuantity(quantityPart, {
+      line: lineNumber,
+      invalid: {
+        code: "E0201",
+        message: "Ingredient quantity is invalid.",
+      },
+    });
+    diagnostics.push(...result.diagnostics);
+    parsedQuantity = result.quantity;
+  }
+
+  if (hasNoscale && (!quantityPart || quantityPart.length === 0)) {
+    diagnostics.push(
+      warning(
+        "W0205",
+        "Ingredient uses 'noscale' without a quantity; attribute is redundant.",
+        lineNumber,
+      ),
+    );
+  }
+
+  if (idValue && slug(name) === idValue) {
+    diagnostics.push(
+      warning(
+        "W0204",
+        "Ingredient id matches the default slug; omit redundant id=.",
+        lineNumber,
+      ),
+    );
+  }
+
+  const finalId = idValue ?? slug(name);
+
+  const ingredient: Ingredient = {
+    line: lineNumber,
+    text: lineText,
+    name,
+    id: finalId,
+    quantityText: quantityPart,
+    quantity: parsedQuantity,
+    modifiers: modifiersPart,
+    attributes,
+  };
+
+  return ingredient;
+};
+
+export const parseIngredientsSection = (
+  section: IngredientsSection,
+  diagnostics: Diagnostic[],
+) => {
+  const items: Ingredient[] = [];
+  for (const { text, line } of section.lines) {
+    const ingredient = parseIngredientLine(text, line, diagnostics);
+    if (ingredient) {
+      items.push(ingredient);
+    }
+  }
+  section.ingredients = items;
+};
