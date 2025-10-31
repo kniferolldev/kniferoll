@@ -98,17 +98,13 @@ test("normalizes descending ranges", () => {
 test("rejects fractions with zero denominator", () => {
   const result = run("1/0 cups");
   expect(result.quantity).toBeNull();
-  expect(result.diagnostics.some((diag) => diag.message === "invalid")).toBe(
-    true,
-  );
+  expect(result.diagnostics.some((diag) => diag.message === "invalid")).toBe(true);
 });
 
 test("rejects ranges when upper bound invalid", () => {
   const result = run("1- 1/0 cups");
   expect(result.quantity).toBeNull();
-  expect(result.diagnostics.some((diag) => diag.message === "invalid")).toBe(
-    true,
-  );
+  expect(result.diagnostics.some((diag) => diag.message === "invalid")).toBe(true);
 });
 
 test("parses simple fraction without whole number", () => {

@@ -117,7 +117,7 @@ test("runCheck errors on unsupported stdin type", async () => {
   const stdout = writer();
   const stderr = writer();
   const exitCode = await runCheck("-", {
-    stdin: {},
+    stdin: {} as unknown as IO["stdin"],
     stdout: stdout.channel,
     stderr: stderr.channel,
     readFile: async () => {

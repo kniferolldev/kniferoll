@@ -5,10 +5,12 @@
   "private": true,
   "scripts": {
     "kr": "bun src/kr.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "demo": "bun demo/server.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "playwright": "^1.56.1"
   },
   "peerDependencies": {
     "typescript": "^5"

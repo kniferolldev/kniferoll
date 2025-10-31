@@ -1,8 +1,11 @@
 import { extractFrontmatter } from "./frontmatter";
 import { parseIngredientsSection } from "./ingredients";
 import { slug } from "./slug";
+import { extractStepTokens } from "./steps";
 import type {
+  DocumentStepToken,
   DocumentParseResult,
+  DocumentTitle,
   Diagnostic,
   IngredientsSection,
   ParseOptions,
@@ -15,6 +18,7 @@ import type {
   SectionLine,
   ReferenceToken,
 } from "./types";
+import { createIdRegistry } from "./id-registry";
 
 const SECTION_MAP: Record<string, SectionKind> = {
   ingredients: "ingredients",
@@ -23,80 +27,6 @@ const SECTION_MAP: Record<string, SectionKind> = {
 };
 
 const STEP_NUMBER_RE = /^\s*\d+\.\s+/;
-const TEMPERATURE_PATTERN = /^(\d+)(?:°)?([FC])$/i;
-const TOKEN_MATCHER = /@(?=\d)([0-9hms°fc\-–]+)(?=[\s),.;:!?]|$)/gi;
-
-const TIMER_SEGMENT_PATTERN = /^(?:(?<hours>\d+)(?:h|hr))?(?:(?<minutes>\d+)(?:m|min))?(?:(?<seconds>\d+)(?:s|sec))?$/i;
-
-type TimerDuration = { hours: number; minutes: number; seconds: number };
-
-type ParsedTimer = { kind: "timer"; start: TimerDuration; end?: TimerDuration };
-type ParsedTemperature = { kind: "temperature"; value: number; scale: "F" | "C" };
-type ParsedToken = ParsedTimer | ParsedTemperature;
-
-const parseTimerSegment = (segment: string): TimerDuration | null => {
-  const match = TIMER_SEGMENT_PATTERN.exec(segment);
-  if (!match) {
-    return null;
-  }
-
-  const { hours = "0", minutes = "0", seconds = "0" } = match.groups as {
-    hours?: string;
-    minutes?: string;
-    seconds?: string;
-  };
-
-  return {
-    hours: Number(hours),
-    minutes: Number(minutes),
-    seconds: Number(seconds),
-  };
-};
-
-const parseTimerBody = (body: string): ParsedTimer | null => {
-  const parts = body.split(/[-–]/);
-  if (parts.length === 0 || parts.length > 2) {
-    return null;
-  }
-
-  const start = parseTimerSegment(parts[0] ?? "");
-  if (!start) {
-    return null;
-  }
-
-  if (parts.length === 1) {
-    return { kind: "timer", start };
-  }
-
-  const end = parseTimerSegment(parts[1] ?? "");
-  if (!end) {
-    return null;
-  }
-
-  return { kind: "timer", start, end };
-};
-
-const parseTokenBody = (body: string): ParsedToken | null => {
-  const trimmed = body.trim();
-  if (trimmed === "") {
-    return null;
-  }
-
-  const tempMatch = TEMPERATURE_PATTERN.exec(trimmed);
-  if (tempMatch) {
-    const [, value, scaleRaw] = tempMatch;
-    if (!value || !scaleRaw) {
-      return null;
-    }
-    return {
-      kind: "temperature",
-      value: Number(value),
-      scale: scaleRaw.toUpperCase() as "F" | "C",
-    };
-  }
-
-  return parseTimerBody(trimmed);
-};
 
 const error = (code: string, message: string, line: number): Diagnostic => ({
   code,
@@ -189,6 +119,8 @@ export const parseDocument = (
   const diagnostics = [...frontmatterResult.diagnostics];
   const recipes: Recipe[] = [];
   const references: ReferenceToken[] = [];
+  const stepTokens: DocumentStepToken[] = [];
+  let documentTitle: DocumentTitle | null = null;
 
   const lines = frontmatterResult.body.split("\n");
   const lineOffset = frontmatterResult.bodyStartLine - 1;
@@ -214,6 +146,12 @@ export const parseDocument = (
         const headingType = nextHeadingType(lines, i);
         if (headingType === "#") {
           // Treat as overall document title; skip.
+          if (!documentTitle) {
+            documentTitle = {
+              text: headingText,
+              line: actualLine,
+            };
+          }
           continue;
         }
       }
@@ -317,7 +255,7 @@ export const parseDocument = (
 
   finalizeRecipe(currentRecipe, diagnostics, recipes);
 
-  const idRegistry = new Map<string, { kind: "recipe" | "ingredient"; line: number }>();
+  const idRegistry = createIdRegistry();
 
   for (const recipe of recipes) {
     for (const section of recipe.sections) {
@@ -333,26 +271,29 @@ export const parseDocument = (
     line: number,
     name: string,
   ) => {
-    if (id === "") {
-      diagnostics.push(
-        error("E0301", `${kind === "recipe" ? "Recipe" : "Ingredient"} "${name}" has an empty id.`, line),
-      );
+    const result = idRegistry.register(id, { kind, line, name });
+    if (result.ok) {
       return;
     }
 
-    const existing = idRegistry.get(id);
-    if (existing) {
+    if (result.reason === "empty") {
       diagnostics.push(
         error(
           "E0301",
-          `Duplicate id "${id}" found (${kind === "recipe" ? "recipe" : "ingredient"}).`,
+          `${kind === "recipe" ? "Recipe" : "Ingredient"} "${name}" has an empty id.`,
           line,
         ),
       );
       return;
     }
 
-    idRegistry.set(id, { kind, line });
+    diagnostics.push(
+      error(
+        "E0301",
+        `Duplicate id "${id}" found (${kind === "recipe" ? "recipe" : "ingredient"}).`,
+        line,
+      ),
+    );
   };
 
   for (const recipe of recipes) {
@@ -417,20 +358,26 @@ export const parseDocument = (
       }
 
       for (const line of section.lines) {
-        for (const match of line.text.matchAll(TOKEN_MATCHER)) {
-          const fullToken = match[0];
-          const body = match[1] ?? "";
-          const parsed = parseTokenBody(body);
+        const { tokens: extractedTokens, invalid } = extractStepTokens(line.text);
 
-          if (!parsed) {
-            diagnostics.push(
-              warning(
-                "W0402",
-                `Invalid timer token "${fullToken}" in steps for recipe "${recipe.title}".`,
-                line.line,
-              ),
-            );
-          }
+        for (const bad of invalid) {
+          diagnostics.push(
+            warning(
+              "W0402",
+              `Invalid timer token "${bad.raw}" in steps for recipe "${recipe.title}".`,
+              line.line,
+            ),
+          );
+        }
+
+        for (const token of extractedTokens) {
+          stepTokens.push({
+            ...token,
+            line: line.line,
+            column: token.index + 1,
+            recipeId: recipe.id,
+            recipeTitle: recipe.title,
+          });
         }
 
         referencePattern.lastIndex = 0;
@@ -490,7 +437,9 @@ export const parseDocument = (
     body: frontmatterResult.body,
     diagnostics,
     bodyStartLine: frontmatterResult.bodyStartLine,
+    documentTitle,
     recipes,
+    stepTokens,
     references,
   };
 };

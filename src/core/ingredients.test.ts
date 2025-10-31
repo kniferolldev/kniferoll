@@ -3,9 +3,7 @@ import { parseDocument } from "./parser";
 import type { IngredientsSection } from "./types";
 
 const withRecipe = (lines: string[]) =>
-  ["# Test Recipe", "## Ingredients", ...lines, "## Steps", "1. Do thing"].join(
-    "\n",
-  );
+  ["# Test Recipe", "## Ingredients", ...lines, "## Steps", "1. Do thing"].join("\n");
 
 const getIngredientsSection = (input: string): {
   section: IngredientsSection;
@@ -17,8 +15,7 @@ const getIngredientsSection = (input: string): {
     throw new Error("Expected recipe to be parsed");
   }
   const section = recipe.sections.find(
-    (candidate): candidate is IngredientsSection =>
-      candidate.kind === "ingredients",
+    (candidate): candidate is IngredientsSection => candidate.kind === "ingredients",
   );
   if (!section) {
     throw new Error("Expected ingredients section");

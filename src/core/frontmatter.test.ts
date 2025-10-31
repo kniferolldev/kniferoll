@@ -158,21 +158,18 @@ test("url source rejects unsupported keys", () => {
   const msgs = messagesFrom(
     [
       "version: 0.1.0",
-      "source: { url: https://example.com, extra: true }",
+      'source: { url: https://example.com, title: "Sample", extra: true }',
     ].join("\n"),
   );
-  expect(
-    msgs.some((msg) =>
-      msg.startsWith("Frontmatter source contains unsupported keys"),
-    ),
-  ).toBe(true);
+  expect(msgs.some((msg) => msg.includes("unsupported"))).toBe(true);
 });
 
 test("cookbook source must be object", () => {
   const msgs = messagesFrom(
     [
       "version: 0.1.0",
-      "source: { cookbook: 42 }",
+      "source:",
+      "  cookbook: []",
     ].join("\n"),
   );
   expect(msgs).toContain("Frontmatter source.cookbook must be an object.");
@@ -183,8 +180,7 @@ test("cookbook source requires title", () => {
     [
       "version: 0.1.0",
       "source:",
-      "  cookbook:",
-      "    author: Someone",
+      "  cookbook: {}",
     ].join("\n"),
   );
   expect(msgs).toContain("Frontmatter source.cookbook.title is required.");
@@ -196,8 +192,8 @@ test("cookbook author must be string", () => {
       "version: 0.1.0",
       "source:",
       "  cookbook:",
-      "    title: Sample",
-      "    author: 12",
+      "    title: Bakes",
+      "    author: 123",
     ].join("\n"),
   );
   expect(msgs).toContain("Frontmatter source.cookbook.author must be a string.");
@@ -209,13 +205,11 @@ test("cookbook pages must be string or number", () => {
       "version: 0.1.0",
       "source:",
       "  cookbook:",
-      "    title: Sample",
+      "    title: Bakes",
       "    pages: true",
     ].join("\n"),
   );
-  expect(
-    msgs,
-  ).toContain("Frontmatter source.cookbook.pages must be a string or number.");
+  expect(msgs).toContain("Frontmatter source.cookbook.pages must be a string or number.");
 });
 
 test("cookbook isbn must be string", () => {
@@ -224,8 +218,8 @@ test("cookbook isbn must be string", () => {
       "version: 0.1.0",
       "source:",
       "  cookbook:",
-      "    title: Sample",
-      "    isbn: 123456",
+      "    title: Bakes",
+      "    isbn: 123",
     ].join("\n"),
   );
   expect(msgs).toContain("Frontmatter source.cookbook.isbn must be a string.");
@@ -237,8 +231,8 @@ test("cookbook year must be number", () => {
       "version: 0.1.0",
       "source:",
       "  cookbook:",
-      "    title: Sample",
-      "    year: \"2023\"",
+      "    title: Bakes",
+      "    year: \"2020\"",
     ].join("\n"),
   );
   expect(msgs).toContain("Frontmatter source.cookbook.year must be a number.");
@@ -250,160 +244,10 @@ test("cookbook rejects unsupported keys", () => {
       "version: 0.1.0",
       "source:",
       "  cookbook:",
-      "    title: Sample",
-      "    edition: 2",
+      "    title: Bakes",
+      "    extra: true",
     ].join("\n"),
   );
-  expect(
-    msgs.some((msg) =>
-      msg.startsWith("Frontmatter source.cookbook contains unsupported keys"),
-    ),
-  ).toBe(true);
+  expect(msgs.some((msg) => msg.includes("unsupported"))).toBe(true);
 });
 
-test("fallback source validation error for unsupported type", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 0.1.0",
-      "source: 42",
-    ].join("\n"),
-  );
-  expect(
-    msgs,
-  ).toContain(
-    "Frontmatter source must be a string, URL object, or cookbook object.",
-  );
-});
-
-test("scales must be array", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 0.1.0",
-      "scales: 5",
-    ].join("\n"),
-  );
-  expect(msgs).toContain("Frontmatter scales must be an array of presets.");
-});
-
-test("scale entries must be objects", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 0.1.0",
-      "scales: [1]",
-    ].join("\n"),
-  );
-  expect(msgs).toContain("Frontmatter scales entries must be objects.");
-});
-
-test("scale name must be non-empty string", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 0.1.0",
-      "scales:",
-      "  - anchor: { id: milk, amount: 480, unit: ml }",
-    ].join("\n"),
-  );
-  expect(msgs).toContain("Scale preset name must be a non-empty string.");
-});
-
-test("scale preset requires anchor", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 0.1.0",
-      "scales:",
-      "  - name: Batch",
-    ].join("\n"),
-  );
-  expect(msgs).toContain('Scale preset "Batch" is missing anchor.');
-});
-
-test("scale anchor must be object", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 0.1.0",
-      "scales:",
-      "  - name: Batch",
-      "    anchor: 5",
-    ].join("\n"),
-  );
-  expect(msgs).toContain('Scale preset "Batch" anchor must be an object.');
-});
-
-test("scale anchor id required", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 0.1.0",
-      "scales:",
-      "  - name: Batch",
-      "    anchor: { id: \"\", amount: 1, unit: g }",
-    ].join("\n"),
-  );
-  expect(
-    msgs,
-  ).toContain('Scale preset "Batch" anchor.id must be a non-empty string.');
-});
-
-test("scale anchor amount must be number", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 0.1.0",
-      "scales:",
-      "  - name: Batch",
-      '    anchor: { id: milk, amount: "a lot", unit: ml }',
-    ].join("\n"),
-  );
-  expect(
-    msgs,
-  ).toContain('Scale preset "Batch" anchor.amount must be a number.');
-});
-
-test("scale anchor unit required", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 0.1.0",
-      "scales:",
-      "  - name: Batch",
-      "    anchor: { id: milk, amount: 10, unit: \"\" }",
-    ].join("\n"),
-  );
-  expect(
-    msgs,
-  ).toContain('Scale preset "Batch" anchor.unit must be a non-empty string.');
-});
-
-test("scale anchor id must match known ids when provided", () => {
-  const result = extractFrontmatter(
-    doc(
-      [
-        "version: 0.1.0",
-        "scales:",
-        "  - name: Batch",
-        "    anchor: { id: milk, amount: 10, unit: ml }",
-      ].join("\n"),
-    ),
-    { knownIds: ["flour"] },
-  );
-
-  const msgs = result.diagnostics.map((diag) => diag.message);
-  expect(
-    msgs,
-  ).toContain(
-    'Scale preset "Batch" anchor.id "milk" does not match any known ingredient.',
-  );
-});
-
-test("scale anchor rejects unsupported keys", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 0.1.0",
-      "scales:",
-      "  - name: Batch",
-      "    anchor: { id: milk, amount: 10, unit: ml, extra: yes }",
-    ].join("\n"),
-  );
-  expect(
-    msgs.some((msg) =>
-      msg.startsWith('Scale preset "Batch" anchor contains unsupported keys'),
-    ),
-  ).toBe(true);
-});

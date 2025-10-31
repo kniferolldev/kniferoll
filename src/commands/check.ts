@@ -1,5 +1,5 @@
 import type { IO, StdinLike } from "../types";
-import { runChecks } from "../checker";
+import { parseDocument } from "../core/parser";
 
 const readStdin = async (stdin: StdinLike): Promise<string> => {
   if (typeof (stdin as { text?: unknown }).text === "function") {
@@ -22,7 +22,7 @@ export async function runCheck(
     const content =
       input === "-" ? await readStdin(io.stdin) : await io.readFile(input);
 
-    const result = runChecks(content);
+    const result = parseDocument(content);
     const pathLabel = input === "-" ? "<stdin>" : input;
     let hasError = false;
 

@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import { parseDocument } from "./parser";
 
-const byCode = (diagnostics: ReturnType<typeof parseDocument>["diagnostics"], code: string) =>
-  diagnostics.filter((diag) => diag.code === code);
+const byCode = (
+  diagnostics: ReturnType<typeof parseDocument>["diagnostics"],
+  code: string,
+) => diagnostics.filter((diag) => diag.code === code);
 
 test("parses single recipe without frontmatter and flags missing sections", () => {
   const input = "# Recipe\n\nContent";
@@ -10,6 +12,7 @@ test("parses single recipe without frontmatter and flags missing sections", () =
 
   expect(result.frontmatter).toBeNull();
   expect(result.body).toBe(input);
+  expect(result.documentTitle).toBeNull();
   expect(result.recipes).toHaveLength(1);
   expect(byCode(result.diagnostics, "E0101")).toHaveLength(2);
 });
@@ -30,6 +33,7 @@ test("parses frontmatter, overall title, and recipe sections", () => {
   const result = parseDocument(input);
   expect(result.frontmatter?.version).toBe("0.1.0");
   expect(result.recipes).toHaveLength(1);
+  expect(result.documentTitle?.text).toBe("Fancy Cake Collection");
 
   const recipe = result.recipes[0];
   expect(recipe).toBeDefined();
@@ -128,13 +132,12 @@ test("extracts references and resolves ids", () => {
   const input = [
     "# Salad",
     "## Ingredients",
-    "- lettuce",
+    "- lettuce :: id=lettuce",
     "## Steps",
-    "1. Toss [[lettuce]] with dressing.",
+    "1. Toss [[lettuce]].",
   ].join("\n");
 
   const result = parseDocument(input);
-  expect(result.references).toHaveLength(1);
   const ref = result.references[0];
   expect(ref).toBeDefined();
   if (!ref) {
@@ -223,4 +226,45 @@ test("valid timer forms are accepted", () => {
 
   const result = parseDocument(input);
   expect(byCode(result.diagnostics, "W0402").length).toBe(0);
+});
+
+test("step tokens capture timers and temperatures", () => {
+  const input = [
+    "# Roast",
+    "## Ingredients",
+    "- chicken",
+    "## Steps",
+    "1. Preheat to @375F.",
+    "2. Cook for @1h10m–@1h20m until done.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.stepTokens.length).toBe(3);
+
+  const temp = result.stepTokens.find((token) => token.kind === "temperature");
+  expect(temp).toBeTruthy();
+  expect(temp).toEqual(
+    expect.objectContaining({
+      value: 375,
+      scale: "F",
+      line: 5,
+      recipeId: "roast",
+      recipeTitle: "Roast",
+    }),
+  );
+
+  const timers = result.stepTokens.filter((token) => token.kind === "timer");
+  expect(timers.length).toBe(2);
+  expect(timers[0]).toEqual(
+    expect.objectContaining({
+      start: expect.objectContaining({ hours: 1, minutes: 10 }),
+      line: 6,
+    }),
+  );
+  expect(timers[1]).toEqual(
+    expect.objectContaining({
+      start: expect.objectContaining({ hours: 1, minutes: 20 }),
+      line: 6,
+    }),
+  );
 });

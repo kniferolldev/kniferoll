@@ -1,0 +1,207 @@
+import type {
+  Quantity,
+  QuantityRange,
+  QuantitySingle,
+  ScaledQuantity,
+  ScaledQuantityRange,
+  ScaledQuantitySingle,
+  UnitDefinition,
+  UnitMatch,
+} from "./types";
+import {
+  choosePreferredUnit,
+  fromBaseValue,
+  lookupUnit,
+  roundToProfile,
+  toBaseValue,
+} from "./units";
+
+const FRACTION_MAP: Record<number, string> = {
+  0.125: "1/8",
+  0.25: "1/4",
+  0.3333333333: "1/3",
+  0.5: "1/2",
+  0.6666666666: "2/3",
+  0.75: "3/4",
+};
+
+const EPSILON = 1e-6;
+
+const nearestFraction = (value: number): { whole: number; fraction: string | null } => {
+  const whole = Math.trunc(value);
+  const remainder = value - whole;
+
+  let bestFraction: string | null = null;
+  let bestDiff = Number.POSITIVE_INFINITY;
+  let bestValue = 0;
+
+  for (const [key, label] of Object.entries(FRACTION_MAP)) {
+    const numeric = Number(key);
+    const diff = Math.abs(remainder - numeric);
+    if (diff < bestDiff - EPSILON) {
+      bestDiff = diff;
+      bestFraction = label;
+      bestValue = numeric;
+    }
+  }
+
+  if (bestFraction && bestDiff <= 0.05) {
+    if (Math.abs(bestValue - 1) < EPSILON) {
+      return { whole: whole + Math.sign(value), fraction: null };
+    }
+    return { whole, fraction: bestFraction };
+  }
+
+  return { whole, fraction: null };
+};
+
+const formatNumber = (value: number, unitInfo: UnitMatch | null, allowFractions = false): string => {
+  const rounded = unitInfo?.rounding ? roundToProfile(value, unitInfo.rounding) : value;
+  const absRounded = Math.abs(rounded);
+  const fractionEnabled = allowFractions || unitInfo?.rounding.precision === undefined;
+
+  if (fractionEnabled) {
+    const fractionCandidate = nearestFraction(absRounded);
+
+    if (fractionCandidate.fraction) {
+      if (fractionCandidate.whole === 0) {
+        return `${rounded < 0 ? "-" : ""}${fractionCandidate.fraction}`;
+      }
+      return `${rounded < 0 ? "-" : ""}${Math.abs(fractionCandidate.whole)} ${fractionCandidate.fraction}`;
+    }
+  }
+
+  const precision = unitInfo?.rounding.precision;
+  const fixed = precision !== undefined ? rounded.toFixed(precision) : rounded.toString();
+
+  return fixed.replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1");
+};
+
+const convertValue = (
+  value: number,
+  sourceUnit: UnitMatch | null,
+  targetUnit: UnitMatch | null,
+): number => {
+  if (!sourceUnit || !targetUnit || sourceUnit.canonical === targetUnit.canonical) {
+    return value;
+  }
+  const base = toBaseValue(value, sourceUnit);
+  if (base == null) {
+    return value;
+  }
+  const converted = fromBaseValue(base, targetUnit);
+  return converted ?? value;
+};
+
+const toUnitMatch = (
+  unit: UnitDefinition | UnitMatch | null,
+  fallback?: string | null,
+): UnitMatch | null => {
+  if (!unit) {
+    return null;
+  }
+  if ((unit as UnitMatch).matched) {
+    return unit as UnitMatch;
+  }
+  const definition = unit as UnitDefinition;
+  return {
+    ...definition,
+    matched: fallback ?? definition.display,
+  } satisfies UnitMatch;
+};
+
+const formatQuantitySingle = (
+  quantity: QuantitySingle | ScaledQuantity,
+  sourceUnit: UnitMatch | null,
+  displayUnit: UnitMatch | null,
+  allowFractions: boolean,
+  originalUnit: string | null,
+): string => {
+  const rawValue = "scaledValue" in quantity ? quantity.scaledValue : (quantity as QuantitySingle).value;
+  const targetUnit = displayUnit ?? sourceUnit;
+  const value = convertValue(rawValue, sourceUnit, targetUnit);
+  const unit = targetUnit?.matched ?? originalUnit ?? quantity.unit ?? "";
+  const formattedNumber = formatNumber(value, targetUnit ?? sourceUnit, allowFractions);
+  return unit ? `${formattedNumber} ${unit}`.trim() : formattedNumber;
+};
+
+const formatQuantityRange = (
+  quantity: QuantityRange | ScaledQuantity,
+  sourceUnit: UnitMatch | null,
+  displayUnit: UnitMatch | null,
+  allowFractions: boolean,
+  originalUnit: string | null,
+): string => {
+  const rawMin = "scaledMin" in quantity ? quantity.scaledMin : (quantity as QuantityRange).min;
+  const rawMax = "scaledMax" in quantity ? quantity.scaledMax : (quantity as QuantityRange).max;
+  const targetUnit = displayUnit ?? sourceUnit;
+  const min = convertValue(rawMin, sourceUnit, targetUnit);
+  const max = convertValue(rawMax, sourceUnit, targetUnit);
+  const unit = targetUnit?.matched ?? originalUnit ?? quantity.unit ?? "";
+  const formattedMin = formatNumber(min, targetUnit ?? sourceUnit, allowFractions);
+  const formattedMax = formatNumber(max, targetUnit ?? sourceUnit, allowFractions);
+  return unit ? `${formattedMin}-${formattedMax} ${unit}`.trim() : `${formattedMin}-${formattedMax}`;
+};
+
+export interface FormatQuantityOptions {
+  scaled?: ScaledQuantity | null;
+  targetUnit?: string | null;
+  usePreferredUnit?: boolean;
+}
+
+export const formatQuantity = (
+  original: Quantity | null | undefined,
+  options: FormatQuantityOptions = {},
+): string | null => {
+  if (!original) {
+    return null;
+  }
+
+  const quantity = options.scaled ?? original;
+  const fallbackUnit =
+    "unitInfo" in quantity && quantity.unitInfo
+      ? (quantity.unitInfo as UnitMatch)
+      : quantity.unit
+        ? lookupUnit(quantity.unit)
+        : original.unit
+          ? lookupUnit(original.unit)
+          : null;
+
+  const unitInfo: UnitMatch | null = "unitInfo" in quantity && quantity.unitInfo
+    ? (quantity.unitInfo as UnitMatch)
+    : fallbackUnit;
+
+  const originalUnit = original.unit ?? null;
+  const sourceUnit = unitInfo ?? (originalUnit ? lookupUnit(originalUnit) : null);
+
+  let displayUnit: UnitMatch | null = null;
+
+  if (options.targetUnit) {
+    displayUnit = lookupUnit(options.targetUnit);
+  } else if (options.usePreferredUnit && sourceUnit?.family) {
+    let baseMagnitude: number | null = null;
+
+    if (quantity.kind === "range") {
+      const range = quantity as QuantityRange;
+      const rawMax = "scaledMax" in quantity ? (quantity as ScaledQuantityRange).scaledMax : range.max;
+      baseMagnitude = toBaseValue(rawMax, sourceUnit);
+    } else {
+      const single = quantity as QuantitySingle;
+      const rawValue = "scaledValue" in quantity ? (quantity as ScaledQuantitySingle).scaledValue : single.value;
+      baseMagnitude = toBaseValue(rawValue, sourceUnit);
+    }
+
+    if (baseMagnitude != null) {
+      const preferred = choosePreferredUnit(baseMagnitude, sourceUnit.family);
+      displayUnit = toUnitMatch(preferred, preferred?.display ?? null);
+    }
+  }
+
+  const allowFractions = !displayUnit;
+
+  if (quantity.kind === "range") {
+    return formatQuantityRange(quantity, sourceUnit, displayUnit, allowFractions, originalUnit);
+  }
+
+  return formatQuantitySingle(quantity, sourceUnit, displayUnit, allowFractions, originalUnit);
+};

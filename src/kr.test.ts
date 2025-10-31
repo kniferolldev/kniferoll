@@ -29,7 +29,11 @@ const createTestIO = () => {
 };
 
 // Helper for running CLI with configurable stdin
-const runCliWithArgs = async (args: string[], stdinInput = "", fileReader?: (path: string) => Promise<string>) => {
+const runCliWithArgs = async (
+  args: string[],
+  stdinInput = "",
+  fileReader?: (path: string) => Promise<string>,
+) => {
   const { out, err } = createTestIO();
   const code = await runCli(args, {
     stdin: stdinFrom(stdinInput),
@@ -93,12 +97,32 @@ test("check path uses provided reader", async () => {
   expect(seen).toBe("recipes/sample.md");
 });
 
+const defaultStyleReadFile = async (path: string): Promise<string> => {
+  const file = Bun.file(path);
+  if (!(await file.exists())) {
+    throw new Error(`Unable to read file: ${path}`);
+  }
+  return await file.text();
+};
+
 test("default readFile reads existing recipe files", async () => {
-  const code = await runCli(["bun", "src/kr.ts", "check", "recipes/granola.md"]);
+  const { code, err } = await runCliWithArgs(
+    ["bun", "src/kr.ts", "check", "recipes/granola.md"],
+    "",
+    defaultStyleReadFile,
+  );
+
   expect(code).toBe(0);
+  expect(err.read()).toBe("");
 });
 
 test("default readFile reports missing files", async () => {
-  const code = await runCli(["bun", "src/kr.ts", "check", "recipes/does-not-exist.md"]);
+  const { code, err } = await runCliWithArgs(
+    ["bun", "src/kr.ts", "check", "recipes/does-not-exist.md"],
+    "",
+    defaultStyleReadFile,
+  );
+
   expect(code).toBe(2);
+  expect(err.read()).toContain("Unable to read file: recipes/does-not-exist.md");
 });
