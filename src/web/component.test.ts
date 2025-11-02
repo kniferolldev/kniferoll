@@ -227,6 +227,63 @@ test("renderDocument renders timer and temperature tokens", () => {
   expect(html).toContain('class="kr-timer-group"');
 });
 
+test("renderDocument renders diagnostics panel when requested", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Broken",
+    "",
+    "# Incomplete",
+    "## Ingredients",
+    "- salt",
+  ].join("\n");
+
+  const parsed = parseDocument(markdown);
+  expect(parsed.diagnostics.length).toBeGreaterThan(0);
+
+  const withoutPanel = componentModule.renderDocument(parsed);
+  expect(withoutPanel).not.toContain('class="kr-diagnostics"');
+
+  const withPanel = componentModule.renderDocument(parsed, { showDiagnostics: true });
+  expect(withPanel).toContain('class="kr-diagnostics"');
+  expect(withPanel).toContain("Diagnostics");
+  expect(withPanel).toContain(`data-kr-diagnostics-count="${parsed.diagnostics.length}"`);
+});
+
+test("step references include aria-controls and focusable targets", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Demo",
+    "",
+    "# Seasoning",
+    "## Ingredients",
+    "- red pepper flakes – pinch",
+    "- salt - 1 tsp",
+    "## Steps",
+    "1. Bloom [[red-pepper-flakes]] with [[salt]].",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  expect(html).toContain('id="kr-ingredient-red-pepper-flakes"');
+  expect(html).toContain('aria-controls="kr-ingredient-red-pepper-flakes"');
+  expect(html).toContain('id="kr-ingredient-salt"');
+
+  const { KrRecipeElement } = componentModule;
+  const element = new KrRecipeElement();
+  element.content = markdown;
+  element.connectedCallback();
+
+  const rendered = element.shadowRoot?.innerHTML ?? "";
+  expect(rendered).toContain('aria-controls="kr-ingredient-red-pepper-flakes"');
+  expect(rendered).toContain('id="kr-ingredient-red-pepper-flakes"');
+  expect(rendered).toContain('tabindex="-1"');
+});
+
 test("KrRecipeElement responds to scale and quantity-display attributes", () => {
   if (!componentModule) {
     throw new Error("Component module was not initialized");
@@ -262,6 +319,22 @@ test("KrRecipeElement responds to scale and quantity-display attributes", () => 
   element.setAttribute("layout", "two-column");
   const layoutHtml = element.shadowRoot?.innerHTML ?? "";
   expect(layoutHtml).toContain('data-kr-layout="two-column"');
+
+  element.setAttribute("show-diagnostics", "true");
+  element.content = [
+    "# Demo",
+    "",
+    "# Incomplete",
+    "## Ingredients",
+    "- salt",
+  ].join("\n");
+
+  const diagnosticsHtml = element.shadowRoot?.innerHTML ?? "";
+  expect(diagnosticsHtml).toContain('class="kr-diagnostics"');
+
+  element.removeAttribute("show-diagnostics");
+  const removedDiagnosticsHtml = element.shadowRoot?.innerHTML ?? "";
+  expect(removedDiagnosticsHtml).not.toContain('class="kr-diagnostics"');
 });
 
 test("renderDocument applies scale factor and alternate quantity display", () => {

@@ -57,6 +57,22 @@ test("parses ingredient with quantity, modifiers, and attributes", () => {
   expect(alsoAttr.quantity.unit).toBe("g");
 });
 
+test("parses en dash delimiter between name and quantity", () => {
+  const { section, diagnostics } = getIngredientsSection(
+    withRecipe([
+      "- red pepper flakes – pinch, optional",
+    ]),
+  );
+
+  const ingredient = section.ingredients[0];
+  expect(ingredient).toBeDefined();
+  if (!ingredient) return;
+  expect(ingredient.name).toBe("red pepper flakes");
+  expect(ingredient.quantityText).toBe("pinch");
+  expect(ingredient.quantity).toBeNull();
+  expect(ingredient.modifiers).toBe("optional");
+});
+
 test("flags invalid ingredient syntax when line lacks bullet", () => {
   const input = withRecipe(["sugar - 1 cup"]);
   const { diagnostics, section } = getIngredientsSection(input);

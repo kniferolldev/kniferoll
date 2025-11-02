@@ -212,12 +212,21 @@ ${bundleMarkdown(markdown)}
           );
           const ref = host.shadowRoot?.querySelector(".kr-ref") as HTMLButtonElement | null;
           ref?.dispatchEvent(new Event("click", { bubbles: true }));
+          const targetAttr = ref?.getAttribute("data-kr-target") ?? "";
+          const targetNode = targetAttr
+            ? host.shadowRoot?.querySelector(`[data-kr-id="${targetAttr}"]`)
+            : null;
+          const active = host.shadowRoot?.activeElement ?? document.activeElement;
           return {
             hasRef: !!ref,
             active: ref?.classList.contains("kr-ref--active") ?? false,
             highlighted:
               host.shadowRoot?.querySelectorAll(".kr-target-highlight").length ?? 0,
             detail: (window as unknown as Record<string, unknown>).lastRefDetail ?? null,
+            controls: ref?.getAttribute("aria-controls") ?? null,
+            ariaPressed: ref?.getAttribute("aria-pressed") ?? null,
+            targetActive: targetNode?.getAttribute("data-kr-target-active") ?? null,
+            activeElementId: active instanceof HTMLElement ? active.id : null,
           };
         });
         if (!refInteraction?.active) {
@@ -226,6 +235,10 @@ ${bundleMarkdown(markdown)}
         expect(refInteraction.hasRef).toBe(true);
         expect(refInteraction.highlighted > 0).toBe(true);
         expect((refInteraction.detail as { targetId?: string } | null)?.targetId).toBe("oats");
+        expect(refInteraction.controls).toBe("kr-ingredient-oats");
+        expect(refInteraction.ariaPressed).toBe("true");
+        expect(refInteraction.targetActive).toBe("true");
+        expect(refInteraction.activeElementId).toBe("kr-ingredient-oats");
 
         const temperatureData = await page.evaluate(() => {
           const host = document.querySelector("kr-recipe");
@@ -304,6 +317,44 @@ ${bundleMarkdown(markdown)}
         expect(layoutDetail?.rootLayout).toBe("two-column");
         expect(layoutDetail?.recipeLayout).toBe("two-column");
         expect(layoutDetail?.display).toBe("grid");
+
+        await page.evaluate(() => {
+          const host = document.querySelector<HTMLElement & { content?: string }>("kr-recipe");
+          if (!host) {
+            return;
+          }
+          host.setAttribute("show-diagnostics", "true");
+          const nextContent = [
+            "# Broken",
+            "",
+            "# Incomplete",
+            "## Ingredients",
+            "- salt",
+          ].join("\n");
+          (host as unknown as { content: string }).content = nextContent;
+        });
+
+        await page.waitForFunction(() => {
+          const host = document.querySelector<HTMLElement>("kr-recipe");
+          return !!host?.shadowRoot?.querySelector('[data-kr-diagnostics]');
+        });
+
+        const diagnosticsDetail = await page.evaluate(() => {
+          const host = document.querySelector<HTMLElement>("kr-recipe");
+          if (!host?.shadowRoot) {
+            return null;
+          }
+          const panel = host.shadowRoot.querySelector('[data-kr-diagnostics]');
+          const count = host.shadowRoot
+            .querySelector('.kr-root')
+            ?.getAttribute('data-kr-diagnostics-count');
+          return {
+            hasPanel: !!panel,
+            count,
+          };
+        });
+        expect(diagnosticsDetail?.hasPanel).toBe(true);
+        expect(diagnosticsDetail?.count).toBe("1");
 
         const screenshot = await page.screenshot({ fullPage: true });
         expect(screenshot.byteLength).toBeGreaterThan(5_000);

@@ -116,10 +116,18 @@ const parseIngredientLine = (
   let quantityPart: string | null = null;
   let modifiersPart: string | null = null;
 
-  const dashIndex = body.indexOf(" - ");
+  const hyphenDashIndex = body.indexOf(" - ");
+  const enDashIndex = body.indexOf(" – ");
+  const dashIndex = hyphenDashIndex >= 0
+    ? hyphenDashIndex
+    : enDashIndex >= 0
+      ? enDashIndex
+      : -1;
+  const dashLength = dashIndex === hyphenDashIndex ? 3 : dashIndex === enDashIndex ? 3 : 0;
+
   if (dashIndex >= 0) {
     namePart = body.slice(0, dashIndex);
-    const remainder = body.slice(dashIndex + 3);
+    const remainder = body.slice(dashIndex + dashLength);
     const commaIndex = remainder.indexOf(", ");
     if (commaIndex >= 0) {
       quantityPart = remainder.slice(0, commaIndex);

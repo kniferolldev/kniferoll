@@ -6,6 +6,7 @@ import { scaleQuantity } from "../core/scale-quantity";
 import { formatQuantity } from "../core/format";
 import { lookupUnit } from "../core/units";
 import type {
+  Diagnostic,
   DocumentParseResult,
   DocumentStepTemperatureToken,
   DocumentStepTimerToken,
@@ -142,6 +143,82 @@ const BASE_STYLE = `
     background: var(--kr-color-highlight, rgba(59, 130, 246, 0.15));
     border-radius: 0.4rem;
     transition: background 0.15s ease;
+  }
+
+  .kr-diagnostics {
+    border-radius: var(--kr-diagnostics-radius, 0.75rem);
+    border: var(--kr-diagnostics-border, 1px solid rgba(185, 28, 28, 0.2));
+    background: var(--kr-diagnostics-background, rgba(254, 242, 242, 0.85));
+    padding: var(--kr-diagnostics-padding, 1rem 1.25rem);
+    color: var(--kr-diagnostics-text, #7f1d1d);
+    display: grid;
+    gap: 0.75rem;
+    margin-bottom: var(--kr-diagnostics-margin, 1rem);
+  }
+
+  .kr-diagnostics__header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .kr-diagnostics__summary {
+    font-size: 0.85rem;
+    color: rgba(127, 29, 29, 0.75);
+  }
+
+  .kr-diagnostics__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .kr-diagnostics__item {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .kr-diagnostics__tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .kr-diagnostics__tag::before {
+    content: attr(data-kr-tag);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.75rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(185, 28, 28, 0.15);
+    color: rgba(153, 27, 27, 0.95);
+  }
+
+  .kr-diagnostics__tag[data-kr-severity="warning"]::before {
+    background: rgba(202, 138, 4, 0.2);
+    color: rgba(146, 64, 14, 0.95);
+  }
+
+  .kr-diagnostics__message {
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+
+  .kr-diagnostics__meta {
+    font-size: 0.8rem;
+    color: rgba(127, 29, 29, 0.7);
   }
 
   .kr-ingredient-list {
@@ -355,6 +432,12 @@ const BASE_STYLE = `
     .kr-ingredient__quantity-secondary {
       color: rgba(55, 65, 81, 0.7);
     }
+
+    .kr-diagnostics {
+      border: 1px solid rgba(127, 29, 29, 0.35);
+      background: transparent;
+      color: #7f1d1d;
+    }
   }
 `.trim();
 
@@ -376,16 +459,20 @@ type LayoutPreset =
   | "ingredients-left"
   | "print-compact";
 
+type TargetInfo = { name: string; type: "ingredient" | "recipe" };
+
 interface RenderOptions {
   scaleFactor: number;
   quantityDisplay: QuantityDisplayMode;
   layout: LayoutPreset;
+  showDiagnostics: boolean;
 }
 
 const DEFAULT_RENDER_OPTIONS: RenderOptions = {
   scaleFactor: 1,
   quantityDisplay: "native",
   layout: "stacked",
+  showDiagnostics: false,
 };
 
 const sanitizeAttrKey = (key: string): string =>
@@ -452,6 +539,46 @@ const pickAlternateDisplay = (
   }
 
   return candidates.find((candidate) => candidate.text) ?? candidates[0] ?? null;
+};
+
+const renderDiagnosticsPanel = (diagnostics: Diagnostic[]): string => {
+  if (diagnostics.length === 0) {
+    return "";
+  }
+
+  const errorCount = diagnostics.filter((item) => item.severity === "error").length;
+  const warningCount = diagnostics.length - errorCount;
+  const summaryParts: string[] = [];
+  if (errorCount) {
+    summaryParts.push(`${errorCount} error${errorCount === 1 ? "" : "s"}`);
+  }
+  if (warningCount) {
+    summaryParts.push(`${warningCount} warning${warningCount === 1 ? "" : "s"}`);
+  }
+
+  const summaryText = summaryParts.length ? summaryParts.join(", ") : "No issues";
+
+  const items = diagnostics
+    .map((diag) => {
+      const severityLabel = diag.severity === "error" ? "Error" : "Warning";
+      const code = escapeHtml(diag.code);
+      const message = escapeHtml(diag.message);
+      const location = `Line ${diag.line}:${diag.column}`;
+      return `<li class="kr-diagnostics__item" data-kr-code="${code}" data-kr-severity="${diag.severity}">
+        <span class="kr-diagnostics__tag" data-kr-tag="${code}" data-kr-severity="${diag.severity}">${severityLabel} ${code}</span>
+        <span class="kr-diagnostics__message">${message}</span>
+        <span class="kr-diagnostics__meta">${escapeHtml(location)}</span>
+      </li>`;
+    })
+    .join("");
+
+  return `<section class="kr-diagnostics" data-kr-diagnostics role="status" aria-live="polite">
+      <div class="kr-diagnostics__header">
+        <span>Diagnostics</span>
+        <span class="kr-diagnostics__summary">${escapeHtml(summaryText)}</span>
+      </div>
+      <ul class="kr-diagnostics__list">${items}</ul>
+    </section>`;
 };
 
 const durationToSeconds = (duration: TimerDuration): number =>
@@ -643,7 +770,7 @@ const REFERENCE_PATTERN = /\[\[([^[\]]+)\]\]/g;
 
 const renderStepLine = (
   line: SectionLine,
-  targetMap: Map<string, string>,
+  targetMeta: Map<string, TargetInfo>,
   tokens: DocumentStepToken[],
   context: { recipeId: string; recipeTitle: string },
 ): string => {
@@ -705,13 +832,13 @@ const renderStepLine = (
         target = targetPart;
       }
       if (!display) {
-        const fallback = targetMap.get(target);
+        const fallback = targetMeta.get(target)?.name;
         if (fallback) {
           display = fallback;
         }
       }
     } else {
-      const fallback = targetMap.get(target);
+      const fallback = targetMeta.get(target)?.name;
       if (fallback) {
         display = fallback;
       }
@@ -722,12 +849,21 @@ const renderStepLine = (
       continue;
     }
 
+    const meta = targetMeta.get(target);
+    const controlsId = meta
+      ? meta.type === "ingredient"
+        ? `kr-ingredient-${target}`
+        : `kr-recipe-${target}`
+      : null;
+
     inlineTokens.push({
       start,
       end,
       html: `<button type="button" class="kr-ref" data-kr-target="${escapeAttr(
         target,
-      )}" data-kr-display="${escapeAttr(display)}">${escapeHtml(display)}</button>`,
+      )}" data-kr-display="${escapeAttr(display)}"${controlsId ? ` aria-controls="${escapeAttr(
+        controlsId,
+      )}"` : ""}>${escapeHtml(display)}</button>`,
     });
   }
 
@@ -856,8 +992,9 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
     omitAttributes,
   });
 
+  const elementId = `kr-ingredient-${ingredient.id}`;
   const body = [quantity, name, modifiers, attributes].filter(Boolean).join("");
-  return `<li class="kr-ingredient" ${dataAttrs.join(" ")}>${body}</li>`;
+  return `<li class="kr-ingredient" id="${escapeAttr(elementId)}" tabindex="-1" ${dataAttrs.join(" ")}>${body}</li>`;
 };
 
 const renderIngredientsSection = (
@@ -877,7 +1014,7 @@ const renderSection = (
   recipe: Recipe,
   section: RecipeSection,
   options: RenderOptions,
-  targetMap: Map<string, string>,
+  targetMeta: Map<string, TargetInfo>,
   stepTokensByLine: Map<number, DocumentStepToken[]>,
 ): string => {
   if (section.kind === "ingredients") {
@@ -890,7 +1027,7 @@ const renderSection = (
       .map((line) =>
         renderStepLine(
           line,
-          targetMap,
+          targetMeta,
           stepTokensByLine.get(line.line) ?? [],
           { recipeId: recipe.id, recipeTitle: recipe.title },
         ),
@@ -920,14 +1057,15 @@ const renderRecipe = (
   recipe: Recipe,
   index: number,
   options: RenderOptions,
-  targetMap: Map<string, string>,
+  targetMeta: Map<string, TargetInfo>,
   stepTokensByLine: Map<number, DocumentStepToken[]>,
 ): string => {
   const sections = recipe.sections
-    .map((section) => renderSection(recipe, section, options, targetMap, stepTokensByLine))
+    .map((section) => renderSection(recipe, section, options, targetMeta, stepTokensByLine))
     .join("");
   const roleAttr = index === 0 ? "main" : "secondary";
-  return `<section class="kr-recipe" data-kr-role="${roleAttr}" data-kr-id="${escapeAttr(
+  const recipeElementId = `kr-recipe-${recipe.id}`;
+  return `<section class="kr-recipe" id="${escapeAttr(recipeElementId)}" tabindex="-1" data-kr-role="${roleAttr}" data-kr-id="${escapeAttr(
     recipe.id,
   )}" data-kr-layout="${escapeAttr(options.layout)}"><header class="kr-recipe__header"><h2 class="kr-recipe__title">${escapeHtml(
     recipe.title,
@@ -943,17 +1081,19 @@ export const renderDocument = (
     ...partialOptions,
   };
 
-  const targetMap = new Map<string, string>();
+  const targetMeta = new Map<string, TargetInfo>();
   const stepTokensByLine = new Map<number, DocumentStepToken[]>();
+  const diagnostics = doc.diagnostics ?? [];
+  const diagnosticsCount = diagnostics.length;
 
   for (const recipe of doc.recipes) {
-    targetMap.set(recipe.id, recipe.title);
+    targetMeta.set(recipe.id, { name: recipe.title, type: "recipe" });
     for (const section of recipe.sections) {
       if (section.kind !== "ingredients") {
         continue;
       }
       for (const ingredient of section.ingredients) {
-        targetMap.set(ingredient.id, ingredient.name);
+        targetMeta.set(ingredient.id, { name: ingredient.name, type: "ingredient" });
       }
     }
   }
@@ -973,8 +1113,15 @@ export const renderDocument = (
 
   const parts: string[] = [
     `<style>${BASE_STYLE}</style>`,
-    `<article class="kr-root" data-kr-scale="${options.scaleFactor}" data-kr-quantity-display="${options.quantityDisplay}" data-kr-layout="${options.layout}">`,
   ];
+
+  if (options.showDiagnostics && diagnosticsCount > 0) {
+    parts.push(renderDiagnosticsPanel(diagnostics));
+  }
+
+  parts.push(
+    `<article class="kr-root" data-kr-scale="${options.scaleFactor}" data-kr-quantity-display="${options.quantityDisplay}" data-kr-layout="${options.layout}" data-kr-diagnostics-count="${diagnosticsCount}">`,
+  );
 
   if (doc.documentTitle) {
     parts.push(
@@ -988,7 +1135,7 @@ export const renderDocument = (
     );
   } else {
     doc.recipes.forEach((recipe, index) => {
-      parts.push(renderRecipe(recipe, index, options, targetMap, stepTokensByLine));
+      parts.push(renderRecipe(recipe, index, options, targetMeta, stepTokensByLine));
     });
   }
 
@@ -1002,7 +1149,7 @@ const emptyRender = (): string =>
 export class KrRecipeElement extends HTMLElement {
   static tagName = TAG_NAME;
   static get observedAttributes(): string[] {
-    return ["scale", "preset", "quantity-display", "layout"];
+    return ["scale", "preset", "quantity-display", "layout", "show-diagnostics"];
   }
 
   #content: string | null = null;
@@ -1140,6 +1287,21 @@ export class KrRecipeElement extends HTMLElement {
       default:
         return "stacked";
     }
+  }
+
+  #shouldShowDiagnostics(): boolean {
+    const attr = this.getAttribute("show-diagnostics");
+    if (attr === null) {
+      return false;
+    }
+    const normalized = attr.trim().toLowerCase();
+    if (normalized === "" || normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+    return true;
   }
 
   #setupTimerInteractions(): void {
@@ -1383,9 +1545,11 @@ export class KrRecipeElement extends HTMLElement {
     const clearHighlight = () => {
       if (activeRef) {
         activeRef.classList.remove("kr-ref--active");
+        activeRef.removeAttribute("aria-pressed");
       }
       root.querySelectorAll(".kr-target-highlight").forEach((node) => {
         node.classList.remove("kr-target-highlight");
+        node.removeAttribute("data-kr-target-active");
       });
       activeRef = null;
     };
@@ -1405,14 +1569,25 @@ export class KrRecipeElement extends HTMLElement {
 
       activeRef = ref;
       if (!targetNodes.some((node) => node.classList.contains("kr-target-highlight"))) {
-        targetNodes.forEach((node) => node.classList.add("kr-target-highlight"));
+        targetNodes.forEach((node) => {
+          node.classList.add("kr-target-highlight");
+          node.setAttribute("data-kr-target-active", "true");
+        });
       }
       ref.classList.add("kr-ref--active");
+       if (lock) {
+        ref.setAttribute("aria-pressed", "true");
+      } else {
+        ref.removeAttribute("aria-pressed");
+      }
       if (lock) {
         lockedRef = ref;
         const primaryTarget = targetNodes[0];
         if (primaryTarget && typeof primaryTarget.scrollIntoView === "function") {
           primaryTarget.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        if (primaryTarget && typeof primaryTarget.focus === "function") {
+          primaryTarget.focus({ preventScroll: true });
         }
       }
 
@@ -1494,6 +1669,7 @@ export class KrRecipeElement extends HTMLElement {
       scaleFactor: scaleResolution.factor,
       quantityDisplay,
       layout,
+      showDiagnostics: this.#shouldShowDiagnostics(),
     });
     this.#setupControls(result, scaleResolution, quantityDisplay);
     this.#setupTimerInteractions();
