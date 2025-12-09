@@ -201,6 +201,30 @@ test("numbered steps with indented continuation lines pass", () => {
   expect(byCode(result.diagnostics, "W0401").length).toBe(0);
 });
 
+test("step continuation lines are unwrapped and joined", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. First step with continuation",
+    "   on the next line.",
+    "2. Second step.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const recipe = result.recipes[0];
+  const stepsSection = recipe?.sections.find((s) => s.kind === "steps");
+
+  expect(stepsSection).toBeDefined();
+  if (stepsSection?.kind === "steps") {
+    // Should have 2 lines (2 steps), not 3 (the continuation should be joined)
+    expect(stepsSection.lines.length).toBe(2);
+    // First step should contain the joined text
+    expect(stepsSection.lines[0]?.text).toContain("continuation on the next line");
+  }
+});
+
 test("invalid timer token emits W0402", () => {
   const input = [
     "# Roast",

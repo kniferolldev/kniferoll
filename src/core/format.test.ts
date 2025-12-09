@@ -52,3 +52,20 @@ test("formatQuantity handles metric promotion", () => {
   expect(formatQuantity(q, { scaled })).toBe("1500 g");
   expect(formatQuantity(q, { scaled, targetUnit: "kg" })).toBe("1.5 kg");
 });
+
+test("formatQuantity preserves 1/3 cup with usePreferredUnit", () => {
+  const q = quantity("1/3 cup");
+  expect(formatQuantity(q, { usePreferredUnit: true })).toBe("1/3 cup");
+});
+
+test("formatQuantity preserves unit-only quantities without scaling", () => {
+  const q = quantity("pinch");
+  expect(formatQuantity(q)).toBe("pinch");
+  expect(formatQuantity(q, {})).toBe("pinch");
+});
+
+test("formatQuantity expands unit-only quantities when scaling", () => {
+  const q = quantity("pinch");
+  const scaled = scaleQuantity(q, 2);
+  expect(formatQuantity(q, { scaled })).toBe("2 pinch");
+});

@@ -96,7 +96,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     family: "volume_us",
     preferred: {
       thresholds: [
-        { unit: "cup", min: 48 },
+        { unit: "cup", min: 12 },  // >= 1/4 cup (12 tsp) -> use cups
         { unit: "tbsp", min: 3 },
         { unit: "tsp", min: 0 },
       ],

@@ -56,21 +56,23 @@ const nearestFraction = (value: number): { whole: number; fraction: string | nul
 };
 
 const formatNumber = (value: number, unitInfo: UnitMatch | null, allowFractions = false): string => {
-  const rounded = unitInfo?.rounding ? roundToProfile(value, unitInfo.rounding) : value;
-  const absRounded = Math.abs(rounded);
   const fractionEnabled = allowFractions || unitInfo?.rounding.precision === undefined;
+  const absValue = Math.abs(value);
 
+  // Try to match fractions first, before rounding
   if (fractionEnabled) {
-    const fractionCandidate = nearestFraction(absRounded);
+    const fractionCandidate = nearestFraction(absValue);
 
     if (fractionCandidate.fraction) {
       if (fractionCandidate.whole === 0) {
-        return `${rounded < 0 ? "-" : ""}${fractionCandidate.fraction}`;
+        return `${value < 0 ? "-" : ""}${fractionCandidate.fraction}`;
       }
-      return `${rounded < 0 ? "-" : ""}${Math.abs(fractionCandidate.whole)} ${fractionCandidate.fraction}`;
+      return `${value < 0 ? "-" : ""}${Math.abs(fractionCandidate.whole)} ${fractionCandidate.fraction}`;
     }
   }
 
+  // Apply rounding only if we didn't use a fraction
+  const rounded = unitInfo?.rounding ? roundToProfile(value, unitInfo.rounding) : value;
   const precision = unitInfo?.rounding.precision;
   const fixed = precision !== undefined ? rounded.toFixed(precision) : rounded.toString();
 
@@ -157,6 +159,14 @@ export const formatQuantity = (
     return null;
   }
 
+  // If not scaling or converting, use the original raw text to preserve
+  // the author's formatting choices (e.g., "pinch" instead of "1 pinch")
+  const isNotScaling = !options.scaled;
+  const isNotConverting = !options.targetUnit && !options.usePreferredUnit;
+  if (isNotScaling && isNotConverting && original.raw) {
+    return original.raw;
+  }
+
   const quantity = options.scaled ?? original;
   const fallbackUnit =
     "unitInfo" in quantity && quantity.unitInfo
@@ -197,7 +207,8 @@ export const formatQuantity = (
     }
   }
 
-  const allowFractions = !displayUnit;
+  // Allow fractions when not converting, or when converting within the same unit
+  const allowFractions = !displayUnit || (displayUnit && sourceUnit && displayUnit.canonical === sourceUnit.canonical);
 
   if (quantity.kind === "range") {
     return formatQuantityRange(quantity, sourceUnit, displayUnit, allowFractions, originalUnit);

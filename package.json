@@ -6,7 +6,8 @@
   "scripts": {
     "kr": "bun src/kr.ts",
     "test": "bun test",
-    "demo": "bun demo/server.ts"
+    "demo": "bun demo/server.ts",
+    "screenshot": "bun scripts/screenshot.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

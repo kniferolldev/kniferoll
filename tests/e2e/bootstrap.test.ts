@@ -127,7 +127,7 @@ ${bundleMarkdown(markdown)}
         await page.waitForFunction(() => {
           const host = document.querySelector("kr-recipe");
           return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
-        });
+        }, undefined, { timeout: 5000 });
 
         const docTitle = await page.evaluate(() => {
           const host = document.querySelector("kr-recipe");
@@ -156,7 +156,7 @@ ${bundleMarkdown(markdown)}
         await page.waitForFunction(() => {
           const host = document.querySelector("kr-recipe");
           return !!host?.shadowRoot?.querySelector(".kr-scale-control");
-        });
+        }, undefined, { timeout: 5000 });
         await page.evaluate(() => {
           const host = document.querySelector("kr-recipe");
           const select = host?.shadowRoot?.querySelector(".kr-scale-control") as HTMLSelectElement | null;
@@ -170,12 +170,12 @@ ${bundleMarkdown(markdown)}
           const host = document.querySelector("kr-recipe");
           const quantity = host?.shadowRoot?.querySelector(".kr-ingredient__quantity")?.textContent ?? "";
           return quantity.includes("3");
-        });
+        }, undefined, { timeout: 5000 });
 
         await page.waitForFunction(() => {
           const host = document.querySelector("kr-recipe");
           return !!host?.shadowRoot?.querySelector(".kr-quantity-control");
-        });
+        }, undefined, { timeout: 5000 });
         await page.evaluate(() => {
           const host = document.querySelector("kr-recipe");
           const select = host?.shadowRoot?.querySelector(".kr-quantity-control") as HTMLSelectElement | null;
@@ -189,7 +189,7 @@ ${bundleMarkdown(markdown)}
           const host = document.querySelector("kr-recipe");
           const quantity = host?.shadowRoot?.querySelector(".kr-ingredient__quantity")?.textContent ?? "";
           return quantity.includes("g");
-        });
+        }, undefined, { timeout: 5000 });
 
         const quantityMode = await page.evaluate(() => {
           const host = document.querySelector("kr-recipe");
@@ -259,7 +259,7 @@ ${bundleMarkdown(markdown)}
         await page.waitForFunction(() => {
           const host = document.querySelector("kr-recipe");
           return !!host?.shadowRoot?.querySelector('.kr-timer[data-kr-timer-label="2s"]');
-        });
+        }, undefined, { timeout: 5000 });
 
         await page.evaluate(() => {
           const host = document.querySelector("kr-recipe");
@@ -285,7 +285,7 @@ ${bundleMarkdown(markdown)}
         const timerStartHandle = await page.waitForFunction(() => {
           const store = (window as unknown as { timerStartDetail?: unknown }).timerStartDetail;
           return store ?? null;
-        }, { timeout: 2_000 });
+        }, { timeout: 5000 });
         const timerStart = (await timerStartHandle.jsonValue()) as {
           label?: string;
           durationMs?: number;
@@ -323,7 +323,7 @@ ${bundleMarkdown(markdown)}
           if (!host) {
             return;
           }
-          host.setAttribute("show-diagnostics", "true");
+          host.setAttribute("diagnostics", "panel");
           const nextContent = [
             "# Broken",
             "",
@@ -337,7 +337,7 @@ ${bundleMarkdown(markdown)}
         await page.waitForFunction(() => {
           const host = document.querySelector<HTMLElement>("kr-recipe");
           return !!host?.shadowRoot?.querySelector('[data-kr-diagnostics]');
-        });
+        }, undefined, { timeout: 5000 });
 
         const diagnosticsDetail = await page.evaluate(() => {
           const host = document.querySelector<HTMLElement>("kr-recipe");
@@ -355,6 +355,48 @@ ${bundleMarkdown(markdown)}
         });
         expect(diagnosticsDetail?.hasPanel).toBe(true);
         expect(diagnosticsDetail?.count).toBe("1");
+
+        await page.evaluate(() => {
+          const host = document.querySelector("kr-recipe");
+          host?.setAttribute("diagnostics", "inline");
+        });
+
+        await page.waitForFunction(() => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-diagnostic-target[aria-controls]");
+        }, undefined, { timeout: 5000 });
+
+        const inlineDiagnosticsDetail = await page.evaluate(() => {
+          const host = document.querySelector("kr-recipe");
+          if (!host?.shadowRoot) {
+            return null;
+          }
+          const marker = host.shadowRoot.querySelector<HTMLButtonElement>(".kr-diagnostic-target[aria-controls]");
+          const severity = host.shadowRoot
+            .querySelector(".kr-diagnostic-target")
+            ?.getAttribute("data-kr-diagnostic-severity");
+          return {
+            hasMarker: !!marker,
+            severity,
+          };
+        });
+        expect(inlineDiagnosticsDetail?.hasMarker).toBe(true);
+        expect(inlineDiagnosticsDetail?.severity).toBe("error");
+
+        await page.evaluate(() => {
+          const host = document.querySelector("kr-recipe");
+          const marker = host?.shadowRoot?.querySelector<HTMLButtonElement>(".kr-diagnostic-target[aria-controls]");
+          marker?.click();
+        });
+
+        const popoverTextHandle = await page.waitForFunction(() => {
+          const host = document.querySelector("kr-recipe");
+          const popover = host?.shadowRoot?.querySelector<HTMLElement>(".kr-diagnostic-popover:not([hidden])");
+          return popover?.textContent?.trim() ? popover.textContent.trim() : null;
+        }, undefined, { timeout: 5000 });
+        const popoverText = await popoverTextHandle.jsonValue();
+        expect(typeof popoverText).toBe("string");
+        expect((popoverText as string).length).toBeGreaterThan(5);
 
         const screenshot = await page.screenshot({ fullPage: true });
         expect(screenshot.byteLength).toBeGreaterThan(5_000);

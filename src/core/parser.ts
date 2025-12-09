@@ -49,6 +49,65 @@ const isHeadingLine = (line: string): boolean => {
   return /^#{1,6}\s+/.test(trimmed);
 };
 
+/**
+ * Unwraps continuation lines in steps sections.
+ * Lines starting with whitespace after a numbered step are joined to the previous step.
+ */
+const unwrapStepLines = (lines: SectionLine[]): SectionLine[] => {
+  const unwrapped: SectionLine[] = [];
+  let current: SectionLine | null = null;
+
+  for (const line of lines) {
+    const raw = line.text;
+    const trimmed = raw.trim();
+
+    // Empty lines are preserved
+    if (trimmed === "") {
+      if (current) {
+        unwrapped.push(current);
+        current = null;
+      }
+      unwrapped.push(line);
+      continue;
+    }
+
+    // Check if this is a numbered step
+    if (STEP_NUMBER_RE.test(raw)) {
+      // Save previous step if any
+      if (current) {
+        unwrapped.push(current);
+      }
+      // Start new step
+      current = line;
+      continue;
+    }
+
+    // Check if this is a continuation line (starts with whitespace)
+    if (current && /^\s/.test(raw)) {
+      // Join to current step with a space
+      current = {
+        text: current.text + " " + trimmed,
+        line: current.line, // Keep the line number of the step start
+      };
+      continue;
+    }
+
+    // Not a numbered step or continuation - treat as standalone line
+    if (current) {
+      unwrapped.push(current);
+      current = null;
+    }
+    unwrapped.push(line);
+  }
+
+  // Don't forget the last step if any
+  if (current) {
+    unwrapped.push(current);
+  }
+
+  return unwrapped;
+};
+
 const nextHeadingType = (lines: string[], fromIndex: number): "#" | "##" | null => {
   for (let i = fromIndex + 1; i < lines.length; i += 1) {
     const trimmed = lines[i]?.trim() ?? "";
@@ -261,6 +320,9 @@ export const parseDocument = (
     for (const section of recipe.sections) {
       if (section.kind === "ingredients") {
         parseIngredientsSection(section, diagnostics);
+      } else if (section.kind === "steps") {
+        // Unwrap continuation lines in steps
+        section.lines = unwrapStepLines(section.lines);
       }
     }
   }

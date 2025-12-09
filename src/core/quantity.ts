@@ -107,14 +107,16 @@ export const parseQuantity = (
   const match = QUANTITY_PATTERN.exec(normalizedValue);
 
   if (!match || !match.groups) {
-    diagnostics.push({
-      code: options.invalid.code,
-      message: options.invalid.message,
-      severity: "error",
-      line: options.line,
-      column: 1,
-    });
-    return { quantity: null, diagnostics };
+    // If the pattern doesn't match, check if it's a unit-only quantity
+    // (text with no numeric amount, e.g., "pinch", "dash")
+    // Treat these as having an implied amount of 1
+    const quantity: QuantitySingle = {
+      kind: "single",
+      raw: trimmed,
+      value: 1,
+      unit: trimmed,
+    };
+    return { quantity, diagnostics };
   }
 
   const firstText = match.groups.first ?? "";

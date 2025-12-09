@@ -119,6 +119,8 @@ Example skeleton:
   (`1 1/2`). Fraction characters (`½`) are also allowed.
 - `unit`: free text. If it matches the **unit lexicon** (below), a renderer may
   use unit-aware behavior. Unknown units still scale numerically.
+- **Unit-only**: if a quantity consists only of a unit with no numeric amount
+  (e.g., `pinch`, `dash`), it is treated as having an implied amount of `1`.
 
 ### 3.3 Tail attributes (after `::`)
 

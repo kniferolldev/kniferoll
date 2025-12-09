@@ -69,7 +69,11 @@ test("parses en dash delimiter between name and quantity", () => {
   if (!ingredient) return;
   expect(ingredient.name).toBe("red pepper flakes");
   expect(ingredient.quantityText).toBe("pinch");
-  expect(ingredient.quantity).toBeNull();
+  expect(ingredient.quantity?.kind).toBe("single");
+  if (ingredient.quantity?.kind === "single") {
+    expect(ingredient.quantity.value).toBe(1);
+    expect(ingredient.quantity.unit).toBe("pinch");
+  }
   expect(ingredient.modifiers).toBe("optional");
 });
 
@@ -122,11 +126,24 @@ test("noscale without quantity triggers W0205", () => {
   ]);
 });
 
-test("invalid also quantity raises E0206", () => {
+test("also quantity with unit-only value parses correctly", () => {
   const input = withRecipe(["- sugar - 1 cup :: also=maybe"]);
-  const { diagnostics } = getIngredientsSection(input);
+  const { diagnostics, section } = getIngredientsSection(input);
 
-  expect(diagnostics.some((diag) => diag.code === "E0206")).toBe(true);
+  // "maybe" is technically valid as a unit-only quantity (1 maybe)
+  // even though it's semantically meaningless
+  expect(diagnostics.map((diag) => diag.code)).toEqual([]);
+  const ingredient = section.ingredients[0];
+  expect(ingredient).toBeDefined();
+  if (!ingredient) return;
+
+  const alsoAttr = ingredient.attributes.find((attr) => attr.key === "also");
+  expect(alsoAttr?.value).toBe("maybe");
+  expect(alsoAttr?.quantity?.kind).toBe("single");
+  if (alsoAttr?.quantity?.kind === "single") {
+    expect(alsoAttr.quantity.value).toBe(1);
+    expect(alsoAttr.quantity.unit).toBe("maybe");
+  }
 });
 
 test("ignores blank ingredient lines", () => {
@@ -191,4 +208,101 @@ test("attribute delimiter without trailing value reports error", () => {
   const { diagnostics } = getIngredientsSection(input);
 
   expect(diagnostics.some((diag) => diag.code === "E0202")).toBe(true);
+});
+
+test("line-wrapped tail attributes are merged and parsed correctly", () => {
+  const { section, diagnostics } = getIngredientsSection(
+    withRecipe([
+      "- sweet Italian sausage - 6 oz, removed from casing :: id=sausage",
+      "  also=170g also=\"2 links\"",
+    ]),
+  );
+
+  expect(diagnostics.map((diag) => diag.code)).toEqual([]);
+  const ingredient = section.ingredients[0];
+  expect(ingredient).toBeDefined();
+  if (!ingredient) return;
+
+  expect(ingredient.name).toBe("sweet Italian sausage");
+  expect(ingredient.quantityText).toBe("6 oz");
+  expect(ingredient.modifiers).toBe("removed from casing");
+
+  // Check id attribute
+  const idAttr = ingredient.attributes.find((attr) => attr.key === "id");
+  expect(idAttr?.value).toBe("sausage");
+
+  // Check also attributes (should have two)
+  const alsoAttrs = ingredient.attributes.filter((attr) => attr.key === "also");
+  expect(alsoAttrs).toHaveLength(2);
+  expect(alsoAttrs[0]?.value).toBe("170g");
+  expect(alsoAttrs[1]?.value).toBe("2 links");
+});
+
+test("multiple continuation lines are supported", () => {
+  const { section, diagnostics } = getIngredientsSection(
+    withRecipe([
+      "- flour - 2 cups ::",
+      "  id=flour",
+      "  also=240g",
+      "  noscale",
+    ]),
+  );
+
+  expect(diagnostics.filter((diag) => diag.severity === "error")).toEqual([]);
+  const ingredient = section.ingredients[0];
+  expect(ingredient).toBeDefined();
+  if (!ingredient) return;
+
+  expect(ingredient.name).toBe("flour");
+  expect(ingredient.attributes.some((attr) => attr.key === "id" && attr.value === "flour")).toBe(true);
+  expect(ingredient.attributes.some((attr) => attr.key === "also" && attr.value === "240g")).toBe(true);
+  expect(ingredient.attributes.some((attr) => attr.key === "noscale")).toBe(true);
+});
+
+test("continuation lines do not affect subsequent ingredients", () => {
+  const { section, diagnostics } = getIngredientsSection(
+    withRecipe([
+      "- sugar - 1 cup :: id=white-sugar",
+      "  also=200g",
+      "- salt",
+    ]),
+  );
+
+  expect(diagnostics.map((diag) => diag.code)).toEqual([]);
+  expect(section.ingredients).toHaveLength(2);
+
+  const [sugar, salt] = section.ingredients;
+  expect(sugar?.name).toBe("sugar");
+  expect(sugar?.attributes.some((attr) => attr.key === "also" && attr.value === "200g")).toBe(true);
+  expect(salt?.name).toBe("salt");
+  expect(salt?.attributes).toEqual([]);
+});
+
+test("parses unit-only quantities with implied amount of 1", () => {
+  const { section, diagnostics } = getIngredientsSection(
+    withRecipe([
+      "- red pepper flakes – pinch, optional",
+      "- salt - dash",
+    ]),
+  );
+
+  expect(diagnostics.map((diag) => diag.code)).toEqual([]);
+  expect(section.ingredients).toHaveLength(2);
+
+  const [pepperFlakes, salt] = section.ingredients;
+
+  expect(pepperFlakes?.name).toBe("red pepper flakes");
+  expect(pepperFlakes?.quantity?.kind).toBe("single");
+  if (pepperFlakes?.quantity?.kind === "single") {
+    expect(pepperFlakes.quantity.value).toBe(1);
+    expect(pepperFlakes.quantity.unit).toBe("pinch");
+  }
+  expect(pepperFlakes?.modifiers).toBe("optional");
+
+  expect(salt?.name).toBe("salt");
+  expect(salt?.quantity?.kind).toBe("single");
+  if (salt?.quantity?.kind === "single") {
+    expect(salt.quantity.value).toBe(1);
+    expect(salt.quantity.unit).toBe("dash");
+  }
 });

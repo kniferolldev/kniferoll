@@ -227,7 +227,7 @@ test("renderDocument renders timer and temperature tokens", () => {
   expect(html).toContain('class="kr-timer-group"');
 });
 
-test("renderDocument renders diagnostics panel when requested", () => {
+test("renderDocument renders diagnostics controls according to mode", () => {
   if (!componentModule) {
     throw new Error("Component module was not initialized");
   }
@@ -243,13 +243,22 @@ test("renderDocument renders diagnostics panel when requested", () => {
   const parsed = parseDocument(markdown);
   expect(parsed.diagnostics.length).toBeGreaterThan(0);
 
-  const withoutPanel = componentModule.renderDocument(parsed);
-  expect(withoutPanel).not.toContain('class="kr-diagnostics"');
+  const summaryHtml = componentModule.renderDocument(parsed);
+  expect(summaryHtml).toContain('class="kr-diagnostics"');
+  expect(summaryHtml).toContain('data-kr-mode="summary"');
 
-  const withPanel = componentModule.renderDocument(parsed, { showDiagnostics: true });
-  expect(withPanel).toContain('class="kr-diagnostics"');
-  expect(withPanel).toContain("Diagnostics");
-  expect(withPanel).toContain(`data-kr-diagnostics-count="${parsed.diagnostics.length}"`);
+  const panelHtml = componentModule.renderDocument(parsed, { diagnosticsMode: "panel" });
+  expect(panelHtml).toContain('data-kr-mode="panel"');
+  expect(panelHtml).toContain("<details");
+  expect(panelHtml).toContain("open");
+
+  const offHtml = componentModule.renderDocument(parsed, { diagnosticsMode: "off" });
+  expect(offHtml).not.toContain('class="kr-diagnostics"');
+  expect(offHtml).toContain(`data-kr-diagnostics-count="${parsed.diagnostics.length}"`);
+
+  const inlineHtml = componentModule.renderDocument(parsed, { diagnosticsMode: "inline" });
+  expect(inlineHtml).toContain('kr-diagnostic-target');
+  expect(inlineHtml).toContain('data-kr-diagnostic-severity="error"');
 });
 
 test("step references include aria-controls and focusable targets", () => {
@@ -320,7 +329,7 @@ test("KrRecipeElement responds to scale and quantity-display attributes", () => 
   const layoutHtml = element.shadowRoot?.innerHTML ?? "";
   expect(layoutHtml).toContain('data-kr-layout="two-column"');
 
-  element.setAttribute("show-diagnostics", "true");
+  element.setAttribute("diagnostics", "panel");
   element.content = [
     "# Demo",
     "",
@@ -331,10 +340,15 @@ test("KrRecipeElement responds to scale and quantity-display attributes", () => 
 
   const diagnosticsHtml = element.shadowRoot?.innerHTML ?? "";
   expect(diagnosticsHtml).toContain('class="kr-diagnostics"');
+  expect(diagnosticsHtml).toContain('data-kr-mode="panel"');
 
-  element.removeAttribute("show-diagnostics");
+  element.setAttribute("diagnostics", "off");
   const removedDiagnosticsHtml = element.shadowRoot?.innerHTML ?? "";
   expect(removedDiagnosticsHtml).not.toContain('class="kr-diagnostics"');
+
+  element.setAttribute("diagnostics", "inline");
+  const inlineDiagnosticsHtml = element.shadowRoot?.innerHTML ?? "";
+  expect(inlineDiagnosticsHtml).toContain('kr-diagnostic-target');
 });
 
 test("renderDocument applies scale factor and alternate quantity display", () => {
@@ -389,4 +403,34 @@ test("step references render as interactive targets", () => {
   expect(html).toContain('class="kr-ref"');
   expect(html).toContain('data-kr-target="kosher-salt"');
   expect(html).toContain(">kosher salt<");
+});
+
+test("ingredients render with wrapper div for highlight compatibility", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Test",
+    "",
+    "# Recipe",
+    "## Ingredients",
+    "- salt - 1 tsp",
+    "- pepper",
+    "## Steps",
+    "1. Season with [[salt]] and [[pepper]].",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  // Check that ingredients have wrapper div for grid layout
+  expect(html).toContain('class="kr-ingredient__wrapper"');
+
+  // Check that ingredient references have aria-controls for accessibility
+  expect(html).toContain('aria-controls="kr-ingredient-salt"');
+  expect(html).toContain('aria-controls="kr-ingredient-pepper"');
+
+  // Check that ingredients have proper IDs for targeting
+  expect(html).toContain('id="kr-ingredient-salt"');
+  expect(html).toContain('id="kr-ingredient-pepper"');
 });

@@ -63,10 +63,37 @@ test("parses range with en dash", () => {
   expect(range.unit).toBe("cups");
 });
 
-test("reports invalid quantity", () => {
+test("parses unit-only quantity as implied amount of 1", () => {
+  const result = run("pinch");
+  expect(result.diagnostics).toHaveLength(0);
+  const quantity = result.quantity;
+  if (!quantity || quantity.kind !== "single") {
+    throw new Error("expected single quantity");
+  }
+  expect(quantity.value).toBe(1);
+  expect(quantity.unit).toBe("pinch");
+});
+
+test("parses multi-word unit-only quantity", () => {
   const result = run("about a cup");
-  expect(result.quantity).toBeNull();
-  expect(result.diagnostics.some((diag) => diag.code === "E")).toBe(true);
+  expect(result.diagnostics).toHaveLength(0);
+  const quantity = result.quantity;
+  if (!quantity || quantity.kind !== "single") {
+    throw new Error("expected single quantity");
+  }
+  expect(quantity.value).toBe(1);
+  expect(quantity.unit).toBe("about a cup");
+});
+
+test("parses dash as unit-only quantity", () => {
+  const result = run("dash");
+  expect(result.diagnostics).toHaveLength(0);
+  const quantity = result.quantity;
+  if (!quantity || quantity.kind !== "single") {
+    throw new Error("expected single quantity");
+  }
+  expect(quantity.value).toBe(1);
+  expect(quantity.unit).toBe("dash");
 });
 
 test("rejects blank quantity text", () => {

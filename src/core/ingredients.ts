@@ -314,7 +314,37 @@ export const parseIngredientsSection = (
   diagnostics: Diagnostic[],
 ) => {
   const items: Ingredient[] = [];
-  for (const { text, line } of section.lines) {
+
+  // Merge continuation lines (lines that start with whitespace and don't have a bullet)
+  const mergedLines: Array<{ text: string; line: number }> = [];
+  for (let i = 0; i < section.lines.length; i++) {
+    const current = section.lines[i];
+    if (!current) continue;
+
+    const trimmed = current.text.trim();
+
+    // Skip blank lines
+    if (trimmed === "") {
+      continue;
+    }
+
+    // Check if this is a continuation line (starts with whitespace, not a bullet)
+    const isContinuation = current.text.startsWith(" ") && !trimmed.startsWith("-");
+
+    if (isContinuation && mergedLines.length > 0) {
+      // Append to the previous line
+      const prev = mergedLines[mergedLines.length - 1];
+      if (prev) {
+        prev.text = `${prev.text} ${trimmed}`;
+      }
+    } else {
+      // Start a new line
+      mergedLines.push({ text: current.text, line: current.line });
+    }
+  }
+
+  // Parse merged lines
+  for (const { text, line } of mergedLines) {
     const ingredient = parseIngredientLine(text, line, diagnostics);
     if (ingredient) {
       items.push(ingredient);

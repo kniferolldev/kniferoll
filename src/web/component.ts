@@ -27,148 +27,266 @@ import type {
 const TAG_NAME = "kr-recipe";
 
 const BASE_STYLE = `
+  /*
+   * CSS Custom Properties API
+   * -------------------------
+   * Core palette (set these to theme the component):
+   *   --kr-color-text        Base text color
+   *   --kr-color-muted       Secondary/subtle text
+   *   --kr-color-accent      Links and interactive elements
+   *   --kr-color-surface     Card/control backgrounds
+   *   --kr-color-border      Borders and dividers
+   *
+   * Typography:
+   *   --kr-font-family       Font stack
+   *   --kr-font-size-base    Base font size (default: 1rem)
+   *   --kr-line-height       Base line height (default: 1.6)
+   *
+   * Layout spacing:
+   *   --kr-section-gap       Space between sections (default: 1.75rem)
+   *   --kr-header-gap        Space below section headers (default: 0.75rem)
+   *   --kr-item-gap          Space between list items (default: 0.375rem)
+   *
+   * Card:
+   *   --kr-card-radius       Border radius
+   *   --kr-card-padding      Inner padding
+   *
+   * Semantic (auto-derived, but overridable):
+   *   --kr-color-quantity    Quantity/measurement color
+   *   --kr-color-timer       Timer chip background
+   *   --kr-color-temperature Temperature chip background
+   */
+
   :host {
     display: block;
-    font-family: var(--kr-font-family, system-ui, sans-serif);
-    color: var(--kr-color-text, inherit);
+    font-family: var(--kr-font-family, system-ui, -apple-system, sans-serif);
+    font-size: var(--kr-font-size-base, 1rem);
+    line-height: var(--kr-line-height, 1.6);
+    color: var(--kr-color-text, #1a1a1a);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   .kr-root {
     display: grid;
-    gap: var(--kr-gap, 1.5rem);
+    gap: var(--kr-section-gap, 1.75rem);
   }
 
   .kr-document-title {
     margin: 0;
-    font-size: var(--kr-document-title-size, 1.75rem);
-    font-weight: 600;
+    font-size: 1.75em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
   }
 
+  /* Recipe card */
   .kr-recipe {
-    border-radius: var(--kr-card-radius, 0.75rem);
-    border: var(--kr-card-border, 1px solid var(--kr-color-border, rgba(17, 24, 39, 0.1)));
-    padding: var(--kr-card-padding, 1.25rem);
-    background: var(--kr-card-background, var(--kr-color-surface, rgba(255, 255, 255, 0.95)));
+    border-radius: var(--kr-card-radius, 1rem);
+    border: 1px solid var(--kr-color-border, rgba(0, 0, 0, 0.08));
+    padding: var(--kr-card-padding, 1.5rem);
+    background: var(--kr-color-surface, #ffffff);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
   }
 
   .kr-recipe__title {
-    margin: 0 0 var(--kr-title-spacing, 1rem);
-    font-size: var(--kr-recipe-title-size, 1.5rem);
-    font-weight: 600;
+    margin: 0 0 1.25rem;
+    font-size: 1.5em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    color: var(--kr-color-text, #1a1a1a);
   }
 
+  /* Sections */
   .kr-section {
     margin: 0;
     padding: 0;
   }
 
   .kr-section + .kr-section {
-    margin-top: var(--kr-section-gap, 1rem);
+    margin-top: var(--kr-section-gap, 1.75rem);
   }
 
   .kr-section__title {
-    margin: 0;
-    font-size: var(--kr-section-title-size, 1rem);
-    font-weight: 600;
-    text-transform: capitalize;
+    margin: 0 0 var(--kr-header-gap, 0.75rem);
+    font-size: 0.7em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--kr-color-muted, #6b6b6b);
   }
 
   .kr-section__body {
-    margin-top: var(--kr-section-body-gap, 0.5rem);
-    color: var(--kr-color-muted, #4b5563);
-    font-size: var(--kr-section-body-size, 0.95rem);
-    line-height: var(--kr-section-body-line-height, 1.5);
+    font-size: 0.95em;
+    line-height: var(--kr-line-height, 1.6);
+    color: var(--kr-color-text, #1a1a1a);
   }
 
   .kr-section__line {
     margin: 0;
   }
 
+  .kr-section__line + .kr-section__line {
+    margin-top: 0.625em;
+  }
+
+  .kr-section[data-kr-kind="steps"] .kr-section__line {
+    position: relative;
+    padding-left: 2em;
+  }
+
+  .kr-step-number {
+    position: absolute;
+    left: 0;
+    font-weight: 600;
+    color: var(--kr-color-muted, #6b6b6b);
+  }
+
+  /* Controls */
   .kr-controls {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--kr-control-gap, 0.75rem);
+    gap: 0.5rem;
     align-items: center;
-    margin-bottom: var(--kr-control-margin, 1rem);
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--kr-color-border, rgba(0, 0, 0, 0.08));
   }
 
   .kr-control-label {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    font-size: 0.85rem;
+    gap: 0.35rem;
+    font-size: 0.8em;
     font-weight: 600;
-    color: var(--kr-color-muted, #4b5563);
+    color: var(--kr-color-muted, #6b6b6b);
   }
 
   .kr-control-select {
     appearance: none;
-    border-radius: var(--kr-control-radius, 999px);
-    border: var(--kr-control-border, 1px solid var(--kr-color-border, rgba(17, 24, 39, 0.2)));
-    background: var(--kr-control-background, var(--kr-color-surface, rgba(255, 255, 255, 0.96)));
-    padding: var(--kr-control-padding, 0.35rem 1.1rem 0.35rem 0.65rem);
-    font-size: var(--kr-control-size, 0.9rem);
+    border-radius: 0.5rem;
+    border: 1px solid var(--kr-color-border, rgba(0, 0, 0, 0.12));
+    background: var(--kr-color-surface, #ffffff);
+    padding: 0.35rem 1.5rem 0.35rem 0.6rem;
+    font-size: 0.85em;
+    font-weight: 500;
     line-height: 1.2;
     cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6b6b' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
   }
 
   .kr-control-select:focus-visible {
-    outline: 2px solid var(--kr-color-border, rgba(17, 24, 39, 0.35));
+    outline: 2px solid var(--kr-color-accent, #2563eb);
     outline-offset: 2px;
   }
 
+  /* Ingredient references */
   .kr-ref {
     border: none;
     background: none;
     color: var(--kr-color-accent, #2563eb);
     text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--kr-color-accent, #2563eb) 40%, transparent);
+    text-underline-offset: 2px;
     cursor: pointer;
     font: inherit;
     padding: 0;
+    transition: text-decoration-color 0.15s ease;
+  }
+
+  .kr-ref:hover {
+    text-decoration-color: var(--kr-color-accent, #2563eb);
   }
 
   .kr-ref:focus-visible {
     outline: 2px solid var(--kr-color-accent, #2563eb);
     outline-offset: 2px;
+    border-radius: 2px;
   }
 
   .kr-ref--active {
-    color: var(--kr-color-highlight-text, #1f2937);
-    background: var(--kr-color-highlight, rgba(59, 130, 246, 0.15));
-    border-radius: 0.3rem;
-    padding-inline: 0.2rem;
+    color: var(--kr-color-text, #1a1a1a);
+    background: var(--kr-color-highlight, rgba(37, 99, 235, 0.1));
+    text-decoration: none;
+    border-radius: 0.25rem;
+    padding: 0.1rem 0.3rem;
+    margin: -0.1rem -0.3rem;
   }
 
   .kr-target-highlight {
-    background: var(--kr-color-highlight, rgba(59, 130, 246, 0.15));
-    border-radius: 0.4rem;
+    background: var(--kr-color-highlight, rgba(37, 99, 235, 0.08));
+    border-radius: 0.375rem;
     transition: background 0.15s ease;
   }
 
+  /* Diagnostics panel */
   .kr-diagnostics {
-    border-radius: var(--kr-diagnostics-radius, 0.75rem);
-    border: var(--kr-diagnostics-border, 1px solid rgba(185, 28, 28, 0.2));
-    background: var(--kr-diagnostics-background, rgba(254, 242, 242, 0.85));
-    padding: var(--kr-diagnostics-padding, 1rem 1.25rem);
-    color: var(--kr-diagnostics-text, #7f1d1d);
-    display: grid;
+    border-radius: var(--kr-card-radius, 1rem);
+    border: 1px solid rgba(185, 28, 28, 0.15);
+    background: rgba(254, 242, 242, 0.8);
+    color: #991b1b;
+    margin-bottom: 1rem;
+    overflow: hidden;
+  }
+
+  .kr-diagnostics__toggle {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.8em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .kr-diagnostics__toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .kr-diagnostics__icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 999px;
+    border: 2px solid currentColor;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75em;
+    font-weight: 700;
+  }
+
+  .kr-diagnostics__panel {
+    display: none;
+    border-top: 1px solid rgba(185, 28, 28, 0.15);
+    padding: 1rem 1.25rem 1.25rem;
+    background: rgba(254, 226, 226, 0.4);
     gap: 0.75rem;
-    margin-bottom: var(--kr-diagnostics-margin, 1rem);
+  }
+
+  .kr-diagnostics[open] .kr-diagnostics__panel {
+    display: grid;
   }
 
   .kr-diagnostics__header {
     display: flex;
     align-items: baseline;
     gap: 0.5rem;
-    font-size: 0.95rem;
-    font-weight: 600;
+    font-size: 0.85em;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
   }
 
   .kr-diagnostics__summary {
-    font-size: 0.85rem;
-    color: rgba(127, 29, 29, 0.75);
+    font-size: 0.85em;
+    font-weight: 500;
+    opacity: 0.75;
   }
 
   .kr-diagnostics__list {
@@ -181,71 +299,136 @@ const BASE_STYLE = `
 
   .kr-diagnostics__item {
     display: grid;
-    gap: 0.35rem;
+    gap: 0.25rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 0.375rem;
+    transition: background 0.15s ease;
+  }
+
+  .kr-diagnostics__item:hover {
+    background: rgba(185, 28, 28, 0.08);
   }
 
   .kr-diagnostics__tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.75rem;
-    font-weight: 600;
+    display: block;
+    font-size: 0.85em;
+    font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+    margin-bottom: 0.25rem;
   }
 
-  .kr-diagnostics__tag::before {
-    content: attr(data-kr-tag);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.75rem;
-    padding: 0.15rem 0.45rem;
-    border-radius: 999px;
-    background: rgba(185, 28, 28, 0.15);
-    color: rgba(153, 27, 27, 0.95);
-  }
-
-  .kr-diagnostics__tag[data-kr-severity="warning"]::before {
-    background: rgba(202, 138, 4, 0.2);
-    color: rgba(146, 64, 14, 0.95);
+  /* Remove specific warning border-color as it's no longer a badge */
+  .kr-diagnostics__tag[data-kr-severity="warning"] {
+    /* No custom styling needed here now */
   }
 
   .kr-diagnostics__message {
-    font-size: 0.95rem;
+    font-size: 0.9em;
     font-weight: 500;
   }
 
   .kr-diagnostics__meta {
-    font-size: 0.8rem;
-    color: rgba(127, 29, 29, 0.7);
+    font-size: 0.75em;
+    opacity: 0.7;
   }
 
+  .kr-diagnostic-target {
+    position: relative;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .kr-diagnostic-target[data-kr-diagnostic-severity="error"] {
+    background: rgba(220, 38, 38, 0.15);
+  }
+
+  .kr-diagnostic-target[data-kr-diagnostic-severity="error"]:hover {
+    background: rgba(220, 38, 38, 0.25);
+  }
+
+  .kr-diagnostic-target[data-kr-diagnostic-severity="warning"] {
+    background: rgba(217, 119, 6, 0.2);
+  }
+
+  .kr-diagnostic-target[data-kr-diagnostic-severity="warning"]:hover {
+    background: rgba(217, 119, 6, 0.3);
+  }
+
+  .kr-diagnostic-popover {
+    pointer-events: auto;
+    position: absolute;
+    top: 1.75rem;
+    left: 1.25rem;
+    min-width: 14rem;
+    max-width: min(22rem, 70vw);
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.5rem;
+    border: 1px solid currentColor;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    z-index: 20;
+    font-size: 0.85em;
+  }
+
+  .kr-diagnostic-popover__list {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .kr-diagnostic-popover__item {
+    display: block;
+    line-height: 1.4;
+  }
+
+  /* Ingredient list */
   .kr-ingredient-list {
     list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
-    gap: var(--kr-ingredient-gap, 0.5rem);
+    grid-template-columns: auto 1fr;
+    row-gap: var(--kr-item-gap, 0.375rem);
+    column-gap: 0.5rem;
+    align-items: baseline;
   }
 
   .kr-ingredient {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--kr-ingredient-item-gap, 0.5rem);
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
+
+  .kr-ingredient__wrapper {
+    display: contents;
+  }
+
+  .kr-ingredient.kr-target-highlight {
+    background: var(--kr-color-highlight, rgba(37, 99, 235, 0.08));
   }
 
   .kr-ingredient__quantity {
-    font-weight: 600;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
+    color: var(--kr-color-quantity, #1a1a1a);
+    text-align: right;
   }
 
   .kr-ingredient__quantity-secondary {
-    font-size: var(--kr-ingredient-secondary-size, 0.8rem);
-    color: var(--kr-color-muted, #6b7280);
+    font-size: 0.8em;
+    color: var(--kr-color-muted, #6b6b6b);
     font-style: italic;
-    margin-left: var(--kr-ingredient-secondary-offset, 0.35rem);
+    margin-left: 0.25rem;
+  }
+
+  .kr-ingredient__content {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.5rem;
   }
 
   .kr-ingredient__name {
@@ -253,12 +436,13 @@ const BASE_STYLE = `
   }
 
   .kr-ingredient__modifiers {
-    color: var(--kr-color-muted, #6b7280);
+    color: var(--kr-color-muted, #6b6b6b);
+    font-style: italic;
   }
 
   .kr-ingredient__attributes {
     display: inline-flex;
-    gap: var(--kr-attribute-gap, 0.375rem);
+    gap: 0.375rem;
     flex-wrap: wrap;
   }
 
@@ -266,45 +450,50 @@ const BASE_STYLE = `
     display: inline-flex;
     align-items: center;
     gap: 0.125rem;
-    font-size: var(--kr-attribute-size, 0.75rem);
-    padding: var(--kr-attribute-padding, 0.125rem 0.375rem);
-    border-radius: var(--kr-attribute-radius, 999px);
-    background: var(--kr-color-badge, rgba(15, 118, 110, 0.12));
-    color: var(--kr-color-badge-text, #0f766e);
+    font-size: 0.7em;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: var(--kr-color-badge, rgba(34, 139, 34, 0.1));
+    color: var(--kr-color-badge-text, #166534);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
   }
 
   .kr-ingredient__attribute-value {
-    font-weight: 600;
+    font-weight: 700;
   }
 
+  /* Timer chips */
   .kr-timer-group {
     display: inline-flex;
-    gap: var(--kr-timer-group-gap, 0.35rem);
+    gap: 0.25rem;
     align-items: center;
-    margin: 0 0.25rem;
   }
 
   .kr-timer {
     display: inline-flex;
     align-items: center;
-    gap: var(--kr-timer-gap, 0.35rem);
-    padding: var(--kr-timer-padding, 0.2rem 0.65rem);
-    border-radius: var(--kr-timer-radius, 999px);
-    border: var(--kr-timer-border, 1px solid var(--kr-color-border, rgba(17, 24, 39, 0.2)));
-    background: var(--kr-timer-background, var(--kr-color-surface, rgba(255, 255, 255, 0.96)));
-    font-size: var(--kr-timer-size, 0.85rem);
+    gap: 0.25rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    border: none;
+    background: var(--kr-color-timer, rgba(37, 99, 235, 0.1));
+    color: var(--kr-color-timer-text, #1d4ed8);
+    font: inherit;
+    font-size: 0.85em;
     font-weight: 600;
     line-height: 1.2;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition: background 0.15s ease;
   }
 
   .kr-timer:not(:disabled):hover {
-    background: var(--kr-timer-hover-background, var(--kr-color-surface-strong, rgba(244, 244, 245, 0.9)));
+    background: var(--kr-color-timer-hover, rgba(37, 99, 235, 0.18));
   }
 
   .kr-timer:focus-visible {
-    outline: 2px solid var(--kr-color-border, rgba(17, 24, 39, 0.35));
+    outline: 2px solid var(--kr-color-accent, #2563eb);
     outline-offset: 2px;
   }
 
@@ -312,24 +501,25 @@ const BASE_STYLE = `
     font-variant-numeric: tabular-nums;
   }
 
+  /* Temperature chips */
   .kr-temperature {
     display: inline-flex;
     align-items: center;
-    padding: var(--kr-temperature-padding, 0.05rem 0.4rem);
-    margin: 0 0.25rem;
-    border-radius: var(--kr-temperature-radius, 0.5rem);
-    background: var(--kr-color-temperature, rgba(250, 204, 21, 0.18));
-    color: var(--kr-color-temperature-text, #92400e);
-    font-size: var(--kr-temperature-size, 0.85rem);
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.375rem;
+    background: var(--kr-color-temperature, rgba(234, 88, 12, 0.1));
+    color: var(--kr-color-temperature-text, #c2410c);
+    font-size: 0.85em;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
 
+  /* Layout variants */
   .kr-recipe[data-kr-layout="two-column"],
   .kr-recipe[data-kr-layout="ingredients-left"],
   .kr-recipe[data-kr-layout="steps-left"] {
     display: grid;
-    gap: var(--kr-layout-column-gap, 1.5rem);
+    gap: var(--kr-section-gap, 1.75rem);
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-auto-rows: min-content;
   }
@@ -365,21 +555,22 @@ const BASE_STYLE = `
   }
 
   .kr-root[data-kr-layout="print-compact"] {
-    gap: var(--kr-gap-compact, 1rem);
+    gap: 1rem;
   }
 
   .kr-recipe[data-kr-layout="print-compact"] {
     border: none;
-    padding: var(--kr-print-padding, 0);
+    padding: 0;
     background: transparent;
+    box-shadow: none;
   }
 
   .kr-recipe[data-kr-layout="print-compact"] .kr-recipe__title {
-    font-size: var(--kr-print-title-size, 1.35rem);
+    font-size: 1.35em;
   }
 
   .kr-recipe[data-kr-layout="print-compact"] .kr-section + .kr-section {
-    margin-top: var(--kr-print-section-gap, 0.75rem);
+    margin-top: 1rem;
   }
 
   @media (max-width: 768px) {
@@ -392,23 +583,24 @@ const BASE_STYLE = `
 
   .kr-empty {
     font-style: italic;
-    color: var(--kr-color-muted, #6b7280);
+    color: var(--kr-color-muted, #6b6b6b);
   }
 
+  /* Print styles */
   @media print {
     :host {
-      color: #111827;
-      background: #ffffff !important;
+      color: #000;
+      background: #fff !important;
     }
 
     .kr-root {
-      gap: var(--kr-print-root-gap, 1rem);
+      gap: 1rem;
     }
 
     .kr-recipe {
       border: none;
       background: transparent;
-      padding: var(--kr-print-card-padding, 0);
+      padding: 0;
       box-shadow: none;
     }
 
@@ -424,13 +616,13 @@ const BASE_STYLE = `
     .kr-timer,
     .kr-timer-group,
     .kr-temperature {
-      border: 1px solid rgba(55, 65, 81, 0.4);
+      border: 1px solid rgba(0, 0, 0, 0.3);
       background: transparent;
       padding: 0.1rem 0.35rem;
     }
 
     .kr-ingredient__quantity-secondary {
-      color: rgba(55, 65, 81, 0.7);
+      color: rgba(0, 0, 0, 0.6);
     }
 
     .kr-diagnostics {
@@ -459,20 +651,24 @@ type LayoutPreset =
   | "ingredients-left"
   | "print-compact";
 
+type DiagnosticsMode = "off" | "summary" | "panel" | "inline";
+
 type TargetInfo = { name: string; type: "ingredient" | "recipe" };
 
 interface RenderOptions {
   scaleFactor: number;
   quantityDisplay: QuantityDisplayMode;
   layout: LayoutPreset;
-  showDiagnostics: boolean;
+  diagnosticsMode: DiagnosticsMode;
+  diagnosticsMap?: Map<number, Diagnostic[]>;
+  nextDiagnosticId?: () => string;
 }
 
 const DEFAULT_RENDER_OPTIONS: RenderOptions = {
   scaleFactor: 1,
   quantityDisplay: "native",
   layout: "stacked",
-  showDiagnostics: false,
+  diagnosticsMode: "summary",
 };
 
 const sanitizeAttrKey = (key: string): string =>
@@ -541,30 +737,40 @@ const pickAlternateDisplay = (
   return candidates.find((candidate) => candidate.text) ?? candidates[0] ?? null;
 };
 
-const renderDiagnosticsPanel = (diagnostics: Diagnostic[]): string => {
-  if (diagnostics.length === 0) {
+const formatDiagnosticsSummary = (diagnostics: Diagnostic[]): {
+  totalLabel: string;
+  breakdown: string;
+} => {
+  const errorCount = diagnostics.filter((item) => item.severity === "error").length;
+  const warningCount = diagnostics.length - errorCount;
+  const totalLabel = `${diagnostics.length} issue${diagnostics.length === 1 ? "" : "s"}`;
+  const breakdownParts: string[] = [];
+  if (errorCount) {
+    breakdownParts.push(`${errorCount} error${errorCount === 1 ? "" : "s"}`);
+  }
+  if (warningCount) {
+    breakdownParts.push(`${warningCount} warning${warningCount === 1 ? "" : "s"}`);
+  }
+  const breakdown = breakdownParts.length ? breakdownParts.join(", ") : totalLabel;
+  return { totalLabel, breakdown };
+};
+
+const renderDiagnosticsSection = (diagnostics: Diagnostic[], mode: DiagnosticsMode): string => {
+  if (diagnostics.length === 0 || mode === "off") {
     return "";
   }
 
-  const errorCount = diagnostics.filter((item) => item.severity === "error").length;
-  const warningCount = diagnostics.length - errorCount;
-  const summaryParts: string[] = [];
-  if (errorCount) {
-    summaryParts.push(`${errorCount} error${errorCount === 1 ? "" : "s"}`);
-  }
-  if (warningCount) {
-    summaryParts.push(`${warningCount} warning${warningCount === 1 ? "" : "s"}`);
-  }
-
-  const summaryText = summaryParts.length ? summaryParts.join(", ") : "No issues";
+  const { totalLabel, breakdown } = formatDiagnosticsSummary(diagnostics);
+  const summaryText =
+    breakdown === totalLabel ? totalLabel : `${totalLabel} · ${breakdown}`;
 
   const items = diagnostics
     .map((diag) => {
       const severityLabel = diag.severity === "error" ? "Error" : "Warning";
       const code = escapeHtml(diag.code);
       const message = escapeHtml(diag.message);
-      const location = `Line ${diag.line}:${diag.column}`;
-      return `<li class="kr-diagnostics__item" data-kr-code="${code}" data-kr-severity="${diag.severity}">
+      const location = `Line ${diag.line}`;
+      return `<li class="kr-diagnostics__item" data-kr-code="${code}" data-kr-severity="${diag.severity}" data-kr-line="${diag.line}">
         <span class="kr-diagnostics__tag" data-kr-tag="${code}" data-kr-severity="${diag.severity}">${severityLabel} ${code}</span>
         <span class="kr-diagnostics__message">${message}</span>
         <span class="kr-diagnostics__meta">${escapeHtml(location)}</span>
@@ -572,13 +778,57 @@ const renderDiagnosticsPanel = (diagnostics: Diagnostic[]): string => {
     })
     .join("");
 
-  return `<section class="kr-diagnostics" data-kr-diagnostics role="status" aria-live="polite">
-      <div class="kr-diagnostics__header">
-        <span>Diagnostics</span>
+  const openAttr = mode === "panel" ? " open" : "";
+
+  return `<details class="kr-diagnostics" data-kr-diagnostics data-kr-mode="${mode}" role="status" aria-live="polite"${openAttr}>
+      <summary class="kr-diagnostics__toggle">
+        <span class="kr-diagnostics__icon" aria-hidden="true">!</span>
         <span class="kr-diagnostics__summary">${escapeHtml(summaryText)}</span>
+      </summary>
+      <div class="kr-diagnostics__panel">
+        <ul class="kr-diagnostics__list">${items}</ul>
       </div>
-      <ul class="kr-diagnostics__list">${items}</ul>
-    </section>`;
+    </details>`;
+};
+
+const summarizeDiagnostics = (diagnostics: Diagnostic[]): string =>
+  diagnostics
+    .map(
+      (diag) =>
+        `${diag.severity === "error" ? "Error" : "Warning"} ${diag.code}: ${diag.message}`,
+    )
+    .join(" • ");
+
+const renderInlineDiagnostics = (
+  lineNumber: number,
+  options: RenderOptions,
+): { popover: string; severity: "error" | "warning"; controlsId: string } | null => {
+  if (options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
+    return null;
+  }
+
+  const diagnostics = options.diagnosticsMap.get(lineNumber);
+  if (!diagnostics || diagnostics.length === 0) {
+    return null;
+  }
+
+  const severity = diagnostics.some((diag) => diag.severity === "error") ? "error" : "warning";
+  const markerId = options.nextDiagnosticId
+    ? options.nextDiagnosticId()
+    : `kr-diagnostic-${lineNumber}-${Math.random().toString(36).slice(2)}`;
+
+  const items = diagnostics
+    .map(
+      (diag) =>
+        `<span class="kr-diagnostic-popover__item"><strong>${escapeHtml(diag.code)}</strong> ${escapeHtml(diag.message)}</span>`,
+    )
+    .join("");
+
+  const popover = `<span class="kr-diagnostic-popover" id="${escapeAttr(markerId)}" role="status" hidden>
+        <span class="kr-diagnostic-popover__list">${items}</span>
+      </span>`;
+
+  return { popover, severity, controlsId: markerId };
 };
 
 const durationToSeconds = (duration: TimerDuration): number =>
@@ -768,13 +1018,23 @@ const renderIngredientAttributes = (
 
 const REFERENCE_PATTERN = /\[\[([^[\]]+)\]\]/g;
 
+const STEP_NUMBER_PATTERN = /^(\d+)\.\s+/;
+
 const renderStepLine = (
   line: SectionLine,
   targetMeta: Map<string, TargetInfo>,
   tokens: DocumentStepToken[],
   context: { recipeId: string; recipeTitle: string },
+  options: RenderOptions,
 ): string => {
-  const text = line.text;
+  const fullText = line.text;
+
+  // Check if line starts with a step number like "1. "
+  const stepMatch = STEP_NUMBER_PATTERN.exec(fullText);
+  const stepNumber = stepMatch ? stepMatch[1] : null;
+  const stepPrefixLength = stepMatch ? stepMatch[0].length : 0;
+  const text = stepMatch ? fullText.slice(stepPrefixLength) : fullText;
+
   type InlineToken = { start: number; end: number; html: string };
   const inlineTokens: InlineToken[] = [];
 
@@ -785,11 +1045,15 @@ const renderStepLine = (
 
   let timerIndex = 0;
   for (const token of recipeTokens) {
-    const start = token.index;
-    const end = token.index + token.raw.length;
+    // Adjust indices for stripped step number prefix
+    const start = token.index - stepPrefixLength;
+    const end = token.index + token.raw.length - stepPrefixLength;
+    // Skip tokens that fall within the stripped prefix
+    if (end <= 0) continue;
+    const adjustedStart = Math.max(0, start);
     if (token.kind === "timer") {
       inlineTokens.push({
-        start,
+        start: adjustedStart,
         end,
         html: renderTimerToken(token, {
           recipeId: context.recipeId,
@@ -800,7 +1064,7 @@ const renderStepLine = (
       });
     } else if (token.kind === "temperature") {
       inlineTokens.push({
-        start,
+        start: adjustedStart,
         end,
         html: renderTemperatureToken(token),
       });
@@ -889,7 +1153,20 @@ const renderStepLine = (
     parts.push(escapeHtml(remainder));
   }
 
-  return `<p class="kr-section__line" data-kr-line="${line.line}">${parts.join("")}</p>`;
+  const inlineDiagnostics = renderInlineDiagnostics(line.line, options);
+  const diagnosticClass = inlineDiagnostics ? " kr-diagnostic-target" : "";
+  const diagnosticAttr = inlineDiagnostics
+    ? ` data-kr-diagnostic-severity="${inlineDiagnostics.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiagnostics.controlsId)}" tabindex="0"`
+    : "";
+  const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
+
+  const content = parts.join("");
+
+  if (stepNumber !== null) {
+    return `<p class="kr-section__line${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}<span class="kr-step-number">${escapeHtml(stepNumber)}.</span>${content}</p>`;
+  }
+
+  return `<p class="kr-section__line${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${content}</p>`;
 };
 
 const renderIngredient = (ingredient: Ingredient, options: RenderOptions): string => {
@@ -908,6 +1185,19 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
     }
   }
 
+  const inlineDiagnostics = renderInlineDiagnostics(ingredient.line, options);
+  let diagnosticClass = "";
+  let diagnosticContent = "";
+  if (inlineDiagnostics) {
+    diagnosticClass = " kr-diagnostic-target";
+    dataAttrs.push(`data-kr-diagnostic-severity="${inlineDiagnostics.severity}"`);
+    dataAttrs.push(`role="button"`);
+    dataAttrs.push(`aria-expanded="false"`);
+    dataAttrs.push(`aria-controls="${escapeAttr(inlineDiagnostics.controlsId)}"`);
+    dataAttrs.push(`tabindex="0"`);
+    diagnosticContent = inlineDiagnostics.popover;
+  }
+
   const noscale = ingredient.attributes.some((attr) => attr.key === "noscale");
   const baseQuantity = ingredient.quantity ?? null;
   const shouldScale = Boolean(baseQuantity) && !noscale && options.scaleFactor !== 1;
@@ -918,7 +1208,7 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
 
   const nativeQuantityText = formatQuantity(baseQuantity, {
     scaled: scaledQuantity ?? undefined,
-    usePreferredUnit: true,
+    usePreferredUnit: false,
   });
 
   const alternateAttributes = ingredient.attributes.filter((attr) => attr.key === "also");
@@ -961,13 +1251,10 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
 
   dataAttrs.push(`data-kr-quantity-mode="${quantityMode}"`);
 
+  // Build quantity column (always render, even if empty)
   const quantityParts: string[] = [];
   if (primaryQuantity) {
-    quantityParts.push(
-      `<span class="kr-ingredient__quantity" data-kr-quantity="${escapeAttr(
-        primaryQuantity,
-      )}">${escapeHtml(primaryQuantity)}</span>`,
-    );
+    quantityParts.push(escapeHtml(primaryQuantity));
   }
   if (secondaryQuantity) {
     quantityParts.push(
@@ -976,25 +1263,25 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
       )}</span>`,
     );
   }
+  const quantityContent = quantityParts.join(" ");
+  const quantityAttr = primaryQuantity ? ` data-kr-quantity="${escapeAttr(primaryQuantity)}"` : "";
+  const quantityCell = `<span class="kr-ingredient__quantity"${quantityAttr}>${quantityContent}</span>`;
 
-  const quantity = quantityParts.join(" ");
+  // Build content column
   const name = `<span class="kr-ingredient__name">${escapeHtml(ingredient.name)}</span>`;
   const modifiers = ingredient.modifiers
     ? `<span class="kr-ingredient__modifiers">${escapeHtml(ingredient.modifiers)}</span>`
     : "";
 
-  const omitAttributes =
-    alternateDisplay && alternateDisplay.attribute
-      ? new Set<IngredientAttribute>([alternateDisplay.attribute])
-      : undefined;
-  const attributes = renderIngredientAttributes(ingredient.attributes, {
-    omitKeys: new Set(["also"]),
-    omitAttributes,
-  });
+
+  const contentParts = [name, modifiers].filter(Boolean);
+  const contentCell = `<span class="kr-ingredient__content">${contentParts.join(" ")}</span>`;
 
   const elementId = `kr-ingredient-${ingredient.id}`;
-  const body = [quantity, name, modifiers, attributes].filter(Boolean).join("");
-  return `<li class="kr-ingredient" id="${escapeAttr(elementId)}" tabindex="-1" ${dataAttrs.join(" ")}>${body}</li>`;
+  const wrapper = `<div class="kr-ingredient__wrapper">${quantityCell}${contentCell}</div>`;
+  return `<li class="kr-ingredient${diagnosticClass}" id="${escapeAttr(elementId)}" tabindex="-1" ${dataAttrs.join(
+    " ",
+  )}>${diagnosticContent}${wrapper}</li>`;
 };
 
 const renderIngredientsSection = (
@@ -1030,6 +1317,7 @@ const renderSection = (
           targetMeta,
           stepTokensByLine.get(line.line) ?? [],
           { recipeId: recipe.id, recipeTitle: recipe.title },
+          options,
         ),
       )
       .join("");
@@ -1042,12 +1330,17 @@ const renderSection = (
   }
 
   const lines = section.lines
-    .map(
-      (line) =>
-        `<p class="kr-section__line" data-kr-line="${line.line}">${escapeHtml(
-          line.text.trim(),
-        )}</p>`,
-    )
+    .map((line) => {
+      const inlineDiagnostics = renderInlineDiagnostics(line.line, options);
+      const diagnosticClass = inlineDiagnostics ? " kr-diagnostic-target" : "";
+      const diagnosticAttr = inlineDiagnostics
+        ? ` data-kr-diagnostic-severity="${inlineDiagnostics.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiagnostics.controlsId)}" tabindex="0"`
+        : "";
+      const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
+      return `<p class="kr-section__line${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(
+        line.text.trim(),
+      )}</p>`;
+    })
     .join("");
 
   return `<section class="kr-section" data-kr-kind="${escapeAttr(section.kind)}">${heading}<div class="kr-section__body">${lines}</div></section>`;
@@ -1065,9 +1358,16 @@ const renderRecipe = (
     .join("");
   const roleAttr = index === 0 ? "main" : "secondary";
   const recipeElementId = `kr-recipe-${recipe.id}`;
+  const inlineDiagnostics = renderInlineDiagnostics(recipe.line, options);
+  const diagnosticClass = inlineDiagnostics ? " kr-diagnostic-target" : "";
+  const diagnosticAttr = inlineDiagnostics
+    ? ` data-kr-diagnostic-severity="${inlineDiagnostics.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiagnostics.controlsId)}" tabindex="0"`
+    : "";
+  const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
+
   return `<section class="kr-recipe" id="${escapeAttr(recipeElementId)}" tabindex="-1" data-kr-role="${roleAttr}" data-kr-id="${escapeAttr(
     recipe.id,
-  )}" data-kr-layout="${escapeAttr(options.layout)}"><header class="kr-recipe__header"><h2 class="kr-recipe__title">${escapeHtml(
+  )}" data-kr-layout="${escapeAttr(options.layout)}"><header class="kr-recipe__header"><h2 class="kr-recipe__title${diagnosticClass}" data-kr-line="${recipe.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(
     recipe.title,
   )}</h2></header>${sections}</section>`;
 };
@@ -1076,7 +1376,7 @@ export const renderDocument = (
   doc: DocumentParseResult,
   partialOptions: Partial<RenderOptions> = {},
 ): string => {
-  const options: RenderOptions = {
+  const baseOptions: RenderOptions = {
     ...DEFAULT_RENDER_OPTIONS,
     ...partialOptions,
   };
@@ -1085,6 +1385,29 @@ export const renderDocument = (
   const stepTokensByLine = new Map<number, DocumentStepToken[]>();
   const diagnostics = doc.diagnostics ?? [];
   const diagnosticsCount = diagnostics.length;
+  const diagnosticsMap = new Map<number, Diagnostic[]>();
+
+  if (diagnostics.length) {
+    for (const diagnostic of diagnostics) {
+      if (!diagnosticsMap.has(diagnostic.line)) {
+        diagnosticsMap.set(diagnostic.line, [diagnostic]);
+      } else {
+        diagnosticsMap.get(diagnostic.line)!.push(diagnostic);
+      }
+    }
+  }
+
+  const inlineDiagnosticsMap =
+    baseOptions.diagnosticsMode === "inline" && diagnosticsMap.size > 0
+      ? diagnosticsMap
+      : undefined;
+  let diagnosticIdCounter = 0;
+
+  const options: RenderOptions = {
+    ...baseOptions,
+    diagnosticsMap: inlineDiagnosticsMap,
+    nextDiagnosticId: inlineDiagnosticsMap ? () => `kr-diag-${diagnosticIdCounter++}` : undefined,
+  };
 
   for (const recipe of doc.recipes) {
     targetMeta.set(recipe.id, { name: recipe.title, type: "recipe" });
@@ -1115,8 +1438,9 @@ export const renderDocument = (
     `<style>${BASE_STYLE}</style>`,
   ];
 
-  if (options.showDiagnostics && diagnosticsCount > 0) {
-    parts.push(renderDiagnosticsPanel(diagnostics));
+  const diagnosticsSection = renderDiagnosticsSection(diagnostics, options.diagnosticsMode);
+  if (diagnosticsSection) {
+    parts.push(diagnosticsSection);
   }
 
   parts.push(
@@ -1124,8 +1448,14 @@ export const renderDocument = (
   );
 
   if (doc.documentTitle) {
+    const inlineDiagnostics = renderInlineDiagnostics(doc.documentTitle.line, options);
+    const diagnosticClass = inlineDiagnostics ? " kr-diagnostic-target" : "";
+    const diagnosticAttr = inlineDiagnostics
+      ? ` data-kr-diagnostic-severity="${inlineDiagnostics.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiagnostics.controlsId)}" tabindex="0"`
+      : "";
+    const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
     parts.push(
-      `<header class="kr-document"><h1 class="kr-document-title" data-kr-line="${doc.documentTitle.line}">${escapeHtml(doc.documentTitle.text)}</h1></header>`,
+      `<header class="kr-document"><h1 class="kr-document-title${diagnosticClass}" data-kr-line="${doc.documentTitle.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(doc.documentTitle.text)}</h1></header>`,
     );
   }
 
@@ -1149,7 +1479,13 @@ const emptyRender = (): string =>
 export class KrRecipeElement extends HTMLElement {
   static tagName = TAG_NAME;
   static get observedAttributes(): string[] {
-    return ["scale", "preset", "quantity-display", "layout", "show-diagnostics"];
+    return [
+      "scale",
+      "preset",
+      "quantity-display",
+      "layout",
+      "diagnostics",
+    ];
   }
 
   #content: string | null = null;
@@ -1289,19 +1625,23 @@ export class KrRecipeElement extends HTMLElement {
     }
   }
 
-  #shouldShowDiagnostics(): boolean {
-    const attr = this.getAttribute("show-diagnostics");
-    if (attr === null) {
-      return false;
+  #resolveDiagnosticsMode(): DiagnosticsMode {
+    const attr = this.getAttribute("diagnostics");
+    if (attr !== null) {
+      const normalized = attr.trim().toLowerCase();
+      if (normalized === "off" || normalized === "none") {
+        return "off";
+      }
+      if (normalized === "panel" || normalized === "full") {
+        return "panel";
+      }
+      if (normalized === "inline") {
+        return "inline";
+      }
+      return "summary";
     }
-    const normalized = attr.trim().toLowerCase();
-    if (normalized === "" || normalized === "true") {
-      return true;
-    }
-    if (normalized === "false") {
-      return false;
-    }
-    return true;
+
+    return "summary";
   }
 
   #setupTimerInteractions(): void {
@@ -1311,6 +1651,10 @@ export class KrRecipeElement extends HTMLElement {
 
     const root = this.shadowRoot;
     if (!root) {
+      return;
+    }
+
+    if (typeof (root as ShadowRoot).querySelectorAll !== "function") {
       return;
     }
 
@@ -1661,19 +2005,133 @@ export class KrRecipeElement extends HTMLElement {
       return;
     }
 
+    // Preserve diagnostics panel open/closed state across re-renders
+    const existingDiagnostics =
+      typeof shadow.querySelector === "function"
+        ? shadow.querySelector<HTMLDetailsElement>(".kr-diagnostics")
+        : null;
+    const diagnosticsWasOpen = existingDiagnostics?.open ?? false;
+
     const result = parseDocument(source);
     const scaleResolution = this.#resolveScaleFactor(result);
     const quantityDisplay = this.#resolveQuantityDisplay();
     const layout = this.#resolveLayout();
-    shadow.innerHTML = renderDocument(result, {
+    const html = renderDocument(result, {
       scaleFactor: scaleResolution.factor,
       quantityDisplay,
       layout,
-      showDiagnostics: this.#shouldShowDiagnostics(),
+      diagnosticsMode: this.#resolveDiagnosticsMode(),
     });
+    shadow.innerHTML = html;
+
+    // Restore diagnostics panel state
+    if (diagnosticsWasOpen) {
+      const newDiagnostics = shadow.querySelector<HTMLDetailsElement>(".kr-diagnostics");
+      if (newDiagnostics) {
+        newDiagnostics.open = true;
+      }
+    }
+
     this.#setupControls(result, scaleResolution, quantityDisplay);
     this.#setupTimerInteractions();
     this.#setupReferenceInteractions();
+    this.#setupDiagnosticMarkers();
+    this.#setupDiagnosticsInteractions();
+  }
+
+  #setupDiagnosticMarkers(): void {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (typeof (root as ShadowRoot).querySelectorAll !== "function") {
+      return;
+    }
+
+    const triggers = Array.from(
+      root.querySelectorAll<HTMLElement>(".kr-diagnostic-target[aria-controls]"),
+    );
+    if (triggers.length === 0) {
+      return;
+    }
+
+    const popovers = Array.from(root.querySelectorAll<HTMLElement>(".kr-diagnostic-popover"));
+
+    const closeAll = () => {
+      popovers.forEach((popover) => {
+        popover.hidden = true;
+      });
+      triggers.forEach((trigger) => {
+        trigger.setAttribute("aria-expanded", "false");
+      });
+    };
+
+    triggers.forEach((trigger) => {
+      const controlsId = trigger.getAttribute("aria-controls");
+      const popover = controlsId ? root.getElementById(controlsId) : null;
+
+      trigger.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const expanded = trigger.getAttribute("aria-expanded") === "true";
+        closeAll();
+        if (!expanded && popover) {
+          trigger.setAttribute("aria-expanded", "true");
+          popover.hidden = false;
+        }
+      });
+
+      trigger.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeAll();
+          trigger.focus();
+        }
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          trigger.click();
+        }
+      });
+    });
+
+    popovers.forEach((popover) => {
+      popover.addEventListener("click", (event) => event.stopPropagation());
+    });
+
+    root.addEventListener("click", () => {
+      closeAll();
+    });
+  }
+
+  #setupDiagnosticsInteractions(): void {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (typeof (root as ShadowRoot).querySelectorAll !== "function") {
+      return;
+    }
+
+    const diagnosticItems = Array.from(
+      root.querySelectorAll<HTMLElement>(".kr-diagnostics__item[data-kr-line]"),
+    );
+    if (diagnosticItems.length === 0) {
+      return;
+    }
+
+    diagnosticItems.forEach((item) => {
+      item.addEventListener("click", () => {
+        const line = Number(item.getAttribute("data-kr-line"));
+        if (!Number.isNaN(line) && line > 0) {
+          const detail = {
+            line,
+            code: item.getAttribute("data-kr-code") ?? "",
+            severity: item.getAttribute("data-kr-severity") ?? "error",
+          };
+          this.dispatchEvent(new CustomEvent("kr:diagnostic-click", { detail }));
+        }
+      });
+    });
   }
 }
 
