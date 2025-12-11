@@ -36,30 +36,16 @@ const parseTimerSegment = (segment: string): TimerDuration | null => {
 };
 
 type ParsedStepToken =
-  | { kind: "timer"; start: TimerDuration; end?: TimerDuration }
+  | { kind: "timer"; start: TimerDuration }
   | { kind: "temperature"; value: number; scale: "F" | "C" };
 
 const parseTimerBody = (body: string): ParsedStepToken | null => {
-  const parts = body.split(/[-–]/);
-  if (parts.length === 0 || parts.length > 2) {
+  const duration = parseTimerSegment(body);
+  if (!duration) {
     return null;
   }
 
-  const start = parseTimerSegment(parts[0] ?? "");
-  if (!start) {
-    return null;
-  }
-
-  if (parts.length === 1) {
-    return { kind: "timer", start };
-  }
-
-  const end = parseTimerSegment(parts[1] ?? "");
-  if (!end) {
-    return null;
-  }
-
-  return { kind: "timer", start, end };
+  return { kind: "timer", start: duration };
 };
 
 const parseTokenBody = (body: string): ParsedStepToken | null => {
@@ -98,7 +84,6 @@ export const extractStepTokens = (line: string): ExtractStepTokensResult => {
           raw: full,
           index,
           start: parsed.start,
-          end: parsed.end,
         };
         results.push(token);
       } else {

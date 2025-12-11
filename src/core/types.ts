@@ -183,7 +183,6 @@ export interface StepTokenBase {
 export interface StepTimerToken extends StepTokenBase {
   kind: "timer";
   start: TimerDuration;
-  end?: TimerDuration;
 }
 
 export interface StepTemperatureToken extends StepTokenBase {

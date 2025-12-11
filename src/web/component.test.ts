@@ -213,7 +213,7 @@ test("renderDocument renders timer and temperature tokens", () => {
     "## Steps",
     "1. Preheat @350F.",
     "2. Bake @35m until browned.",
-    "3. Rest @5m-7m before slicing.",
+    "3. Rest @10m before slicing.",
   ].join("\n");
 
   const html = componentModule.renderDocument(parseDocument(markdown));
@@ -222,9 +222,6 @@ test("renderDocument renders timer and temperature tokens", () => {
   expect(html).toContain('data-kr-temperature-scale="F"');
   expect(html).toContain('class="kr-timer"');
   expect(html).toContain('data-kr-timer-variant="single"');
-  expect(html).toContain('data-kr-timer-variant="start"');
-  expect(html).toContain('data-kr-timer-variant="end"');
-  expect(html).toContain('class="kr-timer-group"');
 });
 
 test("renderDocument renders diagnostics controls according to mode", () => {

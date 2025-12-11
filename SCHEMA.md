@@ -223,8 +223,7 @@ A numbered Markdown list (`1.`, `2.`, …). Free text with optional markup.
 
 ### 4.2 Timers
 
-- Single: `@10m`/`@10min`, `@45s`/`@45sec`, `@3h`, `@2h30m`, `@5m30s`
-- Ranges: `@8–10m` or `@8-10m`; mixed forms like `@1h15m–1h30m` are allowed.
+- Format: `@10m`/`@10min`, `@45s`/`@45sec`, `@3h`, `@2h30m`, `@5m30s`
 
 ### 4.3 Temperatures
 
@@ -235,7 +234,7 @@ A numbered Markdown list (`1.`, `2.`, …). Free text with optional markup.
 ```
 1. Whisk [[all-purpose-flour]] with sugar, baking powder, and salt.
 2. Add milk and eggs; rest @10m.
-3. Bake @350F @30–35m. Frost with [[frosting]].
+3. Bake @350F until golden, 30–35 minutes. Frost with [[frosting]].
 ```
 
 ---

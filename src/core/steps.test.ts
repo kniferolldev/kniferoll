@@ -44,3 +44,42 @@ test("extractStepTokens reports invalid tokens", () => {
     }),
   ]);
 });
+
+test("extractStepTokens rejects timer ranges with hyphen", () => {
+  const line = "Roast until golden, @10-15m.";
+  const { tokens, invalid } = extractStepTokens(line);
+
+  expect(tokens.length).toBe(0);
+  expect(invalid.length).toBe(1);
+  expect(invalid[0]).toEqual(
+    expect.objectContaining({
+      raw: "@10-15m",
+    }),
+  );
+});
+
+test("extractStepTokens rejects timer ranges with en-dash", () => {
+  const line = "Roast until golden, @10–15m.";
+  const { tokens, invalid } = extractStepTokens(line);
+
+  expect(tokens.length).toBe(0);
+  expect(invalid.length).toBe(1);
+  expect(invalid[0]).toEqual(
+    expect.objectContaining({
+      raw: "@10–15m",
+    }),
+  );
+});
+
+test("extractStepTokens rejects complex timer ranges", () => {
+  const line = "Bake @1h15m-1h30m.";
+  const { tokens, invalid } = extractStepTokens(line);
+
+  expect(tokens.length).toBe(0);
+  expect(invalid.length).toBe(1);
+  expect(invalid[0]).toEqual(
+    expect.objectContaining({
+      raw: "@1h15m-1h30m",
+    }),
+  );
+});

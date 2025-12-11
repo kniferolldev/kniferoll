@@ -245,7 +245,7 @@ test("valid timer forms are accepted", () => {
     "- chicken",
     "## Steps",
     "1. Rest @10min before slicing.",
-    "2. Cook @1h15min–1h30min until tender.",
+    "2. Cook @1h15min until tender.",
   ].join("\n");
 
   const result = parseDocument(input);

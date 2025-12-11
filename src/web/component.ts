@@ -5,6 +5,7 @@ import { computeScaleFactor } from "../core/scale";
 import { scaleQuantity } from "../core/scale-quantity";
 import { formatQuantity } from "../core/format";
 import { lookupUnit } from "../core/units";
+import BASE_STYLE from "./styles.css" with { type: "text" };
 import type {
   Diagnostic,
   DocumentParseResult,
@@ -25,613 +26,6 @@ import type {
 } from "../core/types";
 
 const TAG_NAME = "kr-recipe";
-
-const BASE_STYLE = `
-  /*
-   * CSS Custom Properties API
-   * -------------------------
-   * Core palette (set these to theme the component):
-   *   --kr-color-text        Base text color
-   *   --kr-color-muted       Secondary/subtle text
-   *   --kr-color-accent      Links and interactive elements
-   *   --kr-color-surface     Card/control backgrounds
-   *   --kr-color-border      Borders and dividers
-   *
-   * Typography:
-   *   --kr-font-family       Font stack
-   *   --kr-font-size-base    Base font size (default: 1rem)
-   *   --kr-line-height       Base line height (default: 1.6)
-   *
-   * Layout spacing:
-   *   --kr-section-gap       Space between sections (default: 1.75rem)
-   *   --kr-header-gap        Space below section headers (default: 0.75rem)
-   *   --kr-item-gap          Space between list items (default: 0.375rem)
-   *
-   * Card:
-   *   --kr-card-radius       Border radius
-   *   --kr-card-padding      Inner padding
-   *
-   * Semantic (auto-derived, but overridable):
-   *   --kr-color-quantity    Quantity/measurement color
-   *   --kr-color-timer       Timer chip background
-   *   --kr-color-temperature Temperature chip background
-   */
-
-  :host {
-    display: block;
-    font-family: var(--kr-font-family, system-ui, -apple-system, sans-serif);
-    font-size: var(--kr-font-size-base, 1rem);
-    line-height: var(--kr-line-height, 1.6);
-    color: var(--kr-color-text, #1a1a1a);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  .kr-root {
-    display: grid;
-    gap: var(--kr-section-gap, 1.75rem);
-  }
-
-  .kr-document-title {
-    margin: 0;
-    font-size: 1.75em;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
-  }
-
-  /* Recipe card */
-  .kr-recipe {
-    border-radius: var(--kr-card-radius, 1rem);
-    border: 1px solid var(--kr-color-border, rgba(0, 0, 0, 0.08));
-    padding: var(--kr-card-padding, 1.5rem);
-    background: var(--kr-color-surface, #ffffff);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
-  }
-
-  .kr-recipe__title {
-    margin: 0 0 1.25rem;
-    font-size: 1.5em;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
-    color: var(--kr-color-text, #1a1a1a);
-  }
-
-  /* Sections */
-  .kr-section {
-    margin: 0;
-    padding: 0;
-  }
-
-  .kr-section + .kr-section {
-    margin-top: var(--kr-section-gap, 1.75rem);
-  }
-
-  .kr-section__title {
-    margin: 0 0 var(--kr-header-gap, 0.75rem);
-    font-size: 0.7em;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--kr-color-muted, #6b6b6b);
-  }
-
-  .kr-section__body {
-    font-size: 0.95em;
-    line-height: var(--kr-line-height, 1.6);
-    color: var(--kr-color-text, #1a1a1a);
-  }
-
-  .kr-section__line {
-    margin: 0;
-  }
-
-  .kr-section__line + .kr-section__line {
-    margin-top: 0.625em;
-  }
-
-  .kr-section[data-kr-kind="steps"] .kr-section__line {
-    position: relative;
-    padding-left: 2em;
-  }
-
-  .kr-step-number {
-    position: absolute;
-    left: 0;
-    font-weight: 600;
-    color: var(--kr-color-muted, #6b6b6b);
-  }
-
-  /* Controls */
-  .kr-controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: center;
-    padding-bottom: 1rem;
-    margin-bottom: 1rem;
-    border-bottom: 1px solid var(--kr-color-border, rgba(0, 0, 0, 0.08));
-  }
-
-  .kr-control-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.8em;
-    font-weight: 600;
-    color: var(--kr-color-muted, #6b6b6b);
-  }
-
-  .kr-control-select {
-    appearance: none;
-    border-radius: 0.5rem;
-    border: 1px solid var(--kr-color-border, rgba(0, 0, 0, 0.12));
-    background: var(--kr-color-surface, #ffffff);
-    padding: 0.35rem 1.5rem 0.35rem 0.6rem;
-    font-size: 0.85em;
-    font-weight: 500;
-    line-height: 1.2;
-    cursor: pointer;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6b6b' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.5rem center;
-  }
-
-  .kr-control-select:focus-visible {
-    outline: 2px solid var(--kr-color-accent, #2563eb);
-    outline-offset: 2px;
-  }
-
-  /* Ingredient references */
-  .kr-ref {
-    border: none;
-    background: none;
-    color: var(--kr-color-accent, #2563eb);
-    text-decoration: underline;
-    text-decoration-color: color-mix(in srgb, var(--kr-color-accent, #2563eb) 40%, transparent);
-    text-underline-offset: 2px;
-    cursor: pointer;
-    font: inherit;
-    padding: 0;
-    transition: text-decoration-color 0.15s ease;
-  }
-
-  .kr-ref:hover {
-    text-decoration-color: var(--kr-color-accent, #2563eb);
-  }
-
-  .kr-ref:focus-visible {
-    outline: 2px solid var(--kr-color-accent, #2563eb);
-    outline-offset: 2px;
-    border-radius: 2px;
-  }
-
-  .kr-ref--active {
-    color: var(--kr-color-text, #1a1a1a);
-    background: var(--kr-color-highlight, rgba(37, 99, 235, 0.1));
-    text-decoration: none;
-    border-radius: 0.25rem;
-    padding: 0.1rem 0.3rem;
-    margin: -0.1rem -0.3rem;
-  }
-
-  .kr-target-highlight {
-    background: var(--kr-color-highlight, rgba(37, 99, 235, 0.08));
-    border-radius: 0.375rem;
-    transition: background 0.15s ease;
-  }
-
-  /* Diagnostics panel */
-  .kr-diagnostics {
-    border-radius: var(--kr-card-radius, 1rem);
-    border: 1px solid rgba(185, 28, 28, 0.15);
-    background: rgba(254, 242, 242, 0.8);
-    color: #991b1b;
-    margin-bottom: 1rem;
-    overflow: hidden;
-  }
-
-  .kr-diagnostics__toggle {
-    list-style: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1rem;
-    font-size: 0.8em;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .kr-diagnostics__toggle::-webkit-details-marker {
-    display: none;
-  }
-
-  .kr-diagnostics__icon {
-    width: 1.25rem;
-    height: 1.25rem;
-    border-radius: 999px;
-    border: 2px solid currentColor;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75em;
-    font-weight: 700;
-  }
-
-  .kr-diagnostics__panel {
-    display: none;
-    border-top: 1px solid rgba(185, 28, 28, 0.15);
-    padding: 1rem 1.25rem 1.25rem;
-    background: rgba(254, 226, 226, 0.4);
-    gap: 0.75rem;
-  }
-
-  .kr-diagnostics[open] .kr-diagnostics__panel {
-    display: grid;
-  }
-
-  .kr-diagnostics__header {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    font-size: 0.85em;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .kr-diagnostics__summary {
-    font-size: 0.85em;
-    font-weight: 500;
-    opacity: 0.75;
-  }
-
-  .kr-diagnostics__list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.6rem;
-  }
-
-  .kr-diagnostics__item {
-    display: grid;
-    gap: 0.25rem;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 0.375rem;
-    transition: background 0.15s ease;
-  }
-
-  .kr-diagnostics__item:hover {
-    background: rgba(185, 28, 28, 0.08);
-  }
-
-  .kr-diagnostics__tag {
-    display: block;
-    font-size: 0.85em;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    margin-bottom: 0.25rem;
-  }
-
-  /* Remove specific warning border-color as it's no longer a badge */
-  .kr-diagnostics__tag[data-kr-severity="warning"] {
-    /* No custom styling needed here now */
-  }
-
-  .kr-diagnostics__message {
-    font-size: 0.9em;
-    font-weight: 500;
-  }
-
-  .kr-diagnostics__meta {
-    font-size: 0.75em;
-    opacity: 0.7;
-  }
-
-  .kr-diagnostic-target {
-    position: relative;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    transition: background 0.15s ease;
-    padding: 0.25rem 0.5rem;
-  }
-
-  .kr-diagnostic-target[data-kr-diagnostic-severity="error"] {
-    background: rgba(220, 38, 38, 0.15);
-  }
-
-  .kr-diagnostic-target[data-kr-diagnostic-severity="error"]:hover {
-    background: rgba(220, 38, 38, 0.25);
-  }
-
-  .kr-diagnostic-target[data-kr-diagnostic-severity="warning"] {
-    background: rgba(217, 119, 6, 0.2);
-  }
-
-  .kr-diagnostic-target[data-kr-diagnostic-severity="warning"]:hover {
-    background: rgba(217, 119, 6, 0.3);
-  }
-
-  .kr-diagnostic-popover {
-    pointer-events: auto;
-    position: absolute;
-    top: 1.75rem;
-    left: 1.25rem;
-    min-width: 14rem;
-    max-width: min(22rem, 70vw);
-    padding: 0.6rem 0.8rem;
-    border-radius: 0.5rem;
-    border: 1px solid currentColor;
-    background: #fff;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-    z-index: 20;
-    font-size: 0.85em;
-  }
-
-  .kr-diagnostic-popover__list {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .kr-diagnostic-popover__item {
-    display: block;
-    line-height: 1.4;
-  }
-
-  /* Ingredient list */
-  .kr-ingredient-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: auto 1fr;
-    row-gap: var(--kr-item-gap, 0.375rem);
-    column-gap: 0.5rem;
-    align-items: baseline;
-  }
-
-  .kr-ingredient {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: subgrid;
-  }
-
-  .kr-ingredient__wrapper {
-    display: contents;
-  }
-
-  .kr-ingredient.kr-target-highlight {
-    background: var(--kr-color-highlight, rgba(37, 99, 235, 0.08));
-  }
-
-  .kr-ingredient__quantity {
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    color: var(--kr-color-quantity, #1a1a1a);
-    text-align: right;
-  }
-
-  .kr-ingredient__quantity-secondary {
-    font-size: 0.8em;
-    color: var(--kr-color-muted, #6b6b6b);
-    font-style: italic;
-    margin-left: 0.25rem;
-  }
-
-  .kr-ingredient__content {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.25rem 0.5rem;
-  }
-
-  .kr-ingredient__name {
-    font-weight: 500;
-  }
-
-  .kr-ingredient__modifiers {
-    color: var(--kr-color-muted, #6b6b6b);
-    font-style: italic;
-  }
-
-  .kr-ingredient__attributes {
-    display: inline-flex;
-    gap: 0.375rem;
-    flex-wrap: wrap;
-  }
-
-  .kr-ingredient__attribute {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.125rem;
-    font-size: 0.7em;
-    font-weight: 600;
-    padding: 0.2rem 0.5rem;
-    border-radius: 999px;
-    background: var(--kr-color-badge, rgba(34, 139, 34, 0.1));
-    color: var(--kr-color-badge-text, #166534);
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-
-  .kr-ingredient__attribute-value {
-    font-weight: 700;
-  }
-
-  /* Timer chips */
-  .kr-timer-group {
-    display: inline-flex;
-    gap: 0.25rem;
-    align-items: center;
-  }
-
-  .kr-timer {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.6rem;
-    border-radius: 999px;
-    border: none;
-    background: var(--kr-color-timer, rgba(37, 99, 235, 0.1));
-    color: var(--kr-color-timer-text, #1d4ed8);
-    font: inherit;
-    font-size: 0.85em;
-    font-weight: 600;
-    line-height: 1.2;
-    cursor: pointer;
-    transition: background 0.15s ease;
-  }
-
-  .kr-timer:not(:disabled):hover {
-    background: var(--kr-color-timer-hover, rgba(37, 99, 235, 0.18));
-  }
-
-  .kr-timer:focus-visible {
-    outline: 2px solid var(--kr-color-accent, #2563eb);
-    outline-offset: 2px;
-  }
-
-  .kr-timer__label {
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Temperature chips */
-  .kr-temperature {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.2rem 0.5rem;
-    border-radius: 0.375rem;
-    background: var(--kr-color-temperature, rgba(234, 88, 12, 0.1));
-    color: var(--kr-color-temperature-text, #c2410c);
-    font-size: 0.85em;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Layout variants */
-  .kr-recipe[data-kr-layout="two-column"],
-  .kr-recipe[data-kr-layout="ingredients-left"],
-  .kr-recipe[data-kr-layout="steps-left"] {
-    display: grid;
-    gap: var(--kr-section-gap, 1.75rem);
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-auto-rows: min-content;
-  }
-
-  .kr-recipe[data-kr-layout="two-column"] .kr-recipe__header,
-  .kr-recipe[data-kr-layout="ingredients-left"] .kr-recipe__header,
-  .kr-recipe[data-kr-layout="steps-left"] .kr-recipe__header {
-    grid-column: 1 / -1;
-  }
-
-  .kr-recipe[data-kr-layout="two-column"] .kr-section[data-kr-kind="ingredients"],
-  .kr-recipe[data-kr-layout="ingredients-left"] .kr-section[data-kr-kind="ingredients"] {
-    grid-column: 1;
-  }
-
-  .kr-recipe[data-kr-layout="two-column"] .kr-section[data-kr-kind="steps"],
-  .kr-recipe[data-kr-layout="ingredients-left"] .kr-section[data-kr-kind="steps"] {
-    grid-column: 2;
-  }
-
-  .kr-recipe[data-kr-layout="steps-left"] .kr-section[data-kr-kind="steps"] {
-    grid-column: 1;
-  }
-
-  .kr-recipe[data-kr-layout="steps-left"] .kr-section[data-kr-kind="ingredients"] {
-    grid-column: 2;
-  }
-
-  .kr-recipe[data-kr-layout="two-column"] .kr-section:not([data-kr-kind="ingredients"]):not([data-kr-kind="steps"]),
-  .kr-recipe[data-kr-layout="ingredients-left"] .kr-section:not([data-kr-kind="ingredients"]):not([data-kr-kind="steps"]),
-  .kr-recipe[data-kr-layout="steps-left"] .kr-section:not([data-kr-kind="ingredients"]):not([data-kr-kind="steps"]) {
-    grid-column: 1 / -1;
-  }
-
-  .kr-root[data-kr-layout="print-compact"] {
-    gap: 1rem;
-  }
-
-  .kr-recipe[data-kr-layout="print-compact"] {
-    border: none;
-    padding: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .kr-recipe[data-kr-layout="print-compact"] .kr-recipe__title {
-    font-size: 1.35em;
-  }
-
-  .kr-recipe[data-kr-layout="print-compact"] .kr-section + .kr-section {
-    margin-top: 1rem;
-  }
-
-  @media (max-width: 768px) {
-    .kr-recipe[data-kr-layout="two-column"],
-    .kr-recipe[data-kr-layout="ingredients-left"],
-    .kr-recipe[data-kr-layout="steps-left"] {
-      display: block;
-    }
-  }
-
-  .kr-empty {
-    font-style: italic;
-    color: var(--kr-color-muted, #6b6b6b);
-  }
-
-  /* Print styles */
-  @media print {
-    :host {
-      color: #000;
-      background: #fff !important;
-    }
-
-    .kr-root {
-      gap: 1rem;
-    }
-
-    .kr-recipe {
-      border: none;
-      background: transparent;
-      padding: 0;
-      box-shadow: none;
-    }
-
-    .kr-controls {
-      display: none !important;
-    }
-
-    .kr-ref {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    .kr-timer,
-    .kr-timer-group,
-    .kr-temperature {
-      border: 1px solid rgba(0, 0, 0, 0.3);
-      background: transparent;
-      padding: 0.1rem 0.35rem;
-    }
-
-    .kr-ingredient__quantity-secondary {
-      color: rgba(0, 0, 0, 0.6);
-    }
-
-    .kr-diagnostics {
-      border: 1px solid rgba(127, 29, 29, 0.35);
-      background: transparent;
-      color: #7f1d1d;
-    }
-  }
-`.trim();
 
 const escapeHtml = (value: string): string =>
   value
@@ -869,12 +263,6 @@ const formatDurationAria = (duration: TimerDuration): string => {
   return parts.join(" ");
 };
 
-const TIMER_VARIANT_LABEL: Record<"single" | "start" | "end", string> = {
-  single: "",
-  start: " (minimum)",
-  end: " (maximum)",
-};
-
 interface TimerTokenContext {
   recipeId: string;
   recipeTitle: string;
@@ -887,61 +275,34 @@ const renderTimerToken = (
   context: TimerTokenContext,
 ): string => {
   const baseId = `${context.recipeId}:${context.lineNumber}:${context.tokenIndex}`;
-  const rangeStartMs = durationToMilliseconds(token.start);
-  const rangeEndMs = token.end ? durationToMilliseconds(token.end) : null;
+  const timerId = `${baseId}:single`;
+  const durationMs = durationToMilliseconds(token.start);
+  const display = formatDurationDisplay(token.start);
+  const ariaDuration = formatDurationAria(token.start);
+  const ariaLabel = `Start ${ariaDuration} timer`;
 
-  const renderButton = (
-    variant: "single" | "start" | "end",
-    duration: TimerDuration,
-    durationMs: number,
-  ): string => {
-    const display = formatDurationDisplay(duration);
-    const ariaDuration = formatDurationAria(duration);
-    const variantSuffix = TIMER_VARIANT_LABEL[variant];
-    const ariaLabel = `Start ${ariaDuration} timer${variantSuffix}`;
-    const dataAttrs = [
-      `type="button"`,
-      `class="kr-timer"`,
-      `data-kr-timer-id="${escapeAttr(`${baseId}:${variant}`)}"`,
-      `data-kr-timer-duration="${String(durationMs)}"`,
-      `data-kr-timer-label="${escapeAttr(display)}"`,
-      `data-kr-timer-line="${String(context.lineNumber)}"`,
-      `data-kr-timer-column="${String(token.column)}"`,
-      `data-kr-timer-recipe-id="${escapeAttr(context.recipeId)}"`,
-      `data-kr-timer-recipe-title="${escapeAttr(context.recipeTitle)}"`,
-      `data-kr-timer-variant="${variant}"`,
-      `data-kr-timer-hours="${String(duration.hours)}"`,
-      `data-kr-timer-minutes="${String(duration.minutes)}"`,
-      `data-kr-timer-seconds="${String(duration.seconds)}"`,
-      `data-kr-timer-raw="${escapeAttr(token.raw)}"`,
-    ];
+  const dataAttrs = [
+    `type="button"`,
+    `class="kr-timer"`,
+    `data-kr-timer-id="${escapeAttr(timerId)}"`,
+    `data-kr-timer-duration="${String(durationMs)}"`,
+    `data-kr-timer-label="${escapeAttr(display)}"`,
+    `data-kr-timer-line="${String(context.lineNumber)}"`,
+    `data-kr-timer-column="${String(token.column)}"`,
+    `data-kr-timer-recipe-id="${escapeAttr(context.recipeId)}"`,
+    `data-kr-timer-recipe-title="${escapeAttr(context.recipeTitle)}"`,
+    `data-kr-timer-variant="single"`,
+    `data-kr-timer-hours="${String(token.start.hours)}"`,
+    `data-kr-timer-minutes="${String(token.start.minutes)}"`,
+    `data-kr-timer-seconds="${String(token.start.seconds)}"`,
+    `data-kr-timer-raw="${escapeAttr(token.raw)}"`,
+  ];
 
-    if (token.end) {
-      dataAttrs.push(`data-kr-timer-range-start="${String(rangeStartMs)}"`);
-      dataAttrs.push(`data-kr-timer-range-end="${String(rangeEndMs ?? durationMs)}"`);
-    }
-
-    return `<button ${dataAttrs.join(" ")} aria-label="${escapeAttr(
-      ariaLabel,
-    )}" data-kr-timer-range-role="${variant}"><span class="kr-timer__label">${escapeHtml(
-      display,
-    )}</span></button>`;
-  };
-
-  if (!token.end) {
-    return renderButton("single", token.start, rangeStartMs);
-  }
-
-  const buttons = [
-    renderButton("start", token.start, rangeStartMs),
-    renderButton("end", token.end, rangeEndMs ?? rangeStartMs),
-  ].join("");
-
-  return `<span class="kr-timer-group" data-kr-timer="${escapeAttr(
-    baseId,
-  )}" aria-label="${escapeAttr(
-    `Timer options for ${formatDurationAria(token.start)} to ${formatDurationAria(token.end)}`,
-  )}">${buttons}</span>`;
+  return `<button ${dataAttrs.join(" ")} aria-label="${escapeAttr(
+    ariaLabel,
+  )}" data-kr-timer-range-role="single"><span class="kr-timer__label">${escapeHtml(
+    display,
+  )}</span></button>`;
 };
 
 const convertTemperature = (value: number, scale: "F" | "C"): { other: number; otherScale: "F" | "C" } => {
@@ -964,19 +325,16 @@ const renderTemperatureToken = (token: DocumentStepTemperatureToken): string => 
   )}" title="${escapeAttr(`approx. ${other}${otherScale}`)}">${display}</span>`;
 };
 
-type TimerVariant = "single" | "start" | "end";
-
 interface TimerStartDetail {
   timerId: string;
   recipeId: string;
   recipeTitle: string;
   line: number;
   column: number;
-  variant: TimerVariant;
+  variant: "single";
   durationMs: number;
   duration: { hours: number; minutes: number; seconds: number };
   label: string;
-  range?: { startMs: number; endMs: number };
   startedAt: number;
 }
 
@@ -1674,15 +1032,11 @@ export class KrRecipeElement extends HTMLElement {
   }
 
   #buildTimerDetail(button: HTMLButtonElement): TimerStartDetail {
-    const variantAttr = button.dataset.krTimerVariant ?? "single";
-    const variant: TimerVariant =
-      variantAttr === "start" || variantAttr === "end" ? variantAttr : "single";
+    const variant = "single" as const;
     const durationMs = Number(button.dataset.krTimerDuration ?? "0");
     const hours = Number(button.dataset.krTimerHours ?? "0");
     const minutes = Number(button.dataset.krTimerMinutes ?? "0");
     const seconds = Number(button.dataset.krTimerSeconds ?? "0");
-    const rangeStartAttr = button.dataset.krTimerRangeStart;
-    const rangeEndAttr = button.dataset.krTimerRangeEnd;
 
     return {
       timerId: button.dataset.krTimerId ?? "",
@@ -1694,13 +1048,6 @@ export class KrRecipeElement extends HTMLElement {
       durationMs,
       duration: { hours, minutes, seconds },
       label: button.dataset.krTimerLabel ?? button.textContent ?? "",
-      range:
-        rangeStartAttr !== undefined && rangeEndAttr !== undefined
-          ? {
-              startMs: Number(rangeStartAttr),
-              endMs: Number(rangeEndAttr),
-            }
-          : undefined,
       startedAt: Date.now(),
     };
   }
