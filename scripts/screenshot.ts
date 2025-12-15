@@ -2,7 +2,7 @@
  * Screenshot capture script for visual feedback loop.
  *
  * Usage:
- *   bun run screenshot                     # Capture playground
+ *   bun run screenshot                     # Capture editor
  *   bun run screenshot --layout two-column # Capture specific layout
  *   bun run screenshot --all-layouts       # Capture all layout variants
  *   bun run screenshot --dark              # Capture in dark theme
@@ -121,11 +121,11 @@ const capture = async (
   } else if (options.layout) {
     await page.selectOption("#layout-select", options.layout);
     await page.waitForTimeout(150);
-    const filename = `playground-${options.layout}${themeSuffix}${panelSuffix}.png`;
+    const filename = `editor-${options.layout}${themeSuffix}${panelSuffix}.png`;
     await page.screenshot({ path: join(SCREENSHOTS_DIR, filename), fullPage: true });
     captured.push(filename);
   } else {
-    const filename = `playground${themeSuffix}${panelSuffix}.png`;
+    const filename = `editor${themeSuffix}${panelSuffix}.png`;
     await page.screenshot({ path: join(SCREENSHOTS_DIR, filename), fullPage: true });
     captured.push(filename);
   }
@@ -159,7 +159,7 @@ const main = async (): Promise<void> => {
   try {
     await fetch(BASE_URL);
   } catch {
-    console.error(`Demo server not running. Start it with: bun run demo`);
+    console.error(`Editor server not running. Start it with: bun run editor`);
     process.exit(1);
   }
 

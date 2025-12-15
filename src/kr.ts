@@ -1,4 +1,6 @@
 import { runCheck } from "./commands/check";
+import { runEval } from "./commands/eval";
+import { runPromote } from "./commands/promote";
 import type { IO } from "./types";
 
 const defaultReadFile = async (path: string): Promise<string> => {
@@ -27,19 +29,28 @@ export async function runCli(
 
   const [command, ...rest] = args;
 
-  if (command !== "check") {
-    io.stderr.write(`Unknown command: ${command}\n`);
-    return 2;
+  switch (command) {
+    case "check": {
+      if (rest.length !== 1) {
+        io.stderr.write("Usage: kr check <path | ->\n");
+        return 2;
+      }
+      return await runCheck(rest[0]!, io);
+    }
+
+    case "eval": {
+      return await runEval(rest, io);
+    }
+
+    case "promote": {
+      return await runPromote(rest, io);
+    }
+
+    default:
+      io.stderr.write(`Unknown command: ${command}\n`);
+      io.stderr.write("Available commands: check, eval, promote\n");
+      return 2;
   }
-
-  if (rest.length !== 1) {
-    io.stderr.write("Usage: kr check <path | ->\n");
-    return 2;
-  }
-
-  const input = rest[0]!;
-
-  return await runCheck(input, io);
 }
 
 if (import.meta.main) {

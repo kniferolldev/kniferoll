@@ -143,3 +143,34 @@ test("parses simple fraction without whole number", () => {
   expect(quantity.value).toBeCloseTo(0.75);
   expect(quantity.unit).toBe("cup");
 });
+
+test("warns when 'to' is used for range instead of hyphen", () => {
+  const result = run("4 to 5 cups");
+  expect(result.diagnostics).toHaveLength(1);
+  expect(result.diagnostics[0]?.code).toBe("W0207");
+  expect(result.diagnostics[0]?.message).toContain("to");
+  expect(result.diagnostics[0]?.message).toContain("hyphen");
+
+  // Should still parse as a single quantity (with incorrect unit)
+  const quantity = result.quantity;
+  if (!quantity || quantity.kind !== "single") {
+    throw new Error("expected single quantity");
+  }
+  expect(quantity.value).toBe(4);
+});
+
+test("does not warn for 'to' in other contexts", () => {
+  // "potato" contains "to" but not the pattern "number to number"
+  const result1 = run("1 potato");
+  expect(result1.diagnostics).toHaveLength(0);
+
+  // "to taste" contains "to" but not between numbers
+  const result2 = run("pinch, to taste");
+  expect(result2.diagnostics).toHaveLength(0);
+});
+
+test("warns for 'TO' (case insensitive)", () => {
+  const result = run("3 TO 4 cups");
+  expect(result.diagnostics).toHaveLength(1);
+  expect(result.diagnostics[0]?.code).toBe("W0207");
+});

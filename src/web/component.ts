@@ -5,6 +5,7 @@ import { computeScaleFactor } from "../core/scale";
 import { scaleQuantity } from "../core/scale-quantity";
 import { formatQuantity } from "../core/format";
 import { lookupUnit } from "../core/units";
+import { slug } from "../core/slug";
 import BASE_STYLE from "./styles.css" with { type: "text" };
 import type {
   Diagnostic,
@@ -23,6 +24,7 @@ import type {
   UnitFamily,
   ScaleSelection,
   SectionLine,
+  Source,
 } from "../core/types";
 
 const TAG_NAME = "kr-recipe";
@@ -384,6 +386,7 @@ const renderStepLine = (
   tokens: DocumentStepToken[],
   context: { recipeId: string; recipeTitle: string },
   options: RenderOptions,
+  stepIndex: number | null = null,
 ): string => {
   const fullText = line.text;
 
@@ -451,7 +454,7 @@ const renderStepLine = (
         display = displayPart;
       }
       if (targetPart) {
-        target = targetPart;
+        target = slug(targetPart);
       }
       if (!display) {
         const fallback = targetMeta.get(target)?.name;
@@ -460,6 +463,7 @@ const renderStepLine = (
         }
       }
     } else {
+      target = slug(innerRaw);
       const fallback = targetMeta.get(target)?.name;
       if (fallback) {
         display = fallback;
@@ -519,6 +523,11 @@ const renderStepLine = (
   const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
 
   const content = parts.join("");
+
+  if (stepNumber !== null && stepIndex !== null) {
+    const stepAttrs = ` data-kr-recipe-id="${escapeAttr(context.recipeId)}" data-kr-step-index="${stepIndex}" role="button" tabindex="0" aria-pressed="false"`;
+    return `<p class="kr-section__line kr-step${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}${stepAttrs}>${diagnosticContent}<span class="kr-step-number">${escapeHtml(stepNumber)}.</span>${content}</p>`;
+  }
 
   if (stepNumber !== null) {
     return `<p class="kr-section__line${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}<span class="kr-step-number">${escapeHtml(stepNumber)}.</span>${content}</p>`;
@@ -668,16 +677,21 @@ const renderSection = (
 
   if (section.kind === "steps") {
     const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
+    let stepIndex = 0;
     const lines = section.lines
-      .map((line) =>
-        renderStepLine(
+      .map((line) => {
+        const fullText = line.text;
+        const stepMatch = STEP_NUMBER_PATTERN.exec(fullText);
+        const currentStepIndex = stepMatch ? stepIndex++ : null;
+        return renderStepLine(
           line,
           targetMeta,
           stepTokensByLine.get(line.line) ?? [],
           { recipeId: recipe.id, recipeTitle: recipe.title },
           options,
-        ),
-      )
+          currentStepIndex,
+        );
+      })
       .join("");
     return `<section class="kr-section" data-kr-kind="steps">${heading}<div class="kr-section__body">${lines}</div></section>`;
   }
@@ -710,6 +724,7 @@ const renderRecipe = (
   options: RenderOptions,
   targetMeta: Map<string, TargetInfo>,
   stepTokensByLine: Map<number, DocumentStepToken[]>,
+  source?: Source,
 ): string => {
   const sections = recipe.sections
     .map((section) => renderSection(recipe, section, options, targetMeta, stepTokensByLine))
@@ -722,12 +737,42 @@ const renderRecipe = (
     ? ` data-kr-diagnostic-severity="${inlineDiagnostics.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiagnostics.controlsId)}" tabindex="0"`
     : "";
   const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
+  const sourceHtml = source ? renderSource(source) : "";
 
   return `<section class="kr-recipe" id="${escapeAttr(recipeElementId)}" tabindex="-1" data-kr-role="${roleAttr}" data-kr-id="${escapeAttr(
     recipe.id,
   )}" data-kr-layout="${escapeAttr(options.layout)}"><header class="kr-recipe__header"><h2 class="kr-recipe__title${diagnosticClass}" data-kr-line="${recipe.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(
     recipe.title,
-  )}</h2></header>${sections}</section>`;
+  )}</h2>${sourceHtml}</header>${sections}</section>`;
+};
+
+const renderSource = (source: Source): string => {
+  if (source.kind === "text") {
+    return `<div class="kr-source">from ${escapeHtml(source.value)}</div>`;
+  }
+
+  if (source.kind === "url") {
+    const titleText = source.title || source.url;
+    return `<div class="kr-source">from <a class="kr-source__link" href="${escapeAttr(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(titleText)}</a></div>`;
+  }
+
+  if (source.kind === "cookbook") {
+    const parts: string[] = [];
+    parts.push(`<span class="kr-source__book-title">${escapeHtml(source.title)}</span>`);
+
+    if (source.author) {
+      parts.push(` by ${escapeHtml(source.author)}`);
+    }
+
+    if (source.pages) {
+      const pagesText = typeof source.pages === "number" ? `p. ${source.pages}` : `p. ${source.pages}`;
+      parts.push(`, ${pagesText}`);
+    }
+
+    return `<div class="kr-source">from ${parts.join("")}</div>`;
+  }
+
+  return "";
 };
 
 export const renderDocument = (
@@ -823,7 +868,9 @@ export const renderDocument = (
     );
   } else {
     doc.recipes.forEach((recipe, index) => {
-      parts.push(renderRecipe(recipe, index, options, targetMeta, stepTokensByLine));
+      // Only show source on the main recipe (index 0)
+      const source = index === 0 ? doc.frontmatter?.source : undefined;
+      parts.push(renderRecipe(recipe, index, options, targetMeta, stepTokensByLine, source));
     });
   }
 
@@ -849,6 +896,8 @@ export class KrRecipeElement extends HTMLElement {
   #content: string | null = null;
   #inlineSource: string | null = null;
   #isConnected = false;
+  #currentStepIndex: Map<string, number> = new Map(); // recipeId → current step index
+  #stepKeyboardHandler: ((e: KeyboardEvent) => void) | null = null;
 
   connectedCallback(): void {
     this.#isConnected = true;
@@ -1384,6 +1433,7 @@ export class KrRecipeElement extends HTMLElement {
     this.#setupReferenceInteractions();
     this.#setupDiagnosticMarkers();
     this.#setupDiagnosticsInteractions();
+    this.#setupStepProgressionInteractions();
   }
 
   #setupDiagnosticMarkers(): void {
@@ -1478,6 +1528,214 @@ export class KrRecipeElement extends HTMLElement {
           this.dispatchEvent(new CustomEvent("kr:diagnostic-click", { detail }));
         }
       });
+    });
+  }
+
+  #setupStepProgressionInteractions(): void {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (typeof (root as ShadowRoot).querySelectorAll !== "function") {
+      return;
+    }
+
+    const steps = Array.from(root.querySelectorAll<HTMLElement>(".kr-step[data-kr-step-index]"));
+    if (steps.length === 0) {
+      return;
+    }
+
+    // Click handler for steps
+    steps.forEach((step) => {
+      const handleStepClick = () => {
+        const recipeId = step.getAttribute("data-kr-recipe-id") ?? "";
+        const stepIndex = Number(step.getAttribute("data-kr-step-index"));
+
+        if (!Number.isNaN(stepIndex) && stepIndex >= 0) {
+          this.#setCurrentStep(recipeId, stepIndex);
+        }
+      };
+
+      step.addEventListener("click", handleStepClick);
+      step.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleStepClick();
+        }
+      });
+    });
+
+    // Remove old keyboard handler if it exists
+    if (this.#stepKeyboardHandler) {
+      this.removeEventListener("keydown", this.#stepKeyboardHandler);
+    }
+
+    // Global keyboard handler for navigation
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if not focused on a specific interactive element
+      if (e.target !== this && !(e.target as HTMLElement)?.closest?.('.kr-recipe')) {
+        return;
+      }
+
+      const isArrowKey = ["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(e.key);
+      const isSpace = e.key === " ";
+
+      if (isArrowKey || isSpace) {
+        e.preventDefault();
+
+        if (e.key === "ArrowDown" || e.key === "ArrowRight" || e.key === " ") {
+          this.#advanceToNextStep();
+        } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+          this.#advanceToPreviousStep();
+        }
+      }
+    };
+
+    // Store handler reference for cleanup
+    this.#stepKeyboardHandler = handleKeyDown;
+
+    // Make host element focusable for keyboard events
+    if (!this.hasAttribute("tabindex")) {
+      this.setAttribute("tabindex", "0");
+    }
+
+    this.addEventListener("keydown", handleKeyDown);
+
+    // Initialize first step if none selected
+    if (steps.length > 0) {
+      const firstStep = steps[0];
+      const recipeId = firstStep.getAttribute("data-kr-recipe-id") ?? "";
+      if (recipeId && !this.#currentStepIndex.has(recipeId)) {
+        this.#setCurrentStep(recipeId, 0);
+      }
+    }
+  }
+
+  #setCurrentStep(recipeId: string, stepIndex: number): void {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    // Update stored index
+    this.#currentStepIndex.set(recipeId, stepIndex);
+
+    // Update aria-pressed on all steps for this recipe
+    const steps = Array.from(
+      root.querySelectorAll<HTMLElement>(`.kr-step[data-kr-recipe-id="${CSS.escape(recipeId)}"]`)
+    );
+
+    steps.forEach((step) => {
+      const thisStepIndex = Number(step.getAttribute("data-kr-step-index"));
+      step.setAttribute("aria-pressed", thisStepIndex === stepIndex ? "true" : "false");
+    });
+
+    // Highlight ingredients referenced in current step
+    this.#updateIngredientHighlights(recipeId, stepIndex);
+
+    // Dispatch event
+    const detail = { recipeId, stepIndex };
+    this.dispatchEvent(new CustomEvent("kr:step-focus", { detail }));
+  }
+
+  #advanceToNextStep(): void {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    // Find current step
+    const currentStep = root.querySelector<HTMLElement>('.kr-step[aria-pressed="true"]');
+    if (!currentStep) {
+      // No current step, activate first step
+      const firstStep = root.querySelector<HTMLElement>(".kr-step[data-kr-step-index]");
+      if (firstStep) {
+        const recipeId = firstStep.getAttribute("data-kr-recipe-id") ?? "";
+        this.#setCurrentStep(recipeId, 0);
+      }
+      return;
+    }
+
+    const recipeId = currentStep.getAttribute("data-kr-recipe-id") ?? "";
+    const currentIndex = Number(currentStep.getAttribute("data-kr-step-index"));
+
+    if (Number.isNaN(currentIndex)) {
+      return;
+    }
+
+    // Find next step in same recipe
+    const nextStep = root.querySelector<HTMLElement>(
+      `.kr-step[data-kr-recipe-id="${CSS.escape(recipeId)}"][data-kr-step-index="${currentIndex + 1}"]`
+    );
+
+    if (nextStep) {
+      this.#setCurrentStep(recipeId, currentIndex + 1);
+    }
+    // If no next step, stay at current (don't wrap around)
+  }
+
+  #advanceToPreviousStep(): void {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    // Find current step
+    const currentStep = root.querySelector<HTMLElement>('.kr-step[aria-pressed="true"]');
+    if (!currentStep) {
+      return;
+    }
+
+    const recipeId = currentStep.getAttribute("data-kr-recipe-id") ?? "";
+    const currentIndex = Number(currentStep.getAttribute("data-kr-step-index"));
+
+    if (Number.isNaN(currentIndex) || currentIndex === 0) {
+      return; // Already at first step
+    }
+
+    // Find previous step in same recipe
+    const prevStep = root.querySelector<HTMLElement>(
+      `.kr-step[data-kr-recipe-id="${CSS.escape(recipeId)}"][data-kr-step-index="${currentIndex - 1}"]`
+    );
+
+    if (prevStep) {
+      this.#setCurrentStep(recipeId, currentIndex - 1);
+    }
+  }
+
+  #updateIngredientHighlights(recipeId: string, stepIndex: number): void {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    // Get the current step element
+    const step = root.querySelector<HTMLElement>(
+      `.kr-step[data-kr-recipe-id="${CSS.escape(recipeId)}"][data-kr-step-index="${stepIndex}"]`
+    );
+
+    // Clear all highlights first
+    root.querySelectorAll<HTMLElement>(".kr-ingredient[data-kr-step-highlight]").forEach((ing) => {
+      ing.removeAttribute("data-kr-step-highlight");
+    });
+
+    if (!step) {
+      return;
+    }
+
+    // Find all ingredient references in this step
+    const refs = Array.from(step.querySelectorAll<HTMLElement>(".kr-ref[data-kr-target]"));
+    const targetIds = new Set(refs.map((ref) => ref.getAttribute("data-kr-target")).filter(Boolean));
+
+    // Highlight corresponding ingredients
+    targetIds.forEach((targetId) => {
+      const ingredient = root.querySelector<HTMLElement>(
+        `.kr-ingredient[data-kr-id="${CSS.escape(targetId!)}"]`
+      );
+      if (ingredient) {
+        ingredient.setAttribute("data-kr-step-highlight", "true");
+      }
     });
   }
 }

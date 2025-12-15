@@ -115,6 +115,7 @@ Example skeleton:
 - **Single**: `amount [unit]`. Space is optional (e.g., `240g` is allowed).
 - **Range**: `amount–amount [unit]` or `amount-amount [unit]` (en-dash or hyphen
   are both accepted), e.g., `6–7 oz carrots` or `6-7 oz carrots`.
+  - **Note**: Don't use the word "to" for ranges (e.g., `4 to 5 cups`). Always use hyphen form (`4-5 cups`).
 - `amount`: integer (`6`) | decimal (`0.01`) | fraction (`1/2`) | mixed
   (`1 1/2`). Fraction characters (`½`) are also allowed.
 - `unit`: free text. If it matches the **unit lexicon** (below), a renderer may
@@ -216,7 +217,10 @@ A numbered Markdown list (`1.`, `2.`, …). Free text with optional markup.
 ### 4.1 References
 
 - `[[id]]` or `[[display -> id]]` (must resolve to an existing ID in the file).
-  Whitespace is tolerated inside the brackets and around the arrow, and the
+- The `id` portion is automatically normalized using `slug()` before lookup.
+  This means `[[dried porcini mushrooms]]`, `[[Dried Porcini Mushrooms]]`, and
+  `[[dried-porcini-mushrooms]]` all resolve to the same ingredient.
+- Whitespace is tolerated inside the brackets and around the arrow, and the
   display may be quoted if it contains spaces. In steps, use them inline, e.g.:
   `3. Spread the [[ mustard ]] on the bread.`,
   `2. Slice the [["Japanese scallions"->tokyo-negi]] thinly`.
@@ -224,6 +228,24 @@ A numbered Markdown list (`1.`, `2.`, …). Free text with optional markup.
 ### 4.2 Timers
 
 - Format: `@10m`/`@10min`, `@45s`/`@45sec`, `@3h`, `@2h30m`, `@5m30s`
+
+**When to use timer tokens:**
+
+Use timer tokens for operations where you would realistically set a timer and walk away:
+- Baking, roasting, or simmering
+- Resting dough or batter
+- Marinating or steeping
+- Cooling periods
+
+**When NOT to use timer tokens:**
+
+Do not use timer tokens for operations requiring active monitoring or visual cues:
+- Sautéing (watch for color/aroma)
+- Browning or caramelizing (watch for doneness)
+- Quick tasks under 1 minute (you're standing there)
+- Operations with visual cues like "until fragrant" or "until golden"
+
+For these cases, write the duration as prose: "Sauté garlic until fragrant, about 2 minutes."
 
 ### 4.3 Temperatures
 
@@ -268,6 +290,11 @@ trim.
 
 - `[[id]]` — link to any ID (recipe or ingredient) in the file.
 - `[[display -> id]]` — show custom `display` text but link to `id`.
+- The `id` portion is automatically normalized using `slug()` before lookup,
+  making references more natural to write. For example:
+  - `[[dried porcini mushrooms]]` normalizes to `dried-porcini-mushrooms`
+  - `[[Extra Virgin Olive Oil]]` normalizes to `extra-virgin-olive-oil`
+  - Both forms work identically; use whichever is easier to read and edit.
 - Whitespace inside the brackets and around `->` is tolerated; the `display`
   part may be quoted.
 - Allowed contexts: ingredient names, step text, and notes. Not allowed in

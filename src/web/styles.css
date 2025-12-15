@@ -60,13 +60,38 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
   }
 
+  .kr-recipe__header {
+    margin-bottom: 1.25rem;
+  }
+
   .kr-recipe__title {
-    margin: 0 0 1.25rem;
+    margin: 0;
     font-size: 1.5em;
     font-weight: 700;
     letter-spacing: -0.02em;
     line-height: 1.2;
     color: var(--kr-color-text, #1a1a1a);
+  }
+
+  /* Source attribution */
+  .kr-source {
+    margin-top: 0.375rem;
+    font-size: 0.85em;
+    color: var(--kr-color-muted, #6b7280);
+    line-height: 1.5;
+  }
+
+  .kr-source__link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .kr-source__link:hover {
+    text-decoration: underline;
+  }
+
+  .kr-source__book-title {
+    font-style: italic;
   }
 
   /* Sections */
@@ -600,5 +625,62 @@
     border: 1px solid rgba(127, 29, 29, 0.35);
     background: transparent;
     color: #7f1d1d;
+  }
+}
+
+/* Step progression */
+.kr-recipe {
+  margin-left: 1.5rem;
+  position: relative;
+}
+
+.kr-step {
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.kr-step:hover {
+  background: var(--kr-color-surface-hover, rgba(0, 0, 0, 0.02));
+}
+
+.kr-step:focus {
+  outline: none;
+}
+
+.kr-step[aria-pressed="true"]::before {
+  content: '▶';
+  position: absolute;
+  left: -1.5rem;
+  color: var(--kr-color-accent, #2563eb);
+  font-size: 0.875rem;
+  animation: slideIn 0.2s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Highlighted ingredients in current step */
+.kr-ingredient[data-kr-step-highlight="true"] {
+  background: var(--kr-color-step-ingredient-highlight, rgba(250, 204, 21, 0.2));
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+@media print {
+  .kr-step[aria-pressed="true"]::before {
+    display: none;
+  }
+
+  .kr-ingredient[data-kr-step-highlight="true"] {
+    background: transparent;
   }
 }

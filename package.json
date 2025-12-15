@@ -6,7 +6,10 @@
   "scripts": {
     "kr": "bun src/kr.ts",
     "test": "bun test",
-    "demo": "bun demo/server.ts",
+    "editor": "bun apps/editor/server.ts",
+    "demo": "bun apps/editor/server.ts",
+    "importer": "bun apps/importer/server.ts",
+    "reimport": "bun apps/importer/cli.ts",
     "screenshot": "bun scripts/screenshot.ts",
     "build": "bun scripts/build.ts"
   },
@@ -18,6 +21,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "openai": "^6.10.0",
     "yaml": "^2.8.1"
   }
 }

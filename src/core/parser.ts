@@ -453,7 +453,7 @@ export const parseDocument = (
           const arrowIndex = innerRaw.indexOf("->");
           if (arrowIndex !== -1) {
             display = innerRaw.slice(0, arrowIndex).trim();
-            target = innerRaw.slice(arrowIndex + 2).trim();
+            target = slug(innerRaw.slice(arrowIndex + 2).trim());
             if (!display || !target) {
               diagnostics.push(
                 warning("W0303", `Malformed reference token ${match[0]}.`, line.line),
@@ -461,7 +461,7 @@ export const parseDocument = (
               continue;
             }
           } else {
-            target = innerRaw;
+            target = slug(innerRaw);
             if (!target) {
               diagnostics.push(
                 warning("W0303", `Malformed reference token ${match[0]}.`, line.line),

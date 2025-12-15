@@ -147,6 +147,50 @@ test("extracts references and resolves ids", () => {
   expect(byCode(result.diagnostics, "W0302").length).toBe(0);
 });
 
+test("normalizes reference targets with spaces and casing", () => {
+  const input = [
+    "# Soup",
+    "## Ingredients",
+    "- dried porcini mushrooms - 1 oz",
+    "- Extra Virgin Olive Oil - 2 tbsp",
+    "## Steps",
+    "1. Soak the [[dried porcini mushrooms]] in hot water.",
+    "2. Heat the [[Extra Virgin Olive Oil]] over medium heat.",
+    "3. You can also use [[DRIED PORCINI MUSHROOMS]] uppercase.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+
+  // All three references should be normalized and resolve successfully
+  expect(result.references).toHaveLength(3);
+  expect(result.references[0]?.target).toBe("dried-porcini-mushrooms");
+  expect(result.references[1]?.target).toBe("extra-virgin-olive-oil");
+  expect(result.references[2]?.target).toBe("dried-porcini-mushrooms");
+
+  // No warnings about unresolved references
+  expect(byCode(result.diagnostics, "W0302").length).toBe(0);
+});
+
+test("normalizes reference targets in display->id syntax", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- all-purpose flour - 200 g",
+    "## Steps",
+    "1. Mix [[flour -> all purpose flour]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const ref = result.references[0];
+  expect(ref).toBeDefined();
+  if (!ref) {
+    throw new Error("Expected reference to be collected");
+  }
+  expect(ref.display).toBe("flour");
+  expect(ref.target).toBe("all-purpose-flour");
+  expect(byCode(result.diagnostics, "W0302").length).toBe(0);
+});
+
 test("missing reference target emits W0302", () => {
   const input = [
     "# Pasta",
