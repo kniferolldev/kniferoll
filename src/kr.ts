@@ -1,5 +1,6 @@
 import { runCheck } from "./commands/check";
 import { runEval } from "./commands/eval";
+import { runImport } from "./commands/import";
 import { runPromote } from "./commands/promote";
 import type { IO } from "./types";
 
@@ -42,13 +43,17 @@ export async function runCli(
       return await runEval(rest, io);
     }
 
+    case "import": {
+      return await runImport(rest, io);
+    }
+
     case "promote": {
       return await runPromote(rest, io);
     }
 
     default:
       io.stderr.write(`Unknown command: ${command}\n`);
-      io.stderr.write("Available commands: check, eval, promote\n");
+      io.stderr.write("Available commands: check, eval, import, promote\n");
       return 2;
   }
 }

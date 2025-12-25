@@ -9,7 +9,6 @@
     "editor": "bun apps/editor/server.ts",
     "demo": "bun apps/editor/server.ts",
     "importer": "bun apps/importer/server.ts",
-    "reimport": "bun apps/importer/cli.ts",
     "screenshot": "bun scripts/screenshot.ts",
     "build": "bun scripts/build.ts"
   },
@@ -21,6 +20,8 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@google/generative-ai": "^0.24.1",
     "openai": "^6.10.0",
     "yaml": "^2.8.1"
   }

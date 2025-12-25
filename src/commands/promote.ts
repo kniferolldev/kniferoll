@@ -83,10 +83,14 @@ export async function runPromote(
 
   const copiedFiles: string[] = [];
 
-  // Copy output.md → expected.md
+  // Copy output.md → both expected.md AND actual.md
+  // expected.md is the golden version (user will edit this)
+  // actual.md is the cached importer output (regenerate when prompt changes)
   const outputContent = await outputFile.text();
   await Bun.write(join(targetDir, "expected.md"), outputContent);
-  copiedFiles.push("expected.md (from output.md)");
+  await Bun.write(join(targetDir, "actual.md"), outputContent);
+  copiedFiles.push("expected.md (from output.md - edit this to create golden)");
+  copiedFiles.push("actual.md (from output.md - cached importer output)");
 
   // Copy input.txt if it exists
   const inputFile = Bun.file(join(sourceDir, "input.txt"));
