@@ -50,8 +50,10 @@ const isHeadingLine = (line: string): boolean => {
 };
 
 /**
- * Unwraps continuation lines in steps sections.
- * Lines starting with whitespace after a numbered step are joined to the previous step.
+ * Reflows step text by joining continuation lines.
+ * All non-empty lines after a numbered step are joined to it until the next
+ * numbered step or empty line. This allows steps to be wrapped at any column
+ * in the source markdown.
  */
 const unwrapStepLines = (lines: SectionLine[]): SectionLine[] => {
   const unwrapped: SectionLine[] = [];
@@ -82,9 +84,8 @@ const unwrapStepLines = (lines: SectionLine[]): SectionLine[] => {
       continue;
     }
 
-    // Check if this is a continuation line (starts with whitespace)
-    if (current && /^\s/.test(raw)) {
-      // Join to current step with a space
+    // If there's a current step, join this line to it (reflow)
+    if (current) {
       current = {
         text: current.text + " " + trimmed,
         line: current.line, // Keep the line number of the step start
@@ -92,11 +93,7 @@ const unwrapStepLines = (lines: SectionLine[]): SectionLine[] => {
       continue;
     }
 
-    // Not a numbered step or continuation - treat as standalone line
-    if (current) {
-      unwrapped.push(current);
-      current = null;
-    }
+    // No current step - treat as standalone line (shouldn't happen often in well-formed steps)
     unwrapped.push(line);
   }
 
@@ -405,7 +402,9 @@ export const parseDocument = (
 
       if (section.kind === "ingredients") {
         for (const ingredient of section.ingredients) {
-          registerId(ingredient.id, "ingredient", ingredient.line, ingredient.name);
+          // Use qualified ID for registry to allow same ingredient name in different recipes
+          const qualifiedId = `${recipe.id}/${ingredient.id}`;
+          registerId(qualifiedId, "ingredient", ingredient.line, ingredient.name);
         }
       }
     }
@@ -474,6 +473,7 @@ export const parseDocument = (
             original: match[0],
             display,
             target,
+            recipeId: recipe.id,
             line: line.line,
             column,
           });
@@ -482,16 +482,28 @@ export const parseDocument = (
     }
   }
 
+  // Two-phase reference resolution:
+  // 1. Try recipe-scoped lookup: {recipeId}/{target} (for ingredients)
+  // 2. Fall back to global lookup: {target} (for recipe references)
   for (const ref of references) {
-    if (!idRegistry.has(ref.target)) {
-      diagnostics.push(
-        warning(
-          "W0302",
-          `Reference "${ref.target}" does not match any known id.`,
-          ref.line,
-        ),
-      );
+    const scopedTarget = `${ref.recipeId}/${ref.target}`;
+    if (idRegistry.has(scopedTarget)) {
+      ref.resolvedTarget = scopedTarget;
+      continue;
     }
+
+    if (idRegistry.has(ref.target)) {
+      ref.resolvedTarget = ref.target;
+      continue;
+    }
+
+    diagnostics.push(
+      warning(
+        "W0302",
+        `Reference "${ref.target}" does not match any known id.`,
+        ref.line,
+      ),
+    );
   }
 
   return {

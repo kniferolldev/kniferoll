@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
-import type { Browser } from "playwright";
-import { chromium } from "playwright";
-import { bundleMarkdown, loadComponentBundle } from "./test-utils";
+import {
+  bundleMarkdown,
+  closeTestContext,
+  createTestContext,
+  loadComponentBundle,
+} from "./test-utils";
 
 test(
   "renders timer chips and dispatches timer-start event on click",
@@ -16,13 +19,9 @@ test(
       "1. Simmer [[oats]] @2s.",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -39,29 +38,31 @@ ${bundleMarkdown(markdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
       // Wait for component to render
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector('.kr-timer[data-kr-timer-label="2s"]');
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(
+            '.kr-timer[data-kr-timer-label="2s"]',
+          );
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Test: Timer chip exists
-      const hasTimer = await page.evaluate(() => {
+      const hasTimer = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector('.kr-timer[data-kr-timer-label="2s"]');
+        return !!host?.shadowRoot?.querySelector(
+          '.kr-timer[data-kr-timer-label="2s"]',
+        );
       });
       expect(hasTimer).toBe(true);
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );

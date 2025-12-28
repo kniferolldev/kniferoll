@@ -208,7 +208,7 @@ export const formatQuantity = (
   }
 
   // Allow fractions when not converting, or when converting within the same unit
-  const allowFractions = !displayUnit || (displayUnit && sourceUnit && displayUnit.canonical === sourceUnit.canonical);
+  const allowFractions = !displayUnit || !!(displayUnit && sourceUnit && displayUnit.canonical === sourceUnit.canonical);
 
   if (quantity.kind === "range") {
     return formatQuantityRange(quantity, sourceUnit, displayUnit, allowFractions, originalUnit);

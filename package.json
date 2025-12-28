@@ -6,6 +6,7 @@
   "scripts": {
     "kr": "bun src/kr.ts",
     "test": "bun test",
+    "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage",
     "editor": "bun apps/editor/server.ts",
     "demo": "bun apps/editor/server.ts",
     "importer": "bun apps/importer/server.ts",
@@ -23,6 +24,7 @@
     "@anthropic-ai/sdk": "^0.71.2",
     "@google/generative-ai": "^0.24.1",
     "openai": "^6.10.0",
+    "sharp": "^0.34.5",
     "yaml": "^2.8.1"
   }
 }

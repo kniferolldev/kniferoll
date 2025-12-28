@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
-import type { Browser } from "playwright";
-import { chromium } from "playwright";
-import { bundleMarkdown, loadComponentBundle } from "./test-utils";
+import {
+  bundleMarkdown,
+  closeTestContext,
+  createTestContext,
+  loadComponentBundle,
+} from "./test-utils";
 
 test(
   "applies CSS custom properties for theming",
@@ -16,13 +19,9 @@ test(
       "1. Season.",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -46,16 +45,20 @@ ${bundleMarkdown(markdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
       // Wait for component to render
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Test that CSS variables are applied
-      const styles = await page.evaluate(() => {
+      const styles = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         if (!host || !host.shadowRoot) return null;
 
@@ -63,26 +66,26 @@ ${bundleMarkdown(markdown)}
         const computedStyles = recipe ? window.getComputedStyle(recipe) : null;
 
         return {
-          accentColor: computedStyles?.getPropertyValue("--kr-color-accent").trim() ?? null,
-          fontSize: computedStyles?.getPropertyValue("--kr-font-size-base").trim() ?? null,
-          padding: computedStyles?.getPropertyValue("--kr-card-padding").trim() ?? null,
+          accentColor:
+            computedStyles?.getPropertyValue("--kr-color-accent").trim() ??
+            null,
+          fontSize:
+            computedStyles?.getPropertyValue("--kr-font-size-base").trim() ??
+            null,
+          padding:
+            computedStyles?.getPropertyValue("--kr-card-padding").trim() ??
+            null,
         };
       });
 
       expect(styles?.accentColor).toBe("rgb(255, 0, 0)");
       expect(styles?.fontSize).toBe("24px");
       expect(styles?.padding).toBe("3rem");
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );
 
 test(
@@ -98,13 +101,9 @@ test(
       "1. Season.",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -121,41 +120,52 @@ ${bundleMarkdown(markdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
       // Wait for component to render
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Test: Content property setter
-      await page.evaluate(() => {
-        const host = document.querySelector<HTMLElement & { content?: string }>("kr-recipe");
+      await ctx.page.evaluate(() => {
+        const host = document.querySelector<
+          HTMLElement & { content?: string }
+        >("kr-recipe");
         if (host) {
-          (host as unknown as { content: string }).content = "# Test\n## Ingredients\n- salt";
+          (host as unknown as { content: string }).content =
+            "# Test\n## Ingredients\n- salt";
         }
       });
 
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return host?.shadowRoot?.querySelector(".kr-recipe__title")?.textContent === "Test";
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return (
+            host?.shadowRoot?.querySelector(".kr-recipe__title")?.textContent ===
+            "Test"
+          );
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
-      const updatedTitle = await page.evaluate(() => {
+      const updatedTitle = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
-        return host?.shadowRoot?.querySelector(".kr-recipe__title")?.textContent ?? "";
+        return (
+          host?.shadowRoot?.querySelector(".kr-recipe__title")?.textContent ??
+          ""
+        );
       });
       expect(updatedTitle).toBe("Test");
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );

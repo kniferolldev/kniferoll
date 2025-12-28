@@ -392,8 +392,8 @@ const renderStepLine = (
 
   // Check if line starts with a step number like "1. "
   const stepMatch = STEP_NUMBER_PATTERN.exec(fullText);
-  const stepNumber = stepMatch ? stepMatch[1] : null;
-  const stepPrefixLength = stepMatch ? stepMatch[0].length : 0;
+  const stepNumber = stepMatch?.[1] ?? null;
+  const stepPrefixLength = stepMatch?.[0]?.length ?? 0;
   const text = stepMatch ? fullText.slice(stepPrefixLength) : fullText;
 
   type InlineToken = { start: number; end: number; html: string };
@@ -1603,8 +1603,8 @@ export class KrRecipeElement extends HTMLElement {
     this.addEventListener("keydown", handleKeyDown);
 
     // Initialize first step if none selected
-    if (steps.length > 0) {
-      const firstStep = steps[0];
+    const firstStep = steps[0];
+    if (firstStep) {
       const recipeId = firstStep.getAttribute("data-kr-recipe-id") ?? "";
       if (recipeId && !this.#currentStepIndex.has(recipeId)) {
         this.#setCurrentStep(recipeId, 0);

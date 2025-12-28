@@ -16,8 +16,9 @@ function parseArgs(args: string[]): {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
+    if (!arg) continue;
     if (arg === "--name" && args[i + 1]) {
-      name = args[++i];
+      name = args[++i] ?? null;
     } else if (!arg.startsWith("-")) {
       sourcePath = arg;
     }
@@ -39,9 +40,8 @@ export async function runPromote(
   args: string[],
   io: IO
 ): Promise<number> {
-  const encoder = new TextEncoder();
-  const write = (s: string) => io.stdout.write(encoder.encode(s));
-  const writeErr = (s: string) => io.stderr.write(encoder.encode(s));
+  const write = (s: string) => io.stdout.write(s);
+  const writeErr = (s: string) => io.stderr.write(s);
 
   const { sourcePath, name } = parseArgs(args);
 
@@ -72,8 +72,8 @@ export async function runPromote(
   const targetDir = join("evals", slug);
 
   // Check if target already exists
-  const targetExpected = Bun.file(join(targetDir, "expected.md"));
-  if (await targetExpected.exists()) {
+  const targetGolden = Bun.file(join(targetDir, "golden.md"));
+  if (await targetGolden.exists()) {
     writeErr(`Error: ${targetDir} already exists\n`);
     writeErr("Choose a different name or remove the existing directory\n");
     return 1;
@@ -83,13 +83,13 @@ export async function runPromote(
 
   const copiedFiles: string[] = [];
 
-  // Copy output.md → both expected.md AND actual.md
-  // expected.md is the golden version (user will edit this)
+  // Copy output.md → both golden.md AND actual.md
+  // golden.md is the golden version (user will edit this)
   // actual.md is the cached importer output (regenerate when prompt changes)
   const outputContent = await outputFile.text();
-  await Bun.write(join(targetDir, "expected.md"), outputContent);
+  await Bun.write(join(targetDir, "golden.md"), outputContent);
   await Bun.write(join(targetDir, "actual.md"), outputContent);
-  copiedFiles.push("expected.md (from output.md - edit this to create golden)");
+  copiedFiles.push("golden.md (from output.md - edit this to create golden)");
   copiedFiles.push("actual.md (from output.md - cached importer output)");
 
   // Copy input.txt if it exists

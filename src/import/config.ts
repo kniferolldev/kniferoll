@@ -5,8 +5,14 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-/** Default model for recipe import */
-export const DEFAULT_IMPORT_MODEL = "openai/gpt-5.1";
+/** Default model for recipe import (used for extraction in two-stage, or single-stage) */
+export const DEFAULT_IMPORT_MODEL = "google/gemini-3-flash-preview";
+
+/** Default model for formatting stage (text-only, can be smaller/cheaper) */
+export const DEFAULT_FORMAT_MODEL = "google/gemini-3-flash-preview";
+
+/** Default model for judging eval quality */
+export const DEFAULT_JUDGE_MODEL = "anthropic/claude-sonnet-4-5-20250514";
 
 /** Cached schema content */
 let cachedSchema: string | null = null;

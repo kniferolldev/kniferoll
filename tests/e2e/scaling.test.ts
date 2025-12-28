@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
-import type { Browser } from "playwright";
-import { chromium } from "playwright";
-import { bundleMarkdown, loadComponentBundle } from "./test-utils";
+import {
+  bundleMarkdown,
+  closeTestContext,
+  createTestContext,
+  loadComponentBundle,
+} from "./test-utils";
 
 test(
   "scales recipe quantities using preset selector",
@@ -23,13 +26,9 @@ test(
       "1. Cook.",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -46,18 +45,24 @@ ${bundleMarkdown(markdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
       // Wait for component to render
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-scale-control");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-scale-control");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Change to triple preset
-      await page.evaluate(() => {
+      await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
-        const select = host?.shadowRoot?.querySelector(".kr-scale-control") as HTMLSelectElement | null;
+        const select = host?.shadowRoot?.querySelector(
+          ".kr-scale-control",
+        ) as HTMLSelectElement | null;
         if (select) {
           select.value = "preset:0";
           select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -65,28 +70,31 @@ ${bundleMarkdown(markdown)}
       });
 
       // Wait for quantity to update
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        const quantity = host?.shadowRoot?.querySelector(".kr-ingredient__quantity")?.textContent ?? "";
-        return quantity.includes("3");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          const quantity =
+            host?.shadowRoot?.querySelector(".kr-ingredient__quantity")
+              ?.textContent ?? "";
+          return quantity.includes("3");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
-      const quantity = await page.evaluate(() => {
+      const quantity = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
-        return host?.shadowRoot?.querySelector(".kr-ingredient__quantity")?.textContent ?? "";
+        return (
+          host?.shadowRoot?.querySelector(".kr-ingredient__quantity")
+            ?.textContent ?? ""
+        );
       });
       expect(quantity).toContain("3");
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );
 
 test(
@@ -102,13 +110,9 @@ test(
       "1. Cook.",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -125,18 +129,24 @@ ${bundleMarkdown(markdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
       // Wait for component to render
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-quantity-control");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-quantity-control");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Switch to alt-mass mode
-      await page.evaluate(() => {
+      await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
-        const select = host?.shadowRoot?.querySelector(".kr-quantity-control") as HTMLSelectElement | null;
+        const select = host?.shadowRoot?.querySelector(
+          ".kr-quantity-control",
+        ) as HTMLSelectElement | null;
         if (select) {
           select.value = "alt-mass";
           select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -144,26 +154,29 @@ ${bundleMarkdown(markdown)}
       });
 
       // Wait for quantity to switch to grams
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        const quantity = host?.shadowRoot?.querySelector(".kr-ingredient__quantity")?.textContent ?? "";
-        return quantity.includes("g");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          const quantity =
+            host?.shadowRoot?.querySelector(".kr-ingredient__quantity")
+              ?.textContent ?? "";
+          return quantity.includes("g");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
-      const quantity = await page.evaluate(() => {
+      const quantity = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
-        return host?.shadowRoot?.querySelector(".kr-ingredient__quantity")?.textContent ?? "";
+        return (
+          host?.shadowRoot?.querySelector(".kr-ingredient__quantity")
+            ?.textContent ?? ""
+        );
       });
       expect(quantity).toContain("g");
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );

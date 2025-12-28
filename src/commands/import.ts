@@ -180,9 +180,8 @@ async function buildInput(
 // ============================================================================
 
 export async function runImport(args: string[], io: IO): Promise<number> {
-  const encoder = new TextEncoder();
-  const write = (s: string) => io.stdout.write(encoder.encode(s));
-  const writeErr = (s: string) => io.stderr.write(encoder.encode(s));
+  const write = (s: string) => io.stdout.write(s);
+  const writeErr = (s: string) => io.stderr.write(s);
 
   // Parse arguments
   const parseResult = parseArgs(args);

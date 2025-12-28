@@ -3,13 +3,13 @@
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { ProviderAdapter, ResolvedInput } from "../types";
+import type { ProviderAdapter, InferenceResult } from "../types";
 import { arrayBufferToBase64 } from "../utils";
 
 export const googleAdapter: ProviderAdapter = {
   name: "google",
 
-  async infer({ input, systemPrompt, model, apiKey }): Promise<string> {
+  async infer({ input, systemPrompt, model, apiKey }): Promise<InferenceResult> {
     const genAI = new GoogleGenerativeAI(apiKey);
     const geminiModel = genAI.getGenerativeModel({
       model,
@@ -37,10 +37,23 @@ export const googleAdapter: ProviderAdapter = {
       throw new Error("No input provided (text or images required)");
     }
 
+    const start = performance.now();
     const result = await geminiModel.generateContent(parts);
+    const durationMs = performance.now() - start;
+
     const response = result.response;
     const text = response.text();
 
-    return text;
+    // Extract token usage from usageMetadata
+    const usage = response.usageMetadata;
+
+    return {
+      text,
+      metrics: {
+        durationMs,
+        inputTokens: usage?.promptTokenCount ?? 0,
+        outputTokens: usage?.candidatesTokenCount ?? 0,
+      },
+    };
   },
 };

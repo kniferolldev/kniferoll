@@ -3,13 +3,13 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { ProviderAdapter, ResolvedInput } from "../types";
+import type { ProviderAdapter, InferenceResult } from "../types";
 import { arrayBufferToBase64 } from "../utils";
 
 export const anthropicAdapter: ProviderAdapter = {
   name: "anthropic",
 
-  async infer({ input, systemPrompt, model, apiKey }): Promise<string> {
+  async infer({ input, systemPrompt, model, apiKey }): Promise<InferenceResult> {
     const client = new Anthropic({ apiKey });
 
     // Build user content
@@ -43,12 +43,14 @@ export const anthropicAdapter: ProviderAdapter = {
       throw new Error("No input provided (text or images required)");
     }
 
+    const start = performance.now();
     const response = await client.messages.create({
       model,
       max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
+    const durationMs = performance.now() - start;
 
     // Extract text from response
     const textBlock = response.content.find((block) => block.type === "text");
@@ -56,6 +58,13 @@ export const anthropicAdapter: ProviderAdapter = {
       throw new Error("No text response from Anthropic");
     }
 
-    return textBlock.text;
+    return {
+      text: textBlock.text,
+      metrics: {
+        durationMs,
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      },
+    };
   },
 };

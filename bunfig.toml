@@ -1,0 +1,4 @@
+[test]
+
+# Only measure coverage for source files, not tests
+coverageSkipTestFiles = true

@@ -336,3 +336,120 @@ test("step tokens capture timers and temperatures", () => {
     }),
   );
 });
+
+test("same ingredient name in different recipes does not conflict", () => {
+  const input = [
+    "# Collection",
+    "",
+    "# Recipe A",
+    "## Ingredients",
+    "- salt - 1 tsp",
+    "- cornstarch - 1 tbsp",
+    "## Steps",
+    "1. Add [[salt]] and [[cornstarch]].",
+    "",
+    "# Recipe B",
+    "## Ingredients",
+    "- salt - 2 tsp",
+    "- cornstarch - 2 tbsp",
+    "## Steps",
+    "1. Mix [[salt]] with [[cornstarch]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+
+  // No duplicate ID errors
+  const duplicateErrors = byCode(result.diagnostics, "E0301");
+  expect(duplicateErrors).toHaveLength(0);
+
+  // All references should resolve (no W0302 warnings)
+  const unresolvedWarnings = byCode(result.diagnostics, "W0302");
+  expect(unresolvedWarnings).toHaveLength(0);
+
+  // Both recipes parsed
+  expect(result.recipes).toHaveLength(2);
+});
+
+test("references resolve to ingredients in the same recipe", () => {
+  const input = [
+    "# Main",
+    "",
+    "# Marinade",
+    "## Ingredients",
+    "- soy sauce - 1 tbsp",
+    "## Steps",
+    "1. Use [[soy-sauce]].",
+    "",
+    "# Sauce",
+    "## Ingredients",
+    "- soy sauce - 2 tbsp",
+    "## Steps",
+    "1. Add [[soy-sauce]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+
+  // No errors or warnings
+  expect(result.diagnostics).toHaveLength(0);
+
+  // References should have recipeId set
+  expect(result.references).toHaveLength(2);
+  expect(result.references[0]?.recipeId).toBe("marinade");
+  expect(result.references[0]?.resolvedTarget).toBe("marinade/soy-sauce");
+  expect(result.references[1]?.recipeId).toBe("sauce");
+  expect(result.references[1]?.resolvedTarget).toBe("sauce/soy-sauce");
+});
+
+test("recipe references remain global", () => {
+  const input = [
+    "# Main",
+    "",
+    "# Main Dish",
+    "## Ingredients",
+    "- chicken - 1 lb",
+    "## Steps",
+    "1. Prepare the [[Sauce]].",
+    "2. Cook [[chicken]] with sauce.",
+    "",
+    "# Sauce",
+    "## Ingredients",
+    "- soy sauce - 2 tbsp",
+    "## Steps",
+    "1. Mix [[soy-sauce]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+
+  // No errors or warnings
+  expect(result.diagnostics).toHaveLength(0);
+
+  // Find the [[Sauce]] reference
+  const sauceRef = result.references.find((r) => r.target === "sauce");
+  expect(sauceRef).toBeDefined();
+  expect(sauceRef?.resolvedTarget).toBe("sauce"); // Global, not scoped
+});
+
+test("unresolved reference in recipe with same-named ingredient elsewhere warns", () => {
+  const input = [
+    "# Main",
+    "",
+    "# Recipe A",
+    "## Ingredients",
+    "- salt - 1 tsp",
+    "## Steps",
+    "1. Add [[pepper]].",
+    "",
+    "# Recipe B",
+    "## Ingredients",
+    "- pepper - 1 tsp",
+    "## Steps",
+    "1. Use [[pepper]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+
+  // Recipe A's [[pepper]] should warn (pepper is in Recipe B, not A)
+  const unresolvedWarnings = byCode(result.diagnostics, "W0302");
+  expect(unresolvedWarnings).toHaveLength(1);
+  expect(unresolvedWarnings[0]?.message).toContain("pepper");
+});

@@ -251,3 +251,137 @@ test("cookbook rejects unsupported keys", () => {
   expect(msgs.some((msg) => msg.includes("unsupported"))).toBe(true);
 });
 
+test("rejects invalid source type", () => {
+  const msgs = messagesFrom(
+    [
+      "version: 0.1.0",
+      "source: 123",
+    ].join("\n"),
+  );
+  expect(msgs).toContain("Frontmatter source must be a string, URL object, or cookbook object.");
+});
+
+test("scales must be an array", () => {
+  const msgs = messagesFrom(
+    [
+      "version: 0.1.0",
+      "scales: not-an-array",
+    ].join("\n"),
+  );
+  expect(msgs).toContain("Frontmatter scales must be an array of presets.");
+});
+
+test("scales entries must be objects", () => {
+  const msgs = messagesFrom(
+    [
+      "version: 0.1.0",
+      "scales:",
+      "  - just-a-string",
+    ].join("\n"),
+  );
+  expect(msgs).toContain("Frontmatter scales entries must be objects.");
+});
+
+test("scale preset name must be non-empty string", () => {
+  const msgs = messagesFrom(
+    [
+      "version: 0.1.0",
+      "scales:",
+      "  - name: \"\"",
+      "    anchor: { id: salt, amount: 10, unit: g }",
+    ].join("\n"),
+  );
+  expect(msgs).toContain("Scale preset name must be a non-empty string.");
+});
+
+test("scale preset requires anchor", () => {
+  const msgs = messagesFrom(
+    [
+      "version: 0.1.0",
+      "scales:",
+      "  - name: Test",
+    ].join("\n"),
+  );
+  expect(msgs.some((msg) => msg.includes("missing anchor"))).toBe(true);
+});
+
+test("scale preset anchor must be object", () => {
+  const msgs = messagesFrom(
+    [
+      "version: 0.1.0",
+      "scales:",
+      "  - name: Test",
+      "    anchor: not-an-object",
+    ].join("\n"),
+  );
+  expect(msgs.some((msg) => msg.includes("anchor must be an object"))).toBe(true);
+});
+
+test("scale preset anchor.id must be non-empty string", () => {
+  const msgs = messagesFrom(
+    [
+      "version: 0.1.0",
+      "scales:",
+      "  - name: Test",
+      "    anchor: { id: \"\", amount: 10, unit: g }",
+    ].join("\n"),
+  );
+  expect(msgs.some((msg) => msg.includes("anchor.id must be a non-empty string"))).toBe(true);
+});
+
+test("scale preset anchor.amount must be number", () => {
+  const msgs = messagesFrom(
+    [
+      "version: 0.1.0",
+      "scales:",
+      "  - name: Test",
+      "    anchor: { id: salt, amount: \"ten\", unit: g }",
+    ].join("\n"),
+  );
+  expect(msgs.some((msg) => msg.includes("anchor.amount must be a number"))).toBe(true);
+});
+
+test("scale preset anchor.unit must be non-empty string", () => {
+  const msgs = messagesFrom(
+    [
+      "version: 0.1.0",
+      "scales:",
+      "  - name: Test",
+      "    anchor: { id: salt, amount: 10, unit: \"\" }",
+    ].join("\n"),
+  );
+  expect(msgs.some((msg) => msg.includes("anchor.unit must be a non-empty string"))).toBe(true);
+});
+
+test("scale preset anchor rejects unsupported keys", () => {
+  const msgs = messagesFrom(
+    [
+      "version: 0.1.0",
+      "scales:",
+      "  - name: Test",
+      "    anchor: { id: salt, amount: 10, unit: g, extra: true }",
+    ].join("\n"),
+  );
+  expect(msgs.some((msg) => msg.includes("unsupported keys"))).toBe(true);
+});
+
+test("parses valid scales array", () => {
+  const result = extractFrontmatter(
+    doc(
+      [
+        "version: 0.1.0",
+        "scales:",
+        "  - name: Half",
+        "    anchor: { id: salt, amount: 5, unit: g }",
+        "  - name: Double",
+        "    anchor: { id: salt, amount: 20, unit: g }",
+      ].join("\n"),
+    ),
+  );
+
+  expect(result.frontmatter?.scales).toHaveLength(2);
+  expect(result.frontmatter?.scales?.[0]?.name).toBe("Half");
+  expect(result.frontmatter?.scales?.[1]?.anchor.amount).toBe(20);
+  expect(result.diagnostics).toHaveLength(0);
+});
+

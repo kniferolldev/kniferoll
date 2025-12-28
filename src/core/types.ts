@@ -279,7 +279,12 @@ export interface DocumentTitle {
 export interface ReferenceToken {
   original: string;
   display?: string;
+  /** The raw target slug from the reference text. */
   target: string;
+  /** The recipe ID where this reference appears (for scoped resolution). */
+  recipeId: string;
+  /** The resolved qualified ID after two-phase lookup. */
+  resolvedTarget?: string;
   line: number;
   column: number;
 }

@@ -1,12 +1,33 @@
-import { expect, test, describe } from "bun:test";
+import { expect, test, describe, beforeEach, afterEach } from "bun:test";
 import {
   parseModelSpec,
   formatModelSpec,
   buildSystemPrompt,
   DEFAULT_IMPORT_MODEL,
+  DEFAULT_FORMAT_MODEL,
+  DEFAULT_JUDGE_MODEL,
   getApiKeyEnvVar,
+  getApiKey,
+  loadSchema,
   arrayBufferToBase64,
+  blobToLoadedImage,
+  resolveInput,
+  parsePreprocessOptions,
 } from "./index";
+import { clearSchemaCache } from "./config";
+import { buildExtractionPrompt } from "./extract-prompt";
+import { buildFormatPrompt } from "./format-prompt";
+import {
+  processImage,
+  rotateImage,
+  buildRotationDetectionPrompt,
+} from "./image-processing";
+import {
+  importRecipe,
+  extractRecipe,
+  formatRecipe,
+} from "./infer";
+import { getProvider } from "./providers";
 
 describe("parseModelSpec", () => {
   test("parses openai model", () => {
@@ -70,7 +91,7 @@ describe("DEFAULT_IMPORT_MODEL", () => {
   test("is a valid model spec", () => {
     const result = parseModelSpec(DEFAULT_IMPORT_MODEL);
     expect(result).not.toBeNull();
-    expect(result?.provider).toBe("openai");
+    expect(result?.provider).toBe("google");
   });
 });
 
@@ -131,5 +152,552 @@ describe("arrayBufferToBase64", () => {
 
     // Should be valid base64
     expect(base64).toMatch(/^[A-Za-z0-9+/]+=*$/);
+  });
+});
+
+describe("blobToLoadedImage", () => {
+  test("converts blob to loaded image with correct mime type", async () => {
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const blob = new Blob([data], { type: "image/jpeg" });
+
+    const result = await blobToLoadedImage(blob);
+
+    expect(result.kind).toBe("loaded");
+    expect(result.mimeType).toBe("image/jpeg");
+    expect(result.data.byteLength).toBe(4);
+  });
+
+  test("defaults to image/jpeg for unknown mime type", async () => {
+    const data = new Uint8Array([0x00, 0x01, 0x02]);
+    const blob = new Blob([data]);
+
+    const result = await blobToLoadedImage(blob);
+
+    expect(result.mimeType).toBe("image/jpeg");
+  });
+
+  test("handles png mime type", async () => {
+    const data = new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // PNG header
+    const blob = new Blob([data], { type: "image/png" });
+
+    const result = await blobToLoadedImage(blob);
+
+    expect(result.mimeType).toBe("image/png");
+  });
+});
+
+describe("resolveInput", () => {
+  test("passes through text input", async () => {
+    const result = await resolveInput({ text: "hello world" });
+
+    expect(result.text).toBe("hello world");
+    expect(result.images).toBeUndefined();
+  });
+
+  test("handles empty input", async () => {
+    const result = await resolveInput({});
+
+    expect(result.text).toBeUndefined();
+    expect(result.images).toBeUndefined();
+  });
+
+  test("handles loaded images without preprocessing", async () => {
+    const data = new ArrayBuffer(10);
+    const result = await resolveInput({
+      images: [{ kind: "loaded", data, mimeType: "image/jpeg" }],
+    });
+
+    expect(result.images).toHaveLength(1);
+    expect(result.images![0].mimeType).toBe("image/jpeg");
+  });
+
+  test("handles text and images together", async () => {
+    const data = new ArrayBuffer(10);
+    const result = await resolveInput({
+      text: "some text",
+      images: [{ kind: "loaded", data, mimeType: "image/png" }],
+    });
+
+    expect(result.text).toBe("some text");
+    expect(result.images).toHaveLength(1);
+  });
+});
+
+describe("parsePreprocessOptions", () => {
+  test("parses grayscale option", () => {
+    const result = parsePreprocessOptions("grayscale");
+
+    expect(result.grayscale).toBe(true);
+  });
+
+  test("parses contrast option", () => {
+    const result = parsePreprocessOptions("contrast=1.5");
+
+    expect(result.contrast).toBe(1.5);
+  });
+
+  test("parses maxWidth option", () => {
+    const result = parsePreprocessOptions("maxWidth=1024");
+
+    expect(result.maxWidth).toBe(1024);
+  });
+
+  test("parses maxHeight option", () => {
+    const result = parsePreprocessOptions("maxHeight=768");
+
+    expect(result.maxHeight).toBe(768);
+  });
+
+  test("parses quality option", () => {
+    const result = parsePreprocessOptions("quality=90");
+
+    expect(result.quality).toBe(90);
+  });
+
+  test("parses multiple options", () => {
+    const result = parsePreprocessOptions(
+      "grayscale,contrast=1.2,maxWidth=800,quality=85"
+    );
+
+    expect(result.grayscale).toBe(true);
+    expect(result.contrast).toBe(1.2);
+    expect(result.maxWidth).toBe(800);
+    expect(result.quality).toBe(85);
+  });
+
+  test("handles empty string", () => {
+    const result = parsePreprocessOptions("");
+
+    expect(Object.keys(result)).toHaveLength(0);
+  });
+
+  test("handles whitespace in options", () => {
+    const result = parsePreprocessOptions("grayscale , maxWidth=500");
+
+    expect(result.grayscale).toBe(true);
+    expect(result.maxWidth).toBe(500);
+  });
+
+  test("ignores unknown options", () => {
+    const result = parsePreprocessOptions("grayscale,unknown=123");
+
+    expect(result.grayscale).toBe(true);
+    expect((result as Record<string, unknown>).unknown).toBeUndefined();
+  });
+});
+
+describe("buildExtractionPrompt", () => {
+  test("returns a non-empty string", () => {
+    const prompt = buildExtractionPrompt();
+
+    expect(typeof prompt).toBe("string");
+    expect(prompt.length).toBeGreaterThan(100);
+  });
+
+  test("mentions OCR/transcription", () => {
+    const prompt = buildExtractionPrompt();
+
+    expect(prompt).toContain("OCR");
+  });
+
+  test("includes JSON output format", () => {
+    const prompt = buildExtractionPrompt();
+
+    expect(prompt).toContain("title");
+    expect(prompt).toContain("sections");
+    expect(prompt).toContain("content");
+  });
+
+  test("warns against generating content", () => {
+    const prompt = buildExtractionPrompt();
+
+    expect(prompt).toContain("NEVER");
+    expect(prompt.toLowerCase()).toContain("guess");
+  });
+});
+
+describe("buildFormatPrompt", () => {
+  test("includes the provided schema", () => {
+    const schema = "# My Test Schema\n\nSome content here";
+    const prompt = buildFormatPrompt(schema);
+
+    expect(prompt).toContain(schema);
+  });
+
+  test("mentions Recipe Markdown", () => {
+    const prompt = buildFormatPrompt("schema");
+
+    expect(prompt).toContain("Recipe Markdown");
+  });
+
+  test("includes formatting guidelines", () => {
+    const prompt = buildFormatPrompt("schema");
+
+    expect(prompt).toContain("FORMATTING GUIDELINES");
+    expect(prompt).toContain("frontmatter");
+    expect(prompt).toContain("version:");
+  });
+
+  test("describes input format", () => {
+    const prompt = buildFormatPrompt("schema");
+
+    expect(prompt).toContain("INPUT FORMAT");
+    expect(prompt).toContain("sections");
+  });
+});
+
+describe("buildRotationDetectionPrompt", () => {
+  test("returns a non-empty string", () => {
+    const prompt = buildRotationDetectionPrompt();
+
+    expect(typeof prompt).toBe("string");
+    expect(prompt.length).toBeGreaterThan(50);
+  });
+
+  test("mentions rotation angles", () => {
+    const prompt = buildRotationDetectionPrompt();
+
+    expect(prompt).toContain("0");
+    expect(prompt).toContain("90");
+    expect(prompt).toContain("180");
+    expect(prompt).toContain("270");
+  });
+
+  test("asks for a single number response", () => {
+    const prompt = buildRotationDetectionPrompt();
+
+    expect(prompt.toLowerCase()).toContain("number");
+  });
+});
+
+describe("DEFAULT_FORMAT_MODEL", () => {
+  test("is a valid model spec", () => {
+    const result = parseModelSpec(DEFAULT_FORMAT_MODEL);
+
+    expect(result).not.toBeNull();
+  });
+});
+
+describe("DEFAULT_JUDGE_MODEL", () => {
+  test("is a valid model spec", () => {
+    const result = parseModelSpec(DEFAULT_JUDGE_MODEL);
+
+    expect(result).not.toBeNull();
+    expect(result?.provider).toBe("anthropic");
+  });
+});
+
+describe("getApiKey", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    // Restore original environment
+    process.env = { ...originalEnv };
+  });
+
+  test("returns null when env var is not set", () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const result = getApiKey("openai");
+
+    expect(result).toBeNull();
+  });
+
+  test("returns api key from environment", () => {
+    process.env.ANTHROPIC_API_KEY = "test-key-123";
+
+    const result = getApiKey("anthropic");
+
+    expect(result).toBe("test-key-123");
+  });
+
+  test("returns google api key", () => {
+    process.env.GEMINI_API_KEY = "gemini-key";
+
+    const result = getApiKey("google");
+
+    expect(result).toBe("gemini-key");
+  });
+});
+
+describe("loadSchema", () => {
+  beforeEach(() => {
+    clearSchemaCache();
+  });
+
+  test("loads schema from project root", async () => {
+    const schema = await loadSchema();
+
+    expect(typeof schema).toBe("string");
+    expect(schema.length).toBeGreaterThan(100);
+  });
+
+  test("caches schema after first load", async () => {
+    const schema1 = await loadSchema();
+    const schema2 = await loadSchema();
+
+    expect(schema1).toBe(schema2);
+  });
+
+  test("throws error for non-existent path", async () => {
+    await expect(loadSchema("/nonexistent/path")).rejects.toThrow();
+  });
+});
+
+describe("processImage", () => {
+  // Create a minimal valid JPEG for testing
+  // This is a 1x1 red pixel JPEG
+  const minimalJpeg = new Uint8Array([
+    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+    0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43,
+    0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
+    0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
+    0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20,
+    0x24, 0x2e, 0x27, 0x20, 0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29,
+    0x2c, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27, 0x39, 0x3d, 0x38, 0x32,
+    0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01,
+    0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    0x09, 0x0a, 0x0b, 0xff, 0xc4, 0x00, 0xb5, 0x10, 0x00, 0x02, 0x01, 0x03,
+    0x03, 0x02, 0x04, 0x03, 0x05, 0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7d,
+    0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21, 0x31, 0x41, 0x06,
+    0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xa1, 0x08,
+    0x23, 0x42, 0xb1, 0xc1, 0x15, 0x52, 0xd1, 0xf0, 0x24, 0x33, 0x62, 0x72,
+    0x82, 0x09, 0x0a, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x25, 0x26, 0x27, 0x28,
+    0x29, 0x2a, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x43, 0x44, 0x45,
+    0x46, 0x47, 0x48, 0x49, 0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59,
+    0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x73, 0x74, 0x75,
+    0x76, 0x77, 0x78, 0x79, 0x7a, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89,
+    0x8a, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3,
+    0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6,
+    0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9,
+    0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2,
+    0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf1, 0xf2, 0xf3, 0xf4,
+    0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01,
+    0x00, 0x00, 0x3f, 0x00, 0xfb, 0xd5, 0xdb, 0x20, 0xa8, 0xf1, 0x5c, 0xc5,
+    0x5c, 0xb7, 0xdb, 0x2b, 0x8e, 0xb7, 0xd6, 0x91, 0xff, 0xd9,
+  ]).buffer as ArrayBuffer;
+
+  test("processes image with quality option", async () => {
+    const result = await processImage(minimalJpeg, "image/jpeg", {
+      quality: 60,
+    });
+
+    expect(result.mimeType).toBe("image/jpeg");
+    expect(result.originalSize).toBe(minimalJpeg.byteLength);
+    expect(result.processedSize).toBeGreaterThan(0);
+  });
+
+  test("processes image with maxWidth", async () => {
+    const result = await processImage(minimalJpeg, "image/jpeg", {
+      maxWidth: 100,
+    });
+
+    expect(result.mimeType).toBe("image/jpeg");
+    expect(result.data.byteLength).toBeGreaterThan(0);
+  });
+
+  test("processes image with grayscale", async () => {
+    const result = await processImage(minimalJpeg, "image/jpeg", {
+      grayscale: true,
+    });
+
+    expect(result.mimeType).toBe("image/jpeg");
+  });
+
+  test("processes image with contrast adjustment", async () => {
+    const result = await processImage(minimalJpeg, "image/jpeg", {
+      contrast: 1.5,
+    });
+
+    expect(result.mimeType).toBe("image/jpeg");
+  });
+
+  test("processes image with multiple options", async () => {
+    const result = await processImage(minimalJpeg, "image/jpeg", {
+      maxWidth: 500,
+      maxHeight: 500,
+      grayscale: true,
+      contrast: 1.2,
+      quality: 70,
+    });
+
+    expect(result.mimeType).toBe("image/jpeg");
+  });
+});
+
+describe("rotateImage", () => {
+  // Minimal JPEG for rotation tests
+  const minimalJpeg = new Uint8Array([
+    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+    0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43,
+    0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
+    0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
+    0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20,
+    0x24, 0x2e, 0x27, 0x20, 0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29,
+    0x2c, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27, 0x39, 0x3d, 0x38, 0x32,
+    0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01,
+    0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    0x09, 0x0a, 0x0b, 0xff, 0xc4, 0x00, 0xb5, 0x10, 0x00, 0x02, 0x01, 0x03,
+    0x03, 0x02, 0x04, 0x03, 0x05, 0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7d,
+    0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21, 0x31, 0x41, 0x06,
+    0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xa1, 0x08,
+    0x23, 0x42, 0xb1, 0xc1, 0x15, 0x52, 0xd1, 0xf0, 0x24, 0x33, 0x62, 0x72,
+    0x82, 0x09, 0x0a, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x25, 0x26, 0x27, 0x28,
+    0x29, 0x2a, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x43, 0x44, 0x45,
+    0x46, 0x47, 0x48, 0x49, 0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59,
+    0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x73, 0x74, 0x75,
+    0x76, 0x77, 0x78, 0x79, 0x7a, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89,
+    0x8a, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3,
+    0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6,
+    0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9,
+    0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2,
+    0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf1, 0xf2, 0xf3, 0xf4,
+    0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01,
+    0x00, 0x00, 0x3f, 0x00, 0xfb, 0xd5, 0xdb, 0x20, 0xa8, 0xf1, 0x5c, 0xc5,
+    0x5c, 0xb7, 0xdb, 0x2b, 0x8e, 0xb7, 0xd6, 0x91, 0xff, 0xd9,
+  ]).buffer as ArrayBuffer;
+
+  test("returns original for 0 degrees", async () => {
+    const result = await rotateImage(minimalJpeg, 0);
+
+    expect(result).toBe(minimalJpeg);
+  });
+
+  test("rotates image 90 degrees", async () => {
+    const result = await rotateImage(minimalJpeg, 90);
+
+    expect(result.byteLength).toBeGreaterThan(0);
+    expect(result).not.toBe(minimalJpeg);
+  });
+
+  test("rotates image 180 degrees", async () => {
+    const result = await rotateImage(minimalJpeg, 180);
+
+    expect(result.byteLength).toBeGreaterThan(0);
+  });
+
+  test("rotates image 270 degrees", async () => {
+    const result = await rotateImage(minimalJpeg, 270);
+
+    expect(result.byteLength).toBeGreaterThan(0);
+  });
+});
+
+describe("importRecipe", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  test("throws error for invalid model format", async () => {
+    await expect(
+      importRecipe({ text: "test" }, { model: "invalid-model" })
+    ).rejects.toThrow("Invalid model format");
+  });
+
+  test("throws error when API key is missing", async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    await expect(
+      importRecipe({ text: "test" }, { model: "openai/gpt-4o" })
+    ).rejects.toThrow("OPENAI_API_KEY");
+  });
+
+  test("throws error for empty input", async () => {
+    process.env.OPENAI_API_KEY = "test-key";
+
+    await expect(
+      importRecipe({}, { model: "openai/gpt-4o", schema: "test schema" })
+    ).rejects.toThrow("No input provided");
+  });
+});
+
+describe("extractRecipe", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  test("throws error for invalid model format", async () => {
+    await expect(
+      extractRecipe(
+        { images: [{ kind: "loaded", data: new ArrayBuffer(10), mimeType: "image/jpeg" }] },
+        { model: "bad-model" }
+      )
+    ).rejects.toThrow("Invalid model format");
+  });
+
+  test("throws error when API key is missing", async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+
+    await expect(
+      extractRecipe(
+        { images: [{ kind: "loaded", data: new ArrayBuffer(10), mimeType: "image/jpeg" }] },
+        { model: "anthropic/claude-sonnet-4-5-20250514" }
+      )
+    ).rejects.toThrow("ANTHROPIC_API_KEY");
+  });
+
+  test("throws error when no images provided", async () => {
+    process.env.OPENAI_API_KEY = "test-key";
+
+    await expect(
+      extractRecipe({ text: "just text" }, { model: "openai/gpt-4o" })
+    ).rejects.toThrow("No images provided");
+  });
+});
+
+describe("formatRecipe", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  test("throws error for invalid model format", async () => {
+    await expect(
+      formatRecipe('{"title": "Test"}', { model: "not-a-valid-model" })
+    ).rejects.toThrow("Invalid model format");
+  });
+
+  test("throws error when API key is missing", async () => {
+    delete process.env.GEMINI_API_KEY;
+
+    await expect(
+      formatRecipe('{"title": "Test"}', { model: "google/gemini-2.0-flash" })
+    ).rejects.toThrow("GEMINI_API_KEY");
+  });
+});
+
+describe("getProvider", () => {
+  test("returns anthropic adapter", () => {
+    const provider = getProvider("anthropic");
+
+    expect(provider).toBeDefined();
+    expect(typeof provider.infer).toBe("function");
+  });
+
+  test("returns openai adapter", () => {
+    const provider = getProvider("openai");
+
+    expect(provider).toBeDefined();
+    expect(typeof provider.infer).toBe("function");
+  });
+
+  test("returns google adapter", () => {
+    const provider = getProvider("google");
+
+    expect(provider).toBeDefined();
+    expect(typeof provider.infer).toBe("function");
+  });
+
+  test("throws for unknown provider", () => {
+    expect(() => getProvider("unknown" as never)).toThrow("Unknown provider");
   });
 });

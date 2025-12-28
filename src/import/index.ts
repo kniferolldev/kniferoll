@@ -19,8 +19,8 @@
  * }, { model: "anthropic/claude-sonnet-4-5-20250514" });
  */
 
-// Main function
-export { importRecipe } from "./infer";
+// Main functions
+export { importRecipe, extractRecipe, formatRecipe, importRecipeTwoStage } from "./infer";
 
 // Types
 export type {
@@ -30,20 +30,30 @@ export type {
   LazyImage,
   ImageSource,
   InferenceInput,
+  InferenceMetrics,
+  InferenceResult,
   ImportResult,
   ImportOptions,
+  ImageProcessingOptions,
   ResolvedInput,
   ProviderAdapter,
+  ExtractedSection,
+  ExtractionResult,
+  FormatResult,
+  TwoStageMetrics,
 } from "./types";
 
 // Type utilities
 export { parseModelSpec, formatModelSpec } from "./types";
 
 // Configuration
-export { DEFAULT_IMPORT_MODEL, loadSchema, getApiKey, getApiKeyEnvVar } from "./config";
+export { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, DEFAULT_JUDGE_MODEL, loadSchema, getApiKey, getApiKeyEnvVar } from "./config";
 
 // Prompt (exported for transparency/debugging)
 export { buildSystemPrompt } from "./prompt";
 
 // Utilities (for consumers that need to convert Blobs)
 export { blobToLoadedImage, arrayBufferToBase64, resolveInput } from "./utils";
+
+// Image preprocessing
+export { parsePreprocessOptions } from "./image-processing";

@@ -46,21 +46,40 @@ const stubIO = (): { io: IO; stdout: ReturnType<typeof writer>; stderr: ReturnTy
 };
 
 describe("eval argument parsing", () => {
-  test("--regenerate without --model fails with usage message", async () => {
-    const { io, stderr } = stubIO();
-    const exitCode = await runEval(["--regenerate"], io);
+  test("--regenerate without --model uses default model", async () => {
+    // Save and clear API key to trigger early exit (default model is Gemini)
+    const savedKey = process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
 
-    expect(exitCode).toBe(2);
-    expect(stderr.read()).toContain("--model is required");
-    expect(stderr.read()).toContain("--regenerate --model <provider/model>");
+    try {
+      const { io, stderr } = stubIO();
+      const exitCode = await runEval(["--regenerate"], io);
+
+      // Should fail due to missing API key, not missing --model
+      expect(exitCode).toBe(1);
+      expect(stderr.read()).toContain("GEMINI_API_KEY");
+      expect(stderr.read()).not.toContain("--model is required");
+    } finally {
+      if (savedKey) process.env.GEMINI_API_KEY = savedKey;
+    }
   });
 
-  test("--judge without --model fails with usage message", async () => {
-    const { io, stderr } = stubIO();
-    const exitCode = await runEval(["--judge"], io);
+  test("--judge without --model uses default judge model", async () => {
+    // Save and clear API key to trigger early exit
+    const savedKey = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
 
-    expect(exitCode).toBe(2);
-    expect(stderr.read()).toContain("--model is required");
+    try {
+      const { io, stderr } = stubIO();
+      const exitCode = await runEval(["--judge"], io);
+
+      // Should fail due to missing API key (default judge uses Anthropic)
+      expect(exitCode).toBe(1);
+      expect(stderr.read()).toContain("ANTHROPIC_API_KEY");
+      expect(stderr.read()).not.toContain("--model is required");
+    } finally {
+      if (savedKey) process.env.ANTHROPIC_API_KEY = savedKey;
+    }
   });
 
   test("--model with invalid format fails", async () => {
@@ -74,10 +93,10 @@ describe("eval argument parsing", () => {
 
   test("--model with unsupported provider fails", async () => {
     const { io, stderr } = stubIO();
-    const exitCode = await runEval(["--regenerate", "--model", "google/gemini-pro"], io);
+    const exitCode = await runEval(["--regenerate", "--model", "unsupported/model"], io);
 
     expect(exitCode).toBe(2);
-    expect(stderr.read()).toContain('Invalid model format: "google/gemini-pro"');
+    expect(stderr.read()).toContain('Invalid model format: "unsupported/model"');
   });
 
   test("--model with valid format but missing API key fails", async () => {
@@ -120,5 +139,66 @@ describe("eval argument parsing", () => {
     expect(exitCode).toBe(1);
     expect(stderr.read()).toContain("No test cases found");
     expect(stderr.read()).not.toContain("--model is required");
+  });
+});
+
+describe("parsePreprocessOptions", () => {
+  test("parses grayscale flag", async () => {
+    const { parsePreprocessOptions } = await import("../import");
+    const opts = parsePreprocessOptions("grayscale");
+    expect(opts.grayscale).toBe(true);
+  });
+
+  test("parses multiple options", async () => {
+    const { parsePreprocessOptions } = await import("../import");
+    const opts = parsePreprocessOptions("grayscale,contrast=1.5,maxWidth=1024");
+    expect(opts.grayscale).toBe(true);
+    expect(opts.contrast).toBe(1.5);
+    expect(opts.maxWidth).toBe(1024);
+  });
+
+  test("parses quality option", async () => {
+    const { parsePreprocessOptions } = await import("../import");
+    const opts = parsePreprocessOptions("quality=90");
+    expect(opts.quality).toBe(90);
+  });
+});
+
+describe("InferenceMetrics", () => {
+  test("metrics type has required fields", async () => {
+    // Create a mock metrics object to verify the shape
+    const metrics: import("../import").InferenceMetrics = {
+      durationMs: 1500,
+      inputTokens: 1000,
+      outputTokens: 500,
+    };
+
+    expect(metrics.durationMs).toBe(1500);
+    expect(metrics.inputTokens).toBe(1000);
+    expect(metrics.outputTokens).toBe(500);
+  });
+
+  test("ImportResult includes optional metrics", async () => {
+    const result: import("../import").ImportResult = {
+      markdown: "# Test Recipe",
+      model: "openai/gpt-4o",
+      metrics: {
+        durationMs: 2000,
+        inputTokens: 1500,
+        outputTokens: 800,
+      },
+    };
+
+    expect(result.metrics).toBeDefined();
+    expect(result.metrics?.durationMs).toBe(2000);
+  });
+
+  test("ImportResult works without metrics", async () => {
+    const result: import("../import").ImportResult = {
+      markdown: "# Test Recipe",
+      model: "openai/gpt-4o",
+    };
+
+    expect(result.metrics).toBeUndefined();
   });
 });

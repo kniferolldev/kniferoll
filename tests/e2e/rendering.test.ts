@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
-import type { Browser } from "playwright";
-import { chromium } from "playwright";
-import { bundleMarkdown, loadComponentBundle } from "./test-utils";
+import {
+  bundleMarkdown,
+  closeTestContext,
+  createTestContext,
+  loadComponentBundle,
+} from "./test-utils";
 
 test(
   "renders document title and recipe titles",
@@ -22,13 +25,9 @@ test(
       "1. Combine and cook.",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -45,23 +44,30 @@ ${bundleMarkdown(markdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
       // Wait for component to render
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Test: Document title
-      const docTitle = await page.evaluate(() => {
+      const docTitle = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
-        return host?.shadowRoot?.querySelector(".kr-document-title")?.textContent ?? null;
+        return (
+          host?.shadowRoot?.querySelector(".kr-document-title")?.textContent ??
+          null
+        );
       });
       expect(docTitle).toBe("Kitchen Notebook");
 
       // Test: Recipe titles
-      const titles = await page.evaluate(() => {
+      const titles = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         if (!host?.shadowRoot) return [];
         return Array.from(
@@ -70,17 +76,11 @@ ${bundleMarkdown(markdown)}
         );
       });
       expect(titles).toEqual(["Porridge"]);
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );
 
 test(
@@ -100,13 +100,9 @@ test(
       "4. Fourth step",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -123,24 +119,30 @@ ${bundleMarkdown(markdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-step");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-step");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       const getActiveStepIndex = async () => {
-        return await page.evaluate(() => {
+        return await ctx.page.evaluate(() => {
           const host = document.querySelector("kr-recipe");
           if (!host?.shadowRoot) return null;
-          const activeStep = host.shadowRoot.querySelector<HTMLElement>('.kr-step[aria-pressed="true"]');
+          const activeStep = host.shadowRoot.querySelector<HTMLElement>(
+            '.kr-step[aria-pressed="true"]',
+          );
           if (!activeStep) return null;
           return Number(activeStep.getAttribute("data-kr-step-index"));
         });
       };
 
-      await page.evaluate(() => {
+      await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         if (host && typeof (host as HTMLElement).focus === "function") {
           (host as HTMLElement).focus();
@@ -150,36 +152,30 @@ ${bundleMarkdown(markdown)}
       let activeIndex = await getActiveStepIndex();
       expect(activeIndex).toBe(0);
 
-      await page.keyboard.press("ArrowDown");
-      await page.waitForTimeout(100);
+      await ctx.page.keyboard.press("ArrowDown");
+      await ctx.page.waitForTimeout(100);
       activeIndex = await getActiveStepIndex();
       expect(activeIndex).toBe(1);
 
-      await page.keyboard.press("ArrowDown");
-      await page.waitForTimeout(100);
+      await ctx.page.keyboard.press("ArrowDown");
+      await ctx.page.waitForTimeout(100);
       activeIndex = await getActiveStepIndex();
       expect(activeIndex).toBe(2);
 
-      await page.keyboard.press("ArrowDown");
-      await page.waitForTimeout(100);
+      await ctx.page.keyboard.press("ArrowDown");
+      await ctx.page.waitForTimeout(100);
       activeIndex = await getActiveStepIndex();
       expect(activeIndex).toBe(3);
 
-      await page.keyboard.press("ArrowUp");
-      await page.waitForTimeout(100);
+      await ctx.page.keyboard.press("ArrowUp");
+      await ctx.page.waitForTimeout(100);
       activeIndex = await getActiveStepIndex();
       expect(activeIndex).toBe(2);
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );
 
 test(
@@ -199,13 +195,9 @@ test(
       "3. Add [[onion]] and cook.",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -222,15 +214,19 @@ ${bundleMarkdown(markdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-step");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-step");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Focus the component and select the first step
-      await page.evaluate(() => {
+      await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         if (host && typeof (host as HTMLElement).focus === "function") {
           (host as HTMLElement).focus();
@@ -238,44 +234,52 @@ ${bundleMarkdown(markdown)}
       });
 
       // Wait for first step to be selected
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        const step = host?.shadowRoot?.querySelector('.kr-step[aria-pressed="true"]');
-        return !!step;
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          const step = host?.shadowRoot?.querySelector(
+            '.kr-step[aria-pressed="true"]',
+          );
+          return !!step;
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Test: Ingredient is highlighted when step is selected
-      const isHighlighted = await page.evaluate(() => {
+      const isHighlighted = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         if (!host?.shadowRoot) return false;
         const ingredient = host.shadowRoot.querySelector(
-          '.kr-ingredient[data-kr-id="dried-porcini-mushrooms"]'
+          '.kr-ingredient[data-kr-id="dried-porcini-mushrooms"]',
         );
         return ingredient?.hasAttribute("data-kr-step-highlight") ?? false;
       });
       expect(isHighlighted).toBe(true);
 
       // Test: Other ingredients are not highlighted
-      const otherHighlighted = await page.evaluate(() => {
+      const otherHighlighted = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         if (!host?.shadowRoot) return false;
         const ingredient = host.shadowRoot.querySelector(
-          '.kr-ingredient[data-kr-id="extra-virgin-olive-oil"]'
+          '.kr-ingredient[data-kr-id="extra-virgin-olive-oil"]',
         );
         return ingredient?.hasAttribute("data-kr-step-highlight") ?? false;
       });
       expect(otherHighlighted).toBe(false);
 
       // Test: Mouseover on reference highlights ingredient
-      const hoverWorks = await page.evaluate(() => {
+      const hoverWorks = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         if (!host?.shadowRoot) return false;
 
         // Find the reference button in the second step
         const step2 = host.shadowRoot.querySelector(
-          '.kr-step[data-kr-step-index="1"]'
+          '.kr-step[data-kr-step-index="1"]',
         );
-        const ref = step2?.querySelector('.kr-ref[data-kr-target="extra-virgin-olive-oil"]') as HTMLElement;
+        const ref = step2?.querySelector(
+          '.kr-ref[data-kr-target="extra-virgin-olive-oil"]',
+        ) as HTMLElement;
         if (!ref) return false;
 
         // Trigger hover
@@ -283,22 +287,16 @@ ${bundleMarkdown(markdown)}
 
         // Check if ingredient gets highlighted
         const ingredient = host.shadowRoot.querySelector(
-          '.kr-ingredient[data-kr-id="extra-virgin-olive-oil"]'
+          '.kr-ingredient[data-kr-id="extra-virgin-olive-oil"]',
         );
         return ingredient?.classList.contains("kr-target-highlight") ?? false;
       });
       expect(hoverWorks).toBe(true);
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );
 
 test(
@@ -324,13 +322,9 @@ test(
       "1. Mix ingredients.",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -347,16 +341,20 @@ ${bundleMarkdown(cookbookMarkdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
       // Wait for component to render
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Test: Cookbook source is displayed correctly in recipe header
-      const sourceText = await page.evaluate(() => {
+      const sourceText = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         const recipe = host?.shadowRoot?.querySelector(".kr-recipe");
         return recipe?.querySelector(".kr-source")?.textContent?.trim() ?? null;
@@ -367,23 +365,17 @@ ${bundleMarkdown(cookbookMarkdown)}
       expect(sourceText).toContain("p. 112-115");
 
       // Test: Book title is italicized
-      const hasItalicTitle = await page.evaluate(() => {
+      const hasItalicTitle = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         const recipe = host?.shadowRoot?.querySelector(".kr-recipe");
         return !!recipe?.querySelector(".kr-source__book-title");
       });
       expect(hasItalicTitle).toBe(true);
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );
 
 test(
@@ -406,13 +398,9 @@ test(
       "1. Mix ingredients.",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -429,24 +417,30 @@ ${bundleMarkdown(urlMarkdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Test: URL source has a link in recipe header
-      const linkHref = await page.evaluate(() => {
+      const linkHref = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         const recipe = host?.shadowRoot?.querySelector(".kr-recipe");
-        const link = recipe?.querySelector(".kr-source__link") as HTMLAnchorElement;
+        const link = recipe?.querySelector(
+          ".kr-source__link",
+        ) as HTMLAnchorElement;
         return link?.href ?? null;
       });
       expect(linkHref).toBe("https://example.com/recipe");
 
       // Test: Link text shows the title
-      const linkText = await page.evaluate(() => {
+      const linkText = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         const recipe = host?.shadowRoot?.querySelector(".kr-recipe");
         const link = recipe?.querySelector(".kr-source__link");
@@ -455,23 +449,17 @@ ${bundleMarkdown(urlMarkdown)}
       expect(linkText).toBe("Perfect Pancakes");
 
       // Test: Source text contains "from"
-      const sourceText = await page.evaluate(() => {
+      const sourceText = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         const recipe = host?.shadowRoot?.querySelector(".kr-recipe");
         return recipe?.querySelector(".kr-source")?.textContent ?? null;
       });
       expect(sourceText).toContain("from");
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );
 
 test(
@@ -491,13 +479,9 @@ test(
       "1. Mix ingredients.",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -514,30 +498,29 @@ ${bundleMarkdown(textMarkdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Test: Text source is displayed in recipe header
-      const sourceText = await page.evaluate(() => {
+      const sourceText = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         const recipe = host?.shadowRoot?.querySelector(".kr-recipe");
         return recipe?.querySelector(".kr-source")?.textContent?.trim() ?? null;
       });
       expect(sourceText).toContain("from");
       expect(sourceText).toContain("Grandma");
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );
+

@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
-import type { Browser } from "playwright";
-import { chromium } from "playwright";
-import { bundleMarkdown, loadComponentBundle } from "./test-utils";
+import {
+  bundleMarkdown,
+  closeTestContext,
+  createTestContext,
+  loadComponentBundle,
+} from "./test-utils";
 
 test(
   "clicking ingredient reference highlights target and dispatches event",
@@ -17,13 +20,9 @@ test(
       "1. Combine [[oats]] and [[water]].",
     ].join("\n");
 
-    let browser: Browser | null = null;
+    const ctx = await createTestContext();
     try {
-      browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
-      await page.setContent(
+      await ctx.page.setContent(
         `
         <!DOCTYPE html>
         <html lang="en">
@@ -40,32 +39,32 @@ ${bundleMarkdown(markdown)}
       `.trim(),
       );
 
-      await page.addScriptTag({ type: "module", content: moduleCode });
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
 
       // Wait for component to render
-      await page.waitForFunction(() => {
-        const host = document.querySelector("kr-recipe");
-        return !!host?.shadowRoot?.querySelector(".kr-ref");
-      }, undefined, { timeout: 5000 });
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-ref");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       // Click reference and check activation
-      const refActive = await page.evaluate(() => {
+      const refActive = await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
         if (!host) return false;
-        const ref = host.shadowRoot?.querySelector(".kr-ref") as HTMLButtonElement | null;
+        const ref = host.shadowRoot?.querySelector(
+          ".kr-ref",
+        ) as HTMLButtonElement | null;
         ref?.dispatchEvent(new Event("click", { bubbles: true }));
         return ref?.classList.contains("kr-ref--active") ?? false;
       });
       expect(refActive).toBe(true);
-
-      await context.close();
-    } catch (error) {
-      throw error;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 }
+  { timeout: 60_000 },
 );
