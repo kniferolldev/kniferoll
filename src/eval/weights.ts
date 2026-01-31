@@ -15,6 +15,7 @@ export interface ComparisonWeights {
   ingredientName: number;
   ingredientQuantity: number;
   ingredientNotes: number;
+  ingredientAttrs: number;
 
   // Ingredient penalties
   missingIngredientPenalty: number;
@@ -51,9 +52,10 @@ export const DEFAULT_WEIGHTS: ComparisonWeights = {
   structure: 0.5,
 
   // Ingredient sub-weights
-  ingredientName: 0.3,
-  ingredientQuantity: 0.5,
-  ingredientNotes: 0.2,
+  ingredientName: 0.25,
+  ingredientQuantity: 0.45,
+  ingredientNotes: 0.15,
+  ingredientAttrs: 0.15,
 
   // Ingredient penalties (per missing/extra ingredient)
   missingIngredientPenalty: 1.0,

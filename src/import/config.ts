@@ -5,8 +5,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-/** Default model for recipe import (used for extraction in two-stage, or single-stage) */
-export const DEFAULT_IMPORT_MODEL = "google/gemini-3-flash-preview";
+// Re-export browser-safe constants
+export { DEFAULT_IMPORT_MODEL } from "./constants";
 
 /** Default model for formatting stage (text-only, can be smaller/cheaper) */
 export const DEFAULT_FORMAT_MODEL = "google/gemini-3-flash-preview";

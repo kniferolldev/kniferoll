@@ -18,7 +18,7 @@ test("computeScaleFactor resolves preset by name", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "scales:",
       "  - name: Half Batch",
       "    anchor: { id: salt, amount: 5, unit: g }",
@@ -45,7 +45,7 @@ test("computeScaleFactor resolves preset by index", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "scales:",
       "  - name: Default",
       "    anchor: { id: salt, amount: 10, unit: g }",
@@ -80,7 +80,7 @@ test("fails when ingredient lacks quantity", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "scales:",
       "  - name: Invalid",
       "    anchor: { id: chicken, amount: 4, unit: count }",
@@ -102,7 +102,7 @@ test("fails when units mismatch", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "scales:",
       "  - name: Bad",
       "    anchor: { id: salt, amount: 10, unit: teaspoons }",
@@ -122,7 +122,7 @@ test("fails when preset missing", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "scales:",
       "  - name: Small",
       "    anchor: { id: salt, amount: 5, unit: g }",
@@ -162,7 +162,7 @@ test("fails when frontmatter has no scales defined", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "---",
       baseRecipe,
     ].join("\n"),
@@ -179,7 +179,7 @@ test("fails when frontmatter has empty scales array", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "scales: []",
       "---",
       baseRecipe,
@@ -197,7 +197,7 @@ test("fails when preset index is out of bounds", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "scales:",
       "  - name: Only One",
       "    anchor: { id: salt, amount: 5, unit: g }",
@@ -277,7 +277,7 @@ test("fails when ingredient has range quantity", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "---",
       "# Test Recipe",
       "## Ingredients",
@@ -298,7 +298,7 @@ test("fails when ingredient has zero quantity", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "---",
       "# Test Recipe",
       "## Ingredients",
@@ -319,7 +319,7 @@ test("matches units case-insensitively", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "---",
       "# Test Recipe",
       "## Ingredients",
@@ -340,7 +340,7 @@ test("matches null units when anchor has no unit", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "---",
       "# Test Recipe",
       "## Ingredients",
@@ -349,7 +349,7 @@ test("matches null units when anchor has no unit", () => {
   );
 
   const result = computeScaleFactor(doc, {
-    anchor: { id: "eggs", amount: 4 },
+    anchor: { id: "eggs", amount: 4, unit: "" },
   });
   expect(result.ok).toBe(true);
   if (result.ok) {
@@ -361,7 +361,7 @@ test("resolves preset by name case-insensitively", () => {
   const doc = docFrom(
     [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "scales:",
       "  - name: Double Batch",
       "    anchor: { id: salt, amount: 20, unit: g }",

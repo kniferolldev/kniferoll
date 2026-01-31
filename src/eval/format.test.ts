@@ -16,6 +16,9 @@ function makeResult(overrides: Partial<ComparisonResult> = {}): ComparisonResult
     extraRecipes: [],
     metadata: {
       titleScore: 1.0,
+      sourceScore: 1.0,
+      overallScore: 1.0,
+      issues: [],
     },
     issues: [],
     ...overrides,
@@ -28,6 +31,7 @@ function makeRecipeComparison(overrides: Partial<ComparisonResult["recipes"][0]>
     goldenId: "test-recipe",
     goldenTitle: "Test Recipe",
     actualId: "test-recipe",
+    actualTitle: "Test Recipe",
     ingredientScore: 0.9,
     stepScore: 0.85,
     ingredients: {
@@ -112,11 +116,15 @@ describe("formatDetailed", () => {
             comparisons: [
               {
                 goldenId: "flour",
+                goldenName: "flour",
                 actualId: "flour",
+                actualName: "flour",
                 nameScore: 1.0,
                 quantityScore: 0.8,
                 notesScore: 1.0,
+                attrsScore: 1.0,
                 totalScore: 0.9,
+                issues: [],
               },
             ],
             missing: [],
@@ -180,11 +188,15 @@ describe("formatDetailed", () => {
             comparisons: [
               {
                 goldenId: "flour",
+                goldenName: "flour",
                 actualId: "flour",
+                actualName: "flour",
                 nameScore: 0.7,
                 quantityScore: 0.6,
                 notesScore: 0.5,
+                attrsScore: 1.0,
                 totalScore: 0.6,
+                issues: [],
               },
             ],
             missing: [],
@@ -227,7 +239,7 @@ describe("formatDetailed", () => {
               {
                 index: 1,
                 textScore: 0.7,
-                refScore: 1.0,
+                refsScore: 1.0,
                 missingRefs: ["salt"],
                 extraRefs: ["pepper"],
                 totalScore: 0.8,

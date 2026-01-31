@@ -94,6 +94,35 @@
     font-style: italic;
   }
 
+  /* Intro text */
+  .kr-intro {
+    margin-top: 0.75rem;
+    margin-bottom: var(--kr-section-gap, 1.75rem);
+    font-size: 0.95em;
+    line-height: var(--kr-line-height, 1.6);
+  }
+
+  .kr-intro__p {
+    margin: 0 0 0.5em 0;
+  }
+
+  .kr-intro__p:last-child {
+    margin-bottom: 0;
+  }
+
+  .kr-intro strong {
+    font-weight: 600;
+  }
+
+  .kr-intro em {
+    font-style: italic;
+  }
+
+  .kr-intro a {
+    color: var(--kr-color-link, #0066cc);
+    text-decoration: underline;
+  }
+
   /* Sections */
   .kr-section {
     margin: 0;
@@ -125,6 +154,70 @@
 
   .kr-section__line + .kr-section__line {
     margin-top: 0.625em;
+  }
+
+  /* Notes section markdown styles */
+  .kr-notes__header {
+    margin: 1em 0 0.5em 0;
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--kr-color-text, #1a1a1a);
+  }
+
+  .kr-notes__header:first-child {
+    margin-top: 0;
+  }
+
+  .kr-notes__list {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+  }
+
+  .kr-notes__list--ordered {
+    list-style-type: decimal;
+  }
+
+  .kr-notes__list--unordered {
+    list-style-type: disc;
+  }
+
+  .kr-notes__list-item {
+    margin: 0.25em 0;
+  }
+
+  .kr-notes__paragraph {
+    margin: 0.5em 0;
+  }
+
+  .kr-notes__paragraph:first-child {
+    margin-top: 0;
+  }
+
+  .kr-section[data-kr-kind="notes"] strong {
+    font-weight: 600;
+  }
+
+  .kr-section[data-kr-kind="notes"] em {
+    font-style: italic;
+  }
+
+  .kr-section[data-kr-kind="notes"] a {
+    color: var(--kr-color-link, #0066cc);
+    text-decoration: underline;
+  }
+
+  /* Steps section inline formatting */
+  .kr-section[data-kr-kind="steps"] strong {
+    font-weight: 600;
+  }
+
+  .kr-section[data-kr-kind="steps"] em {
+    font-style: italic;
+  }
+
+  .kr-section[data-kr-kind="steps"] a {
+    color: var(--kr-color-link, #0066cc);
+    text-decoration: underline;
   }
 
   .kr-section[data-kr-kind="steps"] .kr-section__line {

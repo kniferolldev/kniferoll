@@ -73,7 +73,7 @@ export interface ScalePreset {
 }
 
 export interface Frontmatter {
-  version: string;
+  version: number;
   source?: Source;
   scales?: ScalePreset[];
 }
@@ -268,6 +268,7 @@ export interface Recipe {
   title: string;
   id: string;
   line: number;
+  intro?: string;
   sections: RecipeSection[];
 }
 

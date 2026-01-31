@@ -208,7 +208,7 @@ describe("resolveInput", () => {
     });
 
     expect(result.images).toHaveLength(1);
-    expect(result.images![0].mimeType).toBe("image/jpeg");
+    expect(result.images?.[0]?.mimeType).toBe("image/jpeg");
   });
 
   test("handles text and images together", async () => {

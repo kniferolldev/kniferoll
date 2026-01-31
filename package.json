@@ -4,12 +4,13 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "homeplate": "cd apps/homeplate && bun run dev",
     "kr": "bun src/kr.ts",
     "test": "bun test",
     "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage",
+    "typecheck": "bunx tsc --noEmit",
     "editor": "bun apps/editor/server.ts",
-    "demo": "bun apps/editor/server.ts",
-    "importer": "bun apps/importer/server.ts",
+    "import-server": "cd apps/import-server && bun server.ts",
     "screenshot": "bun scripts/screenshot.ts",
     "build": "bun scripts/build.ts"
   },
@@ -23,6 +24,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@google/generative-ai": "^0.24.1",
+    "jose": "^6.1.3",
     "openai": "^6.10.0",
     "sharp": "^0.34.5",
     "yaml": "^2.8.1"

@@ -5,6 +5,7 @@
 import { join, basename } from "path";
 import { mkdir, copyFile } from "fs/promises";
 import type { IO } from "../types";
+import { slugify } from "../utils/fs";
 
 /** Parse CLI arguments */
 function parseArgs(args: string[]): {
@@ -27,14 +28,6 @@ function parseArgs(args: string[]): {
   return { sourcePath, name };
 }
 
-/** Generate a slug from a name */
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
 /** Main promote runner */
 export async function runPromote(
   args: string[],
@@ -47,14 +40,14 @@ export async function runPromote(
 
   // Validate arguments
   if (!sourcePath) {
-    writeErr("Usage: kr promote <imported-recipes/dir> --name <name>\n");
-    writeErr("Example: kr promote imported-recipes/2025-12-14-174821-v2yceb --name fried-rice\n");
+    writeErr("Usage: kr promote <imports/dir> --name <name>\n");
+    writeErr("Example: kr promote imports/2025-12-14-174821-v2yceb --name fried-rice\n");
     return 2;
   }
 
   if (!name) {
     writeErr("Error: --name is required\n");
-    writeErr("Example: kr promote imported-recipes/2025-12-14-174821-v2yceb --name fried-rice\n");
+    writeErr("Example: kr promote imports/2025-12-14-174821-v2yceb --name fried-rice\n");
     return 2;
   }
 
@@ -63,7 +56,7 @@ export async function runPromote(
   const outputFile = Bun.file(join(sourceDir, "output.md"));
   if (!(await outputFile.exists())) {
     writeErr(`Error: ${sourceDir}/output.md not found\n`);
-    writeErr("Make sure you're pointing to an imported-recipes directory\n");
+    writeErr("Make sure you're pointing to an imports directory\n");
     return 1;
   }
 

@@ -85,7 +85,6 @@ ${bundleMarkdown(markdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );
 
 test(
@@ -167,5 +166,4 @@ ${bundleMarkdown(markdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );

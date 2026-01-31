@@ -13,7 +13,7 @@ test(
 
     const markdown = [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "---",
       "# Kitchen Notebook",
       "",
@@ -80,7 +80,6 @@ ${bundleMarkdown(markdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );
 
 test(
@@ -175,7 +174,6 @@ ${bundleMarkdown(markdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );
 
 test(
@@ -296,7 +294,6 @@ ${bundleMarkdown(markdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );
 
 test(
@@ -307,7 +304,7 @@ test(
     // Test cookbook source
     const cookbookMarkdown = [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "source:",
       "  cookbook:",
       '    title: "The Joy of Cooking"',
@@ -375,7 +372,6 @@ ${bundleMarkdown(cookbookMarkdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );
 
 test(
@@ -385,7 +381,7 @@ test(
 
     const urlMarkdown = [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "source:",
       '  url: "https://example.com/recipe"',
       '  title: "Perfect Pancakes"',
@@ -459,7 +455,6 @@ ${bundleMarkdown(urlMarkdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );
 
 test(
@@ -469,7 +464,7 @@ test(
 
     const textMarkdown = [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "source: Grandma",
       "---",
       "# Test Recipe",
@@ -521,6 +516,5 @@ ${bundleMarkdown(textMarkdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );
 

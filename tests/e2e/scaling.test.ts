@@ -13,7 +13,7 @@ test(
 
     const markdown = [
       "---",
-      "version: 0.0.1",
+      "version: 1",
       "scales:",
       "  - name: triple",
       "    anchor: { id: oats, amount: 3, unit: cup }",
@@ -94,7 +94,6 @@ ${bundleMarkdown(markdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );
 
 test(
@@ -178,5 +177,4 @@ ${bundleMarkdown(markdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );

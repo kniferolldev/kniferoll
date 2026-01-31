@@ -9,6 +9,7 @@ import type {
   DocumentParseResult,
   Recipe,
   Ingredient,
+  IngredientAttribute,
   Frontmatter,
   IngredientsSection,
   StepsSection,
@@ -28,6 +29,7 @@ export interface IngredientComparison {
   nameScore: number;
   quantityScore: number;
   notesScore: number;
+  attrsScore: number;
   totalScore: number;
   issues: string[];
 }
@@ -150,6 +152,73 @@ function normalize(s: string): string {
 // Ingredient Comparison
 // ============================================================================
 
+/**
+ * Serialize attributes to a comparable string format.
+ * Excludes 'id' since that's just an override for the auto-generated ID.
+ */
+function serializeAttrs(attrs: IngredientAttribute[]): string {
+  return attrs
+    .filter((a) => a.key !== "id")
+    .map((a) => (a.value ? `${a.key}=${a.value}` : a.key))
+    .sort()
+    .join(" ");
+}
+
+/**
+ * Calculate name similarity score with containment bonus.
+ * If one name contains the other as a substring, boost the score.
+ */
+function nameSimilarityScore(golden: string, actual: string): number {
+  const goldenNorm = normalize(golden);
+  const actualNorm = normalize(actual);
+
+  // Base Levenshtein ratio
+  const levScore = levenshteinRatio(goldenNorm, actualNorm);
+
+  // Containment check: if one contains the other, boost the score
+  // This handles cases like "neutral oil" vs "peanut, rice bran, or other neutral oil"
+  if (goldenNorm.includes(actualNorm) || actualNorm.includes(goldenNorm)) {
+    const shorter = Math.min(goldenNorm.length, actualNorm.length);
+    // If the shorter string is reasonably substantial (>= 5 chars) and fully contained,
+    // give it a minimum score of 0.65 regardless of length ratio
+    if (shorter >= 5) {
+      return Math.max(levScore, 0.65);
+    }
+    // For shorter substrings, use length ratio but with a boost
+    const longer = Math.max(goldenNorm.length, actualNorm.length);
+    const containmentScore = shorter / longer;
+    return Math.max(levScore, containmentScore * 1.5, 0.5);
+  }
+
+  return levScore;
+}
+
+/**
+ * Find the best matching actual ingredient for a golden ingredient by name similarity.
+ * Returns the best match and its score, or null if no match above threshold.
+ */
+function findBestIngredientMatch(
+  golden: Ingredient,
+  actualIngredients: Ingredient[],
+  matchedActualIndices: Set<number>,
+  threshold: number = 0.5
+): { actual: Ingredient; index: number; nameScore: number } | null {
+  let bestMatch: { actual: Ingredient; index: number; nameScore: number } | null = null;
+
+  for (let i = 0; i < actualIngredients.length; i++) {
+    if (matchedActualIndices.has(i)) continue;
+
+    const actual = actualIngredients[i]!;
+    const nameScore = nameSimilarityScore(golden.name, actual.name);
+
+    if (nameScore >= threshold && (!bestMatch || nameScore > bestMatch.nameScore)) {
+      bestMatch = { actual, index: i, nameScore };
+    }
+  }
+
+  return bestMatch;
+}
+
 function compareIngredients(
   goldenIngredients: Ingredient[],
   actualIngredients: Ingredient[],
@@ -161,16 +230,14 @@ function compareIngredients(
   score: number;
 } {
   const comparisons: IngredientComparison[] = [];
-  const matchedActualIds = new Set<string>();
+  const matchedActualIndices = new Set<number>();
   const missing: string[] = [];
 
-  // Match by normalized ID
+  // Match by name similarity
   for (const golden of goldenIngredients) {
-    const actual = actualIngredients.find(
-      (a) => a.id === golden.id && !matchedActualIds.has(a.id)
-    );
+    const match = findBestIngredientMatch(golden, actualIngredients, matchedActualIndices);
 
-    if (!actual) {
+    if (!match) {
       missing.push(golden.id);
       comparisons.push({
         goldenId: golden.id,
@@ -180,19 +247,16 @@ function compareIngredients(
         nameScore: 0,
         quantityScore: 0,
         notesScore: 0,
+        attrsScore: 0,
         totalScore: 0,
         issues: [`missing ingredient: ${golden.name}`],
       });
       continue;
     }
 
-    matchedActualIds.add(actual.id);
-
-    // Compare name
-    const nameScore = levenshteinRatio(
-      normalize(golden.name),
-      normalize(actual.name)
-    );
+    matchedActualIndices.add(match.index);
+    const actual = match.actual;
+    const nameScore = match.nameScore;
 
     // Compare quantity
     const goldenQty = golden.quantityText ?? "";
@@ -210,11 +274,20 @@ function compareIngredients(
       normalize(actualNotes)
     );
 
+    // Compare attributes (excluding id=)
+    const goldenAttrs = serializeAttrs(golden.attributes);
+    const actualAttrs = serializeAttrs(actual.attributes);
+    const attrsScore =
+      goldenAttrs || actualAttrs
+        ? levenshteinRatio(goldenAttrs, actualAttrs)
+        : 1.0;
+
     // Calculate total score for this ingredient
     const totalScore =
       weights.ingredientName * nameScore +
       weights.ingredientQuantity * quantityScore +
-      weights.ingredientNotes * notesScore;
+      weights.ingredientNotes * notesScore +
+      weights.ingredientAttrs * attrsScore;
 
     const issues: string[] = [];
     if (nameScore < 0.95) {
@@ -226,6 +299,9 @@ function compareIngredients(
     if (notesScore < 0.9 && (goldenNotes || actualNotes)) {
       issues.push(`notes: "${actualNotes}" vs "${goldenNotes}"`);
     }
+    if (attrsScore < 0.9 && (goldenAttrs || actualAttrs)) {
+      issues.push(`attrs: "${actualAttrs}" vs "${goldenAttrs}"`);
+    }
 
     comparisons.push({
       goldenId: golden.id,
@@ -235,6 +311,7 @@ function compareIngredients(
       nameScore,
       quantityScore,
       notesScore,
+      attrsScore,
       totalScore,
       issues,
     });
@@ -242,9 +319,9 @@ function compareIngredients(
 
   // Find extra ingredients
   const extra: string[] = [];
-  for (const actual of actualIngredients) {
-    if (!matchedActualIds.has(actual.id)) {
-      extra.push(actual.id);
+  for (let i = 0; i < actualIngredients.length; i++) {
+    if (!matchedActualIndices.has(i)) {
+      extra.push(actualIngredients[i]!.id);
     }
   }
 
@@ -269,19 +346,112 @@ function compareIngredients(
 
 const REFERENCE_PATTERN = /\[\[([^\]]+)\]\]/g;
 
-function extractRefs(text: string): Set<string> {
-  const refs = new Set<string>();
+/**
+ * Build a lookup map from ingredient ID to ingredient name.
+ */
+function buildIngredientLookup(ingredients: Ingredient[]): Map<string, string> {
+  const lookup = new Map<string, string>();
+  for (const ing of ingredients) {
+    lookup.set(ing.id, ing.name);
+  }
+  return lookup;
+}
+
+/**
+ * Resolve a single [[...]] reference to its display text.
+ * - [[display -> id]] → "display"
+ * - [[id]] → lookup ingredient name, fallback to id if not found
+ */
+function resolveReference(inner: string, ingredientLookup: Map<string, string>): string {
+  const arrowIndex = inner.indexOf("->");
+  if (arrowIndex >= 0) {
+    // [[display -> id]] syntax - use the display text
+    return inner.slice(0, arrowIndex).trim();
+  }
+  // [[id]] syntax - look up the ingredient name
+  const id = inner.trim().toLowerCase().replace(/\s+/g, "-");
+  return ingredientLookup.get(id) ?? inner.trim();
+}
+
+/**
+ * Resolve all [[...]] references in step text to display text.
+ * Returns the step text with all references replaced by their display form.
+ */
+function resolveStepRefs(text: string, ingredientLookup: Map<string, string>): string {
+  return text.replace(REFERENCE_PATTERN, (_, inner: string) => {
+    return resolveReference(inner, ingredientLookup);
+  });
+}
+
+/**
+ * Extract reference display texts from step text (for diff reporting).
+ */
+function extractRefDisplays(text: string, ingredientLookup: Map<string, string>): string[] {
+  const refs: string[] = [];
   let match;
   REFERENCE_PATTERN.lastIndex = 0;
   while ((match = REFERENCE_PATTERN.exec(text)) !== null) {
     const inner = match[1] ?? "";
-    // Handle [[display -> target]] syntax
-    const arrowIndex = inner.indexOf("->");
-    const target = arrowIndex >= 0 ? inner.slice(arrowIndex + 2).trim() : inner.trim();
-    // Normalize to lowercase slug-like form
-    refs.add(target.toLowerCase().replace(/\s+/g, "-"));
+    refs.push(normalize(resolveReference(inner, ingredientLookup)));
   }
   return refs;
+}
+
+/**
+ * Compare two sets of reference names using fuzzy matching.
+ * Returns matched, missing, extra refs and a score.
+ */
+function compareRefSets(
+  goldenRefs: string[],
+  actualRefs: string[]
+): { score: number; missingRefs: string[]; extraRefs: string[] } {
+  if (goldenRefs.length === 0 && actualRefs.length === 0) {
+    return { score: 1, missingRefs: [], extraRefs: [] };
+  }
+
+  const matchedActualIndices = new Set<number>();
+  const missingRefs: string[] = [];
+  let matchScore = 0;
+
+  // For each golden ref, find the best matching actual ref
+  for (const goldenRef of goldenRefs) {
+    let bestMatch: { index: number; score: number } | null = null;
+
+    for (let i = 0; i < actualRefs.length; i++) {
+      if (matchedActualIndices.has(i)) continue;
+
+      const actualRef = actualRefs[i]!;
+      // Use containment-aware similarity
+      const similarity = nameSimilarityScore(goldenRef, actualRef);
+
+      if (similarity >= 0.5 && (!bestMatch || similarity > bestMatch.score)) {
+        bestMatch = { index: i, score: similarity };
+      }
+    }
+
+    if (bestMatch) {
+      matchedActualIndices.add(bestMatch.index);
+      matchScore += bestMatch.score;
+    } else {
+      missingRefs.push(goldenRef);
+    }
+  }
+
+  // Find extra refs in actual that weren't matched
+  const extraRefs: string[] = [];
+  for (let i = 0; i < actualRefs.length; i++) {
+    if (!matchedActualIndices.has(i)) {
+      extraRefs.push(actualRefs[i]!);
+    }
+  }
+
+  // Score: matched refs / total expected refs, penalized by extras
+  const totalExpected = goldenRefs.length;
+  const matchRatio = totalExpected > 0 ? matchScore / totalExpected : 1;
+  const extraPenalty = extraRefs.length * 0.1; // Small penalty for extra refs
+  const score = Math.max(0, Math.min(1, matchRatio - extraPenalty));
+
+  return { score, missingRefs, extraRefs };
 }
 
 function getStepLines(section: StepsSection): string[] {
@@ -293,6 +463,8 @@ function getStepLines(section: StepsSection): string[] {
 function compareSteps(
   goldenSection: StepsSection | undefined,
   actualSection: StepsSection | undefined,
+  goldenIngredients: Ingredient[],
+  actualIngredients: Ingredient[],
   weights: ComparisonWeights
 ): {
   comparisons: StepComparison[];
@@ -300,6 +472,9 @@ function compareSteps(
   extraCount: number;
   score: number;
 } {
+  const goldenLookup = buildIngredientLookup(goldenIngredients);
+  const actualLookup = buildIngredientLookup(actualIngredients);
+
   if (!goldenSection) {
     return { comparisons: [], missingCount: 0, extraCount: 0, score: 1 };
   }
@@ -323,30 +498,26 @@ function compareSteps(
     const goldenText = goldenSteps[i]!;
     const actualText = actualSteps[i]!;
 
-    // Text similarity
-    const textScore = levenshteinRatio(normalize(goldenText), normalize(actualText));
+    // Resolve references to display text, then compare
+    const goldenResolved = resolveStepRefs(goldenText, goldenLookup);
+    const actualResolved = resolveStepRefs(actualText, actualLookup);
+    const textScore = levenshteinRatio(normalize(goldenResolved), normalize(actualResolved));
 
-    // Reference accuracy
-    const goldenRefs = extractRefs(goldenText);
-    const actualRefs = extractRefs(actualText);
-
-    const intersection = new Set([...goldenRefs].filter((r) => actualRefs.has(r)));
-    const union = new Set([...goldenRefs, ...actualRefs]);
-    const refsScore = union.size > 0 ? intersection.size / union.size : 1;
-
-    const missingRefs = [...goldenRefs].filter((r) => !actualRefs.has(r));
-    const extraRefs = [...actualRefs].filter((r) => !goldenRefs.has(r));
+    // Reference accuracy - compare resolved display texts with fuzzy matching
+    const goldenRefs = extractRefDisplays(goldenText, goldenLookup);
+    const actualRefs = extractRefDisplays(actualText, actualLookup);
+    const refComparison = compareRefSets(goldenRefs, actualRefs);
 
     const totalScore =
-      weights.stepText * textScore + weights.stepRefs * refsScore;
+      weights.stepText * textScore + weights.stepRefs * refComparison.score;
 
     comparisons.push({
       index: i + 1,
       textScore,
-      refsScore,
+      refsScore: refComparison.score,
       totalScore,
-      missingRefs,
-      extraRefs,
+      missingRefs: refComparison.missingRefs,
+      extraRefs: refComparison.extraRefs,
     });
   }
 
@@ -427,6 +598,8 @@ function compareRecipe(
   const stepResult = compareSteps(
     getStepsSection(golden),
     getStepsSection(actual),
+    goldenIngredients,
+    actualIngredients,
     weights
   );
 
@@ -489,8 +662,23 @@ function compareMetadata(
     issues.push(`source mismatch`);
   }
 
-  // Overall (weighted average)
-  const overallScore = titleScore * 0.6 + sourceScore * 0.4;
+  // Frontmatter presence: compare to golden
+  let frontmatterScore = 1.0;
+  const goldenHasFrontmatter = golden.frontmatter != null;
+  const actualHasFrontmatter = actual.frontmatter != null;
+
+  if (!goldenHasFrontmatter && actualHasFrontmatter) {
+    // Golden has no frontmatter, actual does - that's wrong
+    frontmatterScore = 0.0;
+    issues.push("unexpected frontmatter");
+  } else if (goldenHasFrontmatter && !actualHasFrontmatter) {
+    // Golden has frontmatter, actual doesn't - that's wrong
+    frontmatterScore = 0.0;
+    issues.push("missing frontmatter");
+  }
+
+  // Overall (weighted average): title 50%, source 30%, frontmatter presence 20%
+  const overallScore = titleScore * 0.5 + sourceScore * 0.3 + frontmatterScore * 0.2;
 
   return { titleScore, sourceScore, overallScore, issues };
 }

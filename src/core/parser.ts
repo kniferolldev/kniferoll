@@ -128,6 +128,7 @@ const nextHeadingType = (lines: string[], fromIndex: number): "#" | "##" | null 
 type RecipeParseState = Recipe & {
   hasIngredients: boolean;
   hasSteps: boolean;
+  introLines: string[];
 };
 
 const finalizeRecipe = (
@@ -159,10 +160,12 @@ const finalizeRecipe = (
     );
   }
 
+  const introText = current.introLines.join("\n").trim();
   out.push({
     title: current.title,
     id: current.id,
     line: current.line,
+    intro: introText || undefined,
     sections: current.sections,
   });
 };
@@ -190,6 +193,10 @@ export const parseDocument = (
     const trimmed = line.trim();
 
     if (trimmed === "") {
+      // Capture empty lines for intro (to preserve paragraph breaks)
+      if (currentRecipe && !currentSection) {
+        currentRecipe.introLines.push(line);
+      }
       continue;
     }
 
@@ -221,6 +228,7 @@ export const parseDocument = (
         sections: [],
         hasIngredients: false,
         hasSteps: false,
+        introLines: [],
       };
       continue;
     }
@@ -295,6 +303,8 @@ export const parseDocument = (
 
     if (currentSection) {
       currentSection.lines.push({ text: line, line: actualLine });
+    } else if (currentRecipe) {
+      currentRecipe.introLines.push(line);
     }
 
     if (isHeadingLine(trimmed) && !currentRecipe) {
@@ -356,7 +366,8 @@ export const parseDocument = (
   };
 
   for (const recipe of recipes) {
-    registerId(recipe.id, "recipe", recipe.line, recipe.title);
+    // Recipe titles no longer create referenceable IDs - only ingredients do.
+    // Subrecipes are connected to ingredients implicitly by name.
     for (const section of recipe.sections) {
       if (section.kind === "steps") {
         let hasNumbered = false;
@@ -482,18 +493,11 @@ export const parseDocument = (
     }
   }
 
-  // Two-phase reference resolution:
-  // 1. Try recipe-scoped lookup: {recipeId}/{target} (for ingredients)
-  // 2. Fall back to global lookup: {target} (for recipe references)
+  // Reference resolution: scoped to the current recipe's ingredients
   for (const ref of references) {
     const scopedTarget = `${ref.recipeId}/${ref.target}`;
     if (idRegistry.has(scopedTarget)) {
       ref.resolvedTarget = scopedTarget;
-      continue;
-    }
-
-    if (idRegistry.has(ref.target)) {
-      ref.resolvedTarget = ref.target;
       continue;
     }
 

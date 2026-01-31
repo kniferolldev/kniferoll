@@ -66,6 +66,19 @@ Each **recipe** starts with an **H1** and contains section(s) denoted by an
 - Required: `## Steps`
 - Optional: `## Notes`
 
+### Intro text
+
+Optional prose may appear between the recipe title (H1) and the first section
+(H2). This **intro text** is rendered before the recipe body and is useful for
+brief context, headnotes, or attributions.
+
+Intro text supports basic inline Markdown:
+- Bold: `**text**`
+- Italic: `*text*`
+- Links: `[text](url)`
+
+Multiple paragraphs are preserved (separated by blank lines).
+
 Section headers are case‑insensitive (e.g., `## ingredients`, `## INGREDIENTS`,
 and `## Ingredients` are equivalent). Tools may ignore unknown section headers
 under a recipe.
@@ -79,6 +92,8 @@ Example skeleton:
 # Chocolate Cake with Mocha Frosting
 
 # Chocolate Cake
+
+A rich, moist chocolate cake adapted from *The Joy of Cooking*.
 
 ## Ingredients
 
@@ -205,7 +220,7 @@ Volume:
 - parmesan - 30 g, for serving :: noscale
 - whole tomatoes (28-oz can) - 1 :: also="794 g"
 - baking soda - 1/2 tsp, optional
-- [[ frosting ]] - 1 batch
+- frosting - 1 batch
 ```
 
 ---
@@ -269,14 +284,15 @@ works automatically with minimal boilerplate, with manual controls when needed.
 `slug(text)` → lowercase; spaces → `-`; drop non `[a-z0-9-]`; collapse `-`;
 trim.
 
-### 5.1 Global IDs
+### 5.1 Ingredient IDs
 
-- **Recipe IDs**: each recipe gets `recipeId = slug(<Recipe Title>)`.
-- **Ingredient IDs**: each ingredient line gets `id = slug(<name>)` unless
-  overridden (see tail attributes).
-- **Uniqueness**: IDs (recipes + ingredients) share a **single global
-  namespace** within the file. Duplicates are considered errors; choose distinct
-  IDs (e.g., override with `:: id=`) whenever the default slug would collide.
+- Each ingredient line gets `id = slug(<name>)` unless overridden (see tail
+  attributes).
+- IDs are scoped to their recipe, so the same ingredient name can appear in
+  multiple recipes without conflict.
+- Subrecipes are connected to ingredients implicitly by name (e.g., an
+  ingredient "Sauce" corresponds to a subrecipe titled "# Sauce"), not by
+  machine-linked IDs.
 
 ### 5.2 Overriding ingredient IDs
 
@@ -288,7 +304,7 @@ trim.
 
 ### 5.3 Reference tokens
 
-- `[[id]]` — link to any ID (recipe or ingredient) in the file.
+- `[[id]]` — link to an ingredient in the current recipe.
 - `[[display -> id]]` — show custom `display` text but link to `id`.
 - The `id` portion is automatically normalized using `slug()` before lookup,
   making references more natural to write. For example:
@@ -297,9 +313,7 @@ trim.
   - Both forms work identically; use whichever is easier to read and edit.
 - Whitespace inside the brackets and around `->` is tolerated; the `display`
   part may be quoted.
-- Allowed contexts: ingredient names, step text, and notes. Not allowed in
-  ingredient modifiers or tail attributes. Example in an ingredient name:
-  `- [[ frosting ]] - 1 batch`.
+- Allowed contexts: step text and notes. Not allowed in ingredient lines.
 
 ---
 
@@ -321,11 +335,11 @@ trim.
 
 ## 7) Frontmatter (optional)
 
-If present, frontmatter **must** include a semantic version string.
+If present, frontmatter **must** include a positive integer version.
 
 ```yaml
 ---
-version: 0.0.1
+version: 1
 source: Grandma
 scales:
   - name: Family size
@@ -351,17 +365,17 @@ Frontmatter examples:
 
 ```yaml
 ---
-version: 0.0.1
+version: 1
 source: Grandma
 ---
 
 ---
-version: 0.0.1
+version: 1
 source: { url: "https://example.com/pancakes", title: "Perfect Pancakes", accessed: 2024-10-01 }
 ---
 
 ---
-version: 0.0.1
+version: 1
 source:
   cookbook:
     title: The Superiority Burger Cookbook
@@ -378,13 +392,16 @@ source:
 
 ```markdown
 ---
-version: 0.0.1
+version: 1
 scales:
   - name: Family size
     anchor: { id: milk, amount: 480, unit: ml }
 ---
 
 # Buttermilk Pancakes
+
+Light, fluffy pancakes with a hint of tang. The secret is letting the batter
+rest before cooking.
 
 ## Ingredients
 
@@ -409,7 +426,7 @@ scales:
 
 ```markdown
 ---
-version: 0.0.1
+version: 1
 source: { url: "https://nothingbutcake.com/" }
 scales:
   - name: Party
@@ -430,7 +447,7 @@ scales:
 - eggs - 2
 - milk - 240 ml :: also=1cup
 - butter - 115 g, melted
-- [[ frosting ]] - 1 batch
+- frosting - 1 batch
 
 ## Steps
 

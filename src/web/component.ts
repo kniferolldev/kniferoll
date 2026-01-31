@@ -16,6 +16,7 @@ import type {
   Ingredient,
   IngredientAttribute,
   IngredientsSection,
+  NotesSection,
   Recipe,
   RecipeSection,
   Quantity,
@@ -38,6 +39,238 @@ const escapeHtml = (value: string): string =>
     .replace(/'/g, "&#39;");
 
 const escapeAttr = (value: string): string => escapeHtml(value);
+
+const renderMarkdownInline = (text: string): string => {
+  const tokens: { start: number; end: number; html: string }[] = [];
+
+  // Bold: **text**
+  for (const match of text.matchAll(/\*\*([^*]+)\*\*/g)) {
+    tokens.push({
+      start: match.index!,
+      end: match.index! + match[0].length,
+      html: `<strong>${escapeHtml(match[1]!)}</strong>`,
+    });
+  }
+
+  // Italic: *text* (but not inside **)
+  for (const match of text.matchAll(/(?<!\*)\*([^*]+)\*(?!\*)/g)) {
+    const overlaps = tokens.some(
+      (t) => match.index! >= t.start && match.index! < t.end,
+    );
+    if (!overlaps) {
+      tokens.push({
+        start: match.index!,
+        end: match.index! + match[0].length,
+        html: `<em>${escapeHtml(match[1]!)}</em>`,
+      });
+    }
+  }
+
+  // Links: [text](url)
+  for (const match of text.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)) {
+    tokens.push({
+      start: match.index!,
+      end: match.index! + match[0].length,
+      html: `<a href="${escapeAttr(match[2]!)}" target="_blank" rel="noopener noreferrer">${escapeHtml(match[1]!)}</a>`,
+    });
+  }
+
+  tokens.sort((a, b) => a.start - b.start);
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const token of tokens) {
+    if (token.start < cursor) continue;
+    parts.push(escapeHtml(text.slice(cursor, token.start)));
+    parts.push(token.html);
+    cursor = token.end;
+  }
+  parts.push(escapeHtml(text.slice(cursor)));
+  return parts.join("");
+};
+
+const renderIntro = (markdown: string): string => {
+  const paragraphs = markdown.split(/\n\n+/).filter((p) => p.trim());
+  const html = paragraphs
+    .map((p) => {
+      const content = renderMarkdownInline(p.replace(/\n/g, " ").trim());
+      return `<p class="kr-intro__p">${content}</p>`;
+    })
+    .join("");
+  return `<div class="kr-intro">${html}</div>`;
+};
+
+// Notes section markdown rendering
+type NotesBlockType = "paragraph" | "header" | "ul" | "ol";
+
+interface NotesBlock {
+  type: NotesBlockType;
+  lines: SectionLine[];
+  level?: number; // for headers (3 = ###, 4 = ####)
+}
+
+const getLineType = (
+  text: string,
+): { type: NotesBlockType; level?: number; content: string } => {
+  // Headers: ### or ####
+  const headerMatch = text.match(/^(#{3,4})\s+(.*)$/);
+  if (headerMatch) {
+    return {
+      type: "header",
+      level: headerMatch[1]!.length,
+      content: headerMatch[2]!,
+    };
+  }
+  // Unordered list: - or *
+  const ulMatch = text.match(/^[-*]\s+(.*)$/);
+  if (ulMatch) {
+    return { type: "ul", content: ulMatch[1]! };
+  }
+  // Ordered list: 1. 2. etc
+  const olMatch = text.match(/^\d+\.\s+(.*)$/);
+  if (olMatch) {
+    return { type: "ol", content: olMatch[1]! };
+  }
+  // Paragraph
+  return { type: "paragraph", content: text };
+};
+
+const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
+  const blocks: NotesBlock[] = [];
+  let currentBlock: NotesBlock | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.text.trim();
+
+    // Empty lines end current block
+    if (!trimmed) {
+      if (currentBlock) {
+        blocks.push(currentBlock);
+        currentBlock = null;
+      }
+      continue;
+    }
+
+    const { type, level, content } = getLineType(trimmed);
+
+    // Headers are always their own block
+    if (type === "header") {
+      if (currentBlock) {
+        blocks.push(currentBlock);
+      }
+      blocks.push({
+        type: "header",
+        level,
+        lines: [{ ...line, text: content }],
+      });
+      currentBlock = null;
+      continue;
+    }
+
+    // Lists: group consecutive items of same type
+    if (type === "ul" || type === "ol") {
+      if (currentBlock && currentBlock.type === type) {
+        currentBlock.lines.push({ ...line, text: content });
+      } else {
+        if (currentBlock) {
+          blocks.push(currentBlock);
+        }
+        currentBlock = { type, lines: [{ ...line, text: content }] };
+      }
+      continue;
+    }
+
+    // Paragraphs: group consecutive non-empty lines
+    if (currentBlock && currentBlock.type === "paragraph") {
+      currentBlock.lines.push(line);
+    } else {
+      if (currentBlock) {
+        blocks.push(currentBlock);
+      }
+      currentBlock = { type: "paragraph", lines: [line] };
+    }
+  }
+
+  if (currentBlock) {
+    blocks.push(currentBlock);
+  }
+
+  return blocks;
+};
+
+const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => {
+  const renderInlineDiagnostics = (lineNum: number) => {
+    if (options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
+      return null;
+    }
+    const diagnostics = options.diagnosticsMap.get(lineNum);
+    if (!diagnostics?.length) return null;
+    const severity = diagnostics.some((d) => d.code.startsWith("E"))
+      ? "error"
+      : "warning";
+    const controlsId = options.nextDiagnosticId?.() ?? `diag-${lineNum}`;
+    const popover = `<div class="kr-diagnostic-popover" id="${escapeAttr(controlsId)}" popover="auto">${diagnostics
+      .map(
+        (d) =>
+          `<div class="kr-diagnostic-popover__item kr-diagnostic-popover__item--${d.code.startsWith("E") ? "error" : "warning"}">${escapeHtml(d.message)}</div>`,
+      )
+      .join("")}</div>`;
+    return { severity, controlsId, popover };
+  };
+
+  switch (block.type) {
+    case "header": {
+      const line = block.lines[0]!;
+      const tag = block.level === 4 ? "h5" : "h4";
+      const content = renderMarkdownInline(line.text);
+      return `<${tag} class="kr-notes__header" data-kr-line="${line.line}">${content}</${tag}>`;
+    }
+    case "ul":
+    case "ol": {
+      const tag = block.type === "ul" ? "ul" : "ol";
+      const items = block.lines
+        .map((line) => {
+          const inlineDiag = renderInlineDiagnostics(line.line);
+          const diagnosticClass = inlineDiag ? " kr-diagnostic-target" : "";
+          const diagnosticAttr = inlineDiag
+            ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
+            : "";
+          const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
+          const content = renderMarkdownInline(line.text);
+          return `<li class="kr-notes__list-item${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${content}</li>`;
+        })
+        .join("");
+      return `<${tag} class="kr-notes__list kr-notes__list--${block.type === "ul" ? "unordered" : "ordered"}">${items}</${tag}>`;
+    }
+    case "paragraph": {
+      // Join lines and render as paragraph
+      const firstLine = block.lines[0]!;
+      const text = block.lines.map((l) => l.text.trim()).join(" ");
+      const inlineDiag = renderInlineDiagnostics(firstLine.line);
+      const diagnosticClass = inlineDiag ? " kr-diagnostic-target" : "";
+      const diagnosticAttr = inlineDiag
+        ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
+        : "";
+      const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
+      const content = renderMarkdownInline(text);
+      return `<p class="kr-notes__paragraph${diagnosticClass}" data-kr-line="${firstLine.line}"${diagnosticAttr}>${diagnosticContent}${content}</p>`;
+    }
+  }
+};
+
+const renderNotesSection = (
+  section: NotesSection,
+  options: RenderOptions,
+): string => {
+  const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
+  if (!section.lines.length) {
+    return `<section class="kr-section" data-kr-kind="notes">${heading}</section>`;
+  }
+
+  const blocks = parseNotesBlocks(section.lines);
+  const content = blocks.map((block) => renderNotesBlock(block, options)).join("");
+
+  return `<section class="kr-section" data-kr-kind="notes">${heading}<div class="kr-section__body">${content}</div></section>`;
+};
 
 type QuantityDisplayMode = "native" | "alt-mass" | "alt-volume";
 type LayoutPreset =
@@ -504,7 +737,7 @@ const renderStepLine = (
     }
     const prefix = text.slice(cursor, token.start);
     if (prefix) {
-      parts.push(escapeHtml(prefix));
+      parts.push(renderMarkdownInline(prefix));
     }
     parts.push(token.html);
     cursor = token.end;
@@ -512,7 +745,7 @@ const renderStepLine = (
 
   const remainder = text.slice(cursor);
   if (remainder) {
-    parts.push(escapeHtml(remainder));
+    parts.push(renderMarkdownInline(remainder));
   }
 
   const inlineDiagnostics = renderInlineDiagnostics(line.line, options);
@@ -696,6 +929,10 @@ const renderSection = (
     return `<section class="kr-section" data-kr-kind="steps">${heading}<div class="kr-section__body">${lines}</div></section>`;
   }
 
+  if (section.kind === "notes") {
+    return renderNotesSection(section, options);
+  }
+
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
   if (!section.lines.length) {
     return `<section class="kr-section" data-kr-kind="${escapeAttr(section.kind)}">${heading}</section>`;
@@ -738,12 +975,13 @@ const renderRecipe = (
     : "";
   const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
   const sourceHtml = source ? renderSource(source) : "";
+  const introHtml = recipe.intro ? renderIntro(recipe.intro) : "";
 
   return `<section class="kr-recipe" id="${escapeAttr(recipeElementId)}" tabindex="-1" data-kr-role="${roleAttr}" data-kr-id="${escapeAttr(
     recipe.id,
   )}" data-kr-layout="${escapeAttr(options.layout)}"><header class="kr-recipe__header"><h2 class="kr-recipe__title${diagnosticClass}" data-kr-line="${recipe.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(
     recipe.title,
-  )}</h2>${sourceHtml}</header>${sections}</section>`;
+  )}</h2>${sourceHtml}</header>${introHtml}${sections}</section>`;
 };
 
 const renderSource = (source: Source): string => {

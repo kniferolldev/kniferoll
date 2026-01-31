@@ -10,7 +10,6 @@ import type {
   CookbookSource,
 } from "./types";
 
-const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const error = (code: string, message: string): Diagnostic => ({
@@ -356,9 +355,9 @@ export const extractFrontmatter = (
   const frontmatter: Partial<Frontmatter> = {};
 
   const versionValue = record.version;
-  if (typeof versionValue !== "string" || !SEMVER_PATTERN.test(versionValue)) {
+  if (typeof versionValue !== "number" || !Number.isInteger(versionValue) || versionValue < 1) {
     diagnostics.push(
-      error("E0001", 'Frontmatter must include a semantic version string in "version".'),
+      error("E0001", 'Frontmatter must include a positive integer in "version".'),
     );
   } else {
     frontmatter.version = versionValue;

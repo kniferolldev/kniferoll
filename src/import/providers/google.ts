@@ -11,9 +11,19 @@ export const googleAdapter: ProviderAdapter = {
 
   async infer({ input, systemPrompt, model, apiKey }): Promise<InferenceResult> {
     const genAI = new GoogleGenerativeAI(apiKey);
+
+    // Gemini 3 models have "thinking" mode enabled by default at HIGH level,
+    // which adds significant latency. For recipe import tasks, we don't need
+    // deep reasoning, so disable it for faster responses.
+    const isGemini3 = model.includes("gemini-3");
+
     const geminiModel = genAI.getGenerativeModel({
       model,
       systemInstruction: systemPrompt,
+      generationConfig: isGemini3 ? {
+        // @ts-expect-error - thinkingConfig not yet in type definitions
+        thinkingConfig: { thinkingLevel: "MINIMAL" },
+      } : undefined,
     });
 
     // Build content parts

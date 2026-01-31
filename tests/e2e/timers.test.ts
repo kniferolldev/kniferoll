@@ -64,5 +64,4 @@ ${bundleMarkdown(markdown)}
       await closeTestContext(ctx);
     }
   },
-  { timeout: 60_000 },
 );

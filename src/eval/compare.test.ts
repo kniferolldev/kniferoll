@@ -200,7 +200,7 @@ describe("compareDocuments", () => {
 
 ## Ingredients
 
-- all-purpose flour - 1 cup :: id=flour
+- all-purpose flour - 1 cup
 
 ## Steps
 
@@ -211,7 +211,7 @@ describe("compareDocuments", () => {
 
 ## Ingredients
 
-- bread flour - 1 cup :: id=flour
+- all purpose flour - 1 cup
 
 ## Steps
 
@@ -219,10 +219,10 @@ describe("compareDocuments", () => {
 `));
       const result = compareDocuments(golden, actual);
 
-      // Same ID but different display name
+      // Similar names should match and show partial name score
       const comp = result.recipes[0]?.ingredients.comparisons[0];
       expect(comp?.nameScore).toBeLessThan(1);
-      expect(comp?.nameScore).toBeGreaterThan(0);
+      expect(comp?.nameScore).toBeGreaterThan(0.9); // Very similar names
     });
 
     it("compares modifiers with levenshtein ratio", () => {
@@ -668,7 +668,7 @@ describe("compareDocuments", () => {
 
 ## Steps
 
-1. Add [[the flour -> flour]].
+1. Add [[all-purpose flour -> flour]].
 `));
       const actual = parseDocument(makeDoc(`
 # Test Recipe
@@ -683,7 +683,7 @@ describe("compareDocuments", () => {
 `));
       const result = compareDocuments(golden, actual);
 
-      // Both should reference the same ingredient ID
+      // Display text "all-purpose flour" should match resolved name "all-purpose flour"
       expect(result.recipes[0]?.steps.comparisons[0]?.missingRefs).toHaveLength(0);
       expect(result.recipes[0]?.steps.comparisons[0]?.extraRefs).toHaveLength(0);
     });

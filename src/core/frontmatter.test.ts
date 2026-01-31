@@ -12,7 +12,7 @@ test("parses valid frontmatter and preserves empty scales array", () => {
   const result = extractFrontmatter(
     doc(
       [
-        "version: 0.1.0",
+        "version: 1",
         "source: Grandma",
         "scales: []",
       ].join("\n"),
@@ -21,7 +21,7 @@ test("parses valid frontmatter and preserves empty scales array", () => {
   );
 
   expect(result.frontmatter).not.toBeNull();
-  expect(result.frontmatter?.version).toBe("0.1.0");
+  expect(result.frontmatter?.version).toBe(1);
   expect(result.frontmatter?.source).toEqual({ kind: "text", value: "Grandma" });
   expect(result.frontmatter?.scales).toEqual([]);
   expect(result.body.startsWith("# Recipe")).toBe(true);
@@ -33,7 +33,7 @@ test("parses url source with optional fields", () => {
   const result = extractFrontmatter(
     doc(
       [
-        "version: 1.2.3",
+        "version: 1",
         'source: { url: "https://example.com", title: "Sample", accessed: "2024-05-01" }',
       ].join("\n"),
     ),
@@ -51,7 +51,7 @@ test("parses cookbook source with optional fields", () => {
   const result = extractFrontmatter(
     doc(
       [
-        "version: 0.1.0",
+        "version: 1",
         "source:",
         "  cookbook:",
         '    title: "Baking 101"',
@@ -73,11 +73,11 @@ test("parses cookbook source with optional fields", () => {
   });
 });
 
-test("frontmatter requires semantic version", () => {
+test("frontmatter requires positive integer version", () => {
   const { frontmatter, diagnostics } = extractFrontmatter(
     doc(
       [
-        "version: not-a-semver",
+        "version: not-a-number",
       ].join("\n"),
     ),
   );
@@ -117,7 +117,7 @@ test("invalid yaml surfaces parse error", () => {
 test("empty text source triggers validation error", () => {
   const messages = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source: \"\"",
     ].join("\n"),
   );
@@ -127,7 +127,7 @@ test("empty text source triggers validation error", () => {
 test("url source title must be string", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source: { url: https://example.com, title: 42 }",
     ].join("\n"),
   );
@@ -137,7 +137,7 @@ test("url source title must be string", () => {
 test("url source accessed must be string", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source: { url: https://example.com, accessed: 123 }",
     ].join("\n"),
   );
@@ -147,7 +147,7 @@ test("url source accessed must be string", () => {
 test("url source accessed must be iso date", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       'source: { url: https://example.com, accessed: "2024/05/01" }',
     ].join("\n"),
   );
@@ -157,7 +157,7 @@ test("url source accessed must be iso date", () => {
 test("url source rejects unsupported keys", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       'source: { url: https://example.com, title: "Sample", extra: true }',
     ].join("\n"),
   );
@@ -167,7 +167,7 @@ test("url source rejects unsupported keys", () => {
 test("cookbook source must be object", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source:",
       "  cookbook: []",
     ].join("\n"),
@@ -178,7 +178,7 @@ test("cookbook source must be object", () => {
 test("cookbook source requires title", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source:",
       "  cookbook: {}",
     ].join("\n"),
@@ -189,7 +189,7 @@ test("cookbook source requires title", () => {
 test("cookbook author must be string", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source:",
       "  cookbook:",
       "    title: Bakes",
@@ -202,7 +202,7 @@ test("cookbook author must be string", () => {
 test("cookbook pages must be string or number", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source:",
       "  cookbook:",
       "    title: Bakes",
@@ -215,7 +215,7 @@ test("cookbook pages must be string or number", () => {
 test("cookbook isbn must be string", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source:",
       "  cookbook:",
       "    title: Bakes",
@@ -228,7 +228,7 @@ test("cookbook isbn must be string", () => {
 test("cookbook year must be number", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source:",
       "  cookbook:",
       "    title: Bakes",
@@ -241,7 +241,7 @@ test("cookbook year must be number", () => {
 test("cookbook rejects unsupported keys", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source:",
       "  cookbook:",
       "    title: Bakes",
@@ -254,7 +254,7 @@ test("cookbook rejects unsupported keys", () => {
 test("rejects invalid source type", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "source: 123",
     ].join("\n"),
   );
@@ -264,7 +264,7 @@ test("rejects invalid source type", () => {
 test("scales must be an array", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "scales: not-an-array",
     ].join("\n"),
   );
@@ -274,7 +274,7 @@ test("scales must be an array", () => {
 test("scales entries must be objects", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "scales:",
       "  - just-a-string",
     ].join("\n"),
@@ -285,7 +285,7 @@ test("scales entries must be objects", () => {
 test("scale preset name must be non-empty string", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "scales:",
       "  - name: \"\"",
       "    anchor: { id: salt, amount: 10, unit: g }",
@@ -297,7 +297,7 @@ test("scale preset name must be non-empty string", () => {
 test("scale preset requires anchor", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "scales:",
       "  - name: Test",
     ].join("\n"),
@@ -308,7 +308,7 @@ test("scale preset requires anchor", () => {
 test("scale preset anchor must be object", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "scales:",
       "  - name: Test",
       "    anchor: not-an-object",
@@ -320,7 +320,7 @@ test("scale preset anchor must be object", () => {
 test("scale preset anchor.id must be non-empty string", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "scales:",
       "  - name: Test",
       "    anchor: { id: \"\", amount: 10, unit: g }",
@@ -332,7 +332,7 @@ test("scale preset anchor.id must be non-empty string", () => {
 test("scale preset anchor.amount must be number", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "scales:",
       "  - name: Test",
       "    anchor: { id: salt, amount: \"ten\", unit: g }",
@@ -344,7 +344,7 @@ test("scale preset anchor.amount must be number", () => {
 test("scale preset anchor.unit must be non-empty string", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "scales:",
       "  - name: Test",
       "    anchor: { id: salt, amount: 10, unit: \"\" }",
@@ -356,7 +356,7 @@ test("scale preset anchor.unit must be non-empty string", () => {
 test("scale preset anchor rejects unsupported keys", () => {
   const msgs = messagesFrom(
     [
-      "version: 0.1.0",
+      "version: 1",
       "scales:",
       "  - name: Test",
       "    anchor: { id: salt, amount: 10, unit: g, extra: true }",
@@ -369,7 +369,7 @@ test("parses valid scales array", () => {
   const result = extractFrontmatter(
     doc(
       [
-        "version: 0.1.0",
+        "version: 1",
         "scales:",
         "  - name: Half",
         "    anchor: { id: salt, amount: 5, unit: g }",

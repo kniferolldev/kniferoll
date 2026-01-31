@@ -49,6 +49,9 @@ export { parseModelSpec, formatModelSpec } from "./types";
 // Configuration
 export { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, DEFAULT_JUDGE_MODEL, loadSchema, getApiKey, getApiKeyEnvVar } from "./config";
 
+// Browser-safe helpers
+export { getProviderDisplayName, getProviderApiKeyUrl } from "./constants";
+
 // Prompt (exported for transparency/debugging)
 export { buildSystemPrompt } from "./prompt";
 

@@ -20,7 +20,7 @@ test("parses single recipe without frontmatter and flags missing sections", () =
 test("parses frontmatter, overall title, and recipe sections", () => {
   const input = [
     "---",
-    "version: 0.1.0",
+    "version: 1",
     "---",
     "# Fancy Cake Collection",
     "",
@@ -31,7 +31,7 @@ test("parses frontmatter, overall title, and recipe sections", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  expect(result.frontmatter?.version).toBe("0.1.0");
+  expect(result.frontmatter?.version).toBe(1);
   expect(result.recipes).toHaveLength(1);
   expect(result.documentTitle?.text).toBe("Fancy Cake Collection");
 
@@ -96,7 +96,7 @@ test("emits W0102 for unknown sections", () => {
   expect(result.recipes[0]?.sections[0]?.kind).toBe("unknown");
 });
 
-test("duplicate recipe ids emit E0301", () => {
+test("duplicate recipe titles are allowed (no longer used for references)", () => {
   const input = [
     "# Classic Bread",
     "## Ingredients",
@@ -111,7 +111,8 @@ test("duplicate recipe ids emit E0301", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  expect(byCode(result.diagnostics, "E0301").length).toBeGreaterThanOrEqual(1);
+  // Recipe titles no longer create IDs, so duplicate titles don't cause errors
+  expect(byCode(result.diagnostics, "E0301").length).toBe(0);
 });
 
 test("duplicate ingredient ids emit E0301", () => {
@@ -400,15 +401,16 @@ test("references resolve to ingredients in the same recipe", () => {
   expect(result.references[1]?.resolvedTarget).toBe("sauce/soy-sauce");
 });
 
-test("recipe references remain global", () => {
+test("recipe titles do not create referenceable IDs", () => {
   const input = [
     "# Main",
     "",
     "# Main Dish",
     "## Ingredients",
     "- chicken - 1 lb",
+    "- sauce - 1/2 cup",
     "## Steps",
-    "1. Prepare the [[Sauce]].",
+    "1. Prepare the [[sauce]].",
     "2. Cook [[chicken]] with sauce.",
     "",
     "# Sauce",
@@ -420,13 +422,15 @@ test("recipe references remain global", () => {
 
   const result = parseDocument(input);
 
-  // No errors or warnings
+  // No errors or warnings - the [[sauce]] reference resolves to the ingredient, not the recipe
   expect(result.diagnostics).toHaveLength(0);
 
-  // Find the [[Sauce]] reference
-  const sauceRef = result.references.find((r) => r.target === "sauce");
+  // Find the [[sauce]] reference - it resolves to the ingredient in Main Dish
+  const sauceRef = result.references.find(
+    (r) => r.target === "sauce" && r.recipeId === "main-dish",
+  );
   expect(sauceRef).toBeDefined();
-  expect(sauceRef?.resolvedTarget).toBe("sauce"); // Global, not scoped
+  expect(sauceRef?.resolvedTarget).toBe("main-dish/sauce"); // Scoped to ingredient
 });
 
 test("unresolved reference in recipe with same-named ingredient elsewhere warns", () => {
@@ -452,4 +456,56 @@ test("unresolved reference in recipe with same-named ingredient elsewhere warns"
   const unresolvedWarnings = byCode(result.diagnostics, "W0302");
   expect(unresolvedWarnings).toHaveLength(1);
   expect(unresolvedWarnings[0]?.message).toContain("pepper");
+});
+
+test("captures intro text between recipe title and first section", () => {
+  const input = [
+    "# Chocolate Cake",
+    "",
+    "A rich and decadent cake perfect for celebrations.",
+    "This recipe has been passed down for generations.",
+    "",
+    "## Ingredients",
+    "- flour - 2 cups",
+    "## Steps",
+    "1. Mix.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const recipe = result.recipes[0];
+
+  expect(recipe).toBeDefined();
+  expect(recipe?.intro).toBeDefined();
+  expect(recipe?.intro).toBe(
+    "A rich and decadent cake perfect for celebrations.\nThis recipe has been passed down for generations.",
+  );
+});
+
+test("recipe without intro has undefined intro field", () => {
+  const input = [
+    "# Simple Recipe",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Cook.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.recipes[0]?.intro).toBeUndefined();
+});
+
+test("intro with only whitespace is not captured", () => {
+  const input = [
+    "# Recipe",
+    "",
+    "   ",
+    "",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Mix.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.recipes[0]?.intro).toBeUndefined();
 });

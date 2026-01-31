@@ -18,10 +18,10 @@ IMPORTANT: Output the Recipe Markdown directly. Do not wrap it in code fences li
 
 FORMATTING GUIDELINES:
 1. The document MUST start with YAML frontmatter enclosed by \`---\` on its own line at the start
-   AND \`---\` on its own line at the end. The frontmatter MUST include \`version: 0.0.1\`. Example:
+   AND \`---\` on its own line at the end. The frontmatter MUST include \`version: 1\`. Example:
    \`\`\`
    ---
-   version: 0.0.1
+   version: 1
    source: "Cookbook Name"
    ---
 
