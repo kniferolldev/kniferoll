@@ -402,6 +402,27 @@ test("step references render as interactive targets", () => {
   expect(html).toContain(">kosher salt<");
 });
 
+test("trailing punctuation after reference wraps as a unit with the reference", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Soup",
+    "## Ingredients",
+    "- chard - 1 bunch",
+    "- broth - 4 cups",
+    "## Steps",
+    "1. Add the [[chard]], and cook with [[broth]].",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  // Comma after [[chard]] must be inside the nowrap span so it doesn't wrap separately
+  expect(html).toMatch(/chard<\/button>,<\/span>/);
+  // Period after [[broth]] must also be kept with the reference
+  expect(html).toMatch(/broth<\/button>\.<\/span>/);
+});
+
 test("ingredients render with wrapper div for highlight compatibility", () => {
   if (!componentModule) {
     throw new Error("Component module was not initialized");

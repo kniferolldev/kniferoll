@@ -177,6 +177,188 @@ ${bundleMarkdown(markdown)}
 );
 
 test(
+  "step navigation with space key",
+  async () => {
+    const moduleCode = await loadComponentBundle();
+
+    const markdown = [
+      "# Recipe",
+      "## Ingredients",
+      "- ingredient 1",
+      "## Steps",
+      "1. First step",
+      "2. Second step",
+      "3. Third step",
+      "4. Fourth step",
+    ].join("\n");
+
+    const ctx = await createTestContext();
+    try {
+      await ctx.page.setContent(
+        `
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <title>Space Key Navigation Test</title>
+          </head>
+          <body>
+            <kr-recipe id="fixture">
+${bundleMarkdown(markdown)}
+            </kr-recipe>
+          </body>
+        </html>
+      `.trim(),
+      );
+
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
+
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-step");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
+
+      const getActiveStepIndex = async () => {
+        return await ctx.page.evaluate(() => {
+          const host = document.querySelector("kr-recipe");
+          if (!host?.shadowRoot) return null;
+          const activeStep = host.shadowRoot.querySelector<HTMLElement>(
+            '.kr-step[aria-pressed="true"]',
+          );
+          if (!activeStep) return null;
+          return Number(activeStep.getAttribute("data-kr-step-index"));
+        });
+      };
+
+      // Focus the host element
+      await ctx.page.evaluate(() => {
+        const host = document.querySelector("kr-recipe");
+        if (host && typeof (host as HTMLElement).focus === "function") {
+          (host as HTMLElement).focus();
+        }
+      });
+
+      let activeIndex = await getActiveStepIndex();
+      expect(activeIndex).toBe(0);
+
+      // Space should advance through all steps
+      await ctx.page.keyboard.press("Space");
+      await ctx.page.waitForTimeout(100);
+      activeIndex = await getActiveStepIndex();
+      expect(activeIndex).toBe(1);
+
+      await ctx.page.keyboard.press("Space");
+      await ctx.page.waitForTimeout(100);
+      activeIndex = await getActiveStepIndex();
+      expect(activeIndex).toBe(2);
+
+      await ctx.page.keyboard.press("Space");
+      await ctx.page.waitForTimeout(100);
+      activeIndex = await getActiveStepIndex();
+      expect(activeIndex).toBe(3);
+
+      // At the end, space should stay at last step
+      await ctx.page.keyboard.press("Space");
+      await ctx.page.waitForTimeout(100);
+      activeIndex = await getActiveStepIndex();
+      expect(activeIndex).toBe(3);
+    } finally {
+      await closeTestContext(ctx);
+    }
+  },
+);
+
+test(
+  "step navigation with space key after clicking a step",
+  async () => {
+    const moduleCode = await loadComponentBundle();
+
+    const markdown = [
+      "# Recipe",
+      "## Ingredients",
+      "- ingredient 1",
+      "## Steps",
+      "1. First step",
+      "2. Second step",
+      "3. Third step",
+    ].join("\n");
+
+    const ctx = await createTestContext();
+    try {
+      await ctx.page.setContent(
+        `
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <title>Space After Click Test</title>
+          </head>
+          <body>
+            <kr-recipe id="fixture">
+${bundleMarkdown(markdown)}
+            </kr-recipe>
+          </body>
+        </html>
+      `.trim(),
+      );
+
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
+
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-step");
+        },
+        undefined,
+        { timeout: 5000 },
+      );
+
+      const getActiveStepIndex = async () => {
+        return await ctx.page.evaluate(() => {
+          const host = document.querySelector("kr-recipe");
+          if (!host?.shadowRoot) return null;
+          const activeStep = host.shadowRoot.querySelector<HTMLElement>(
+            '.kr-step[aria-pressed="true"]',
+          );
+          if (!activeStep) return null;
+          return Number(activeStep.getAttribute("data-kr-step-index"));
+        });
+      };
+
+      // Click step 0 to focus it directly
+      await ctx.page.evaluate(() => {
+        const host = document.querySelector("kr-recipe");
+        const step = host?.shadowRoot?.querySelector<HTMLElement>(".kr-step[data-kr-step-index='0']");
+        step?.click();
+        step?.focus();
+      });
+      await ctx.page.waitForTimeout(100);
+
+      let activeIndex = await getActiveStepIndex();
+      expect(activeIndex).toBe(0);
+
+      // Space should advance even after clicking/focusing a step
+      await ctx.page.keyboard.press("Space");
+      await ctx.page.waitForTimeout(100);
+      activeIndex = await getActiveStepIndex();
+      expect(activeIndex).toBe(1);
+
+      // And again
+      await ctx.page.keyboard.press("Space");
+      await ctx.page.waitForTimeout(100);
+      activeIndex = await getActiveStepIndex();
+      expect(activeIndex).toBe(2);
+    } finally {
+      await closeTestContext(ctx);
+    }
+  },
+);
+
+test(
   "ingredient highlighting with normalized references",
   async () => {
     const moduleCode = await loadComponentBundle();

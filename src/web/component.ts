@@ -6,6 +6,9 @@ import { scaleQuantity } from "../core/scale-quantity";
 import { formatQuantity } from "../core/format";
 import { lookupUnit } from "../core/units";
 import { slug } from "../core/slug";
+import { computeSourceSpans } from "../core/source-spans";
+import { applyLineEdits } from "../core/edit-format";
+import { setupEditInteractions } from "./edit";
 import BASE_STYLE from "./styles.css" with { type: "text" };
 import type {
   Diagnostic,
@@ -27,6 +30,7 @@ import type {
   SectionLine,
   Source,
 } from "../core/types";
+import type { SourceSpan } from "../core/source-spans";
 
 const TAG_NAME = "kr-recipe";
 
@@ -88,7 +92,46 @@ const renderMarkdownInline = (text: string): string => {
   return parts.join("");
 };
 
-const renderIntro = (markdown: string): string => {
+const renderIntro = (
+  markdown: string,
+  sourceLines?: string[],
+  startLine?: number,
+  endLine?: number,
+): string => {
+  // When source lines are available, split into paragraphs by blank lines
+  // and assign data-kr-line to each paragraph for inline editing
+  if (sourceLines && startLine != null && endLine != null) {
+    const paragraphs: { text: string; line: number }[] = [];
+    let currentLines: string[] = [];
+    let currentStart = -1;
+
+    for (let i = startLine; i <= endLine; i++) {
+      const lineText = (sourceLines[i - 1] ?? "").trim();
+      if (lineText === "") {
+        if (currentLines.length > 0) {
+          paragraphs.push({ text: currentLines.join(" "), line: currentStart });
+          currentLines = [];
+          currentStart = -1;
+        }
+      } else {
+        if (currentStart === -1) currentStart = i;
+        currentLines.push(lineText);
+      }
+    }
+    if (currentLines.length > 0) {
+      paragraphs.push({ text: currentLines.join(" "), line: currentStart });
+    }
+
+    const html = paragraphs
+      .map((p) => {
+        const content = renderMarkdownInline(p.text);
+        return `<p class="kr-intro__p" data-kr-line="${p.line}">${content}</p>`;
+      })
+      .join("");
+    return `<div class="kr-intro">${html}</div>`;
+  }
+
+  // Fallback when source lines aren't available (no line tracking)
   const paragraphs = markdown.split(/\n\n+/).filter((p) => p.trim());
   const html = paragraphs
     .map((p) => {
@@ -291,6 +334,7 @@ interface RenderOptions {
   diagnosticsMode: DiagnosticsMode;
   diagnosticsMap?: Map<number, Diagnostic[]>;
   nextDiagnosticId?: () => string;
+  sourceLines?: string[];
 }
 
 const DEFAULT_RENDER_OPTIONS: RenderOptions = {
@@ -715,15 +759,23 @@ const renderStepLine = (
         : `kr-recipe-${target}`
       : null;
 
-    inlineTokens.push({
-      start,
-      end,
-      html: `<button type="button" class="kr-ref" data-kr-target="${escapeAttr(
+    const buttonHtml = `<button type="button" class="kr-ref" data-kr-target="${escapeAttr(
         target,
       )}" data-kr-display="${escapeAttr(display)}"${controlsId ? ` aria-controls="${escapeAttr(
         controlsId,
-      )}"` : ""}>${escapeHtml(display)}</button>`,
-    });
+      )}"` : ""}>${escapeHtml(display)}</button>`;
+
+    // Grab trailing punctuation so it wraps as a unit with the button
+    const trailingPunct = text.slice(end).match(/^[.,;:!?)]+/);
+    if (trailingPunct) {
+      inlineTokens.push({
+        start,
+        end: end + trailingPunct[0].length,
+        html: `<span class="kr-ref-wrap">${buttonHtml}${escapeHtml(trailingPunct[0])}</span>`,
+      });
+    } else {
+      inlineTokens.push({ start, end, html: buttonHtml });
+    }
   }
 
   inlineTokens.sort((a, b) => a.start - b.start);
@@ -975,7 +1027,25 @@ const renderRecipe = (
     : "";
   const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
   const sourceHtml = source ? renderSource(source) : "";
-  const introHtml = recipe.intro ? renderIntro(recipe.intro) : "";
+  let introHtml = "";
+  if (recipe.intro && options.sourceLines) {
+    // Intro spans from the line after the recipe heading to the line before the first section heading
+    // Trim leading/trailing blank lines to get the actual content range
+    const firstSectionLine = recipe.sections.length > 0 ? recipe.sections[0]!.line : undefined;
+    let introStart = recipe.line + 1;
+    let introEnd = firstSectionLine != null ? firstSectionLine - 1 : introStart;
+    // Scan forward past blank lines
+    while (introStart <= introEnd && (options.sourceLines[introStart - 1] ?? "").trim() === "") {
+      introStart++;
+    }
+    // Scan backward past blank lines
+    while (introEnd >= introStart && (options.sourceLines[introEnd - 1] ?? "").trim() === "") {
+      introEnd--;
+    }
+    introHtml = renderIntro(recipe.intro, options.sourceLines, introStart, introEnd);
+  } else if (recipe.intro) {
+    introHtml = renderIntro(recipe.intro);
+  }
 
   return `<section class="kr-recipe" id="${escapeAttr(recipeElementId)}" tabindex="-1" data-kr-role="${roleAttr}" data-kr-id="${escapeAttr(
     recipe.id,
@@ -1136,6 +1206,9 @@ export class KrRecipeElement extends HTMLElement {
   #isConnected = false;
   #currentStepIndex: Map<string, number> = new Map(); // recipeId → current step index
   #stepKeyboardHandler: ((e: KeyboardEvent) => void) | null = null;
+  #editable = false;
+  #editCleanup: (() => void) | null = null;
+  #editSaveActive: (() => void) | null = null;
 
   connectedCallback(): void {
     this.#isConnected = true;
@@ -1145,6 +1218,11 @@ export class KrRecipeElement extends HTMLElement {
 
   disconnectedCallback(): void {
     this.#isConnected = false;
+    if (this.#editCleanup) {
+      this.#editCleanup();
+      this.#editCleanup = null;
+      this.#editSaveActive = null;
+    }
   }
 
   attributeChangedCallback(): void {
@@ -1162,6 +1240,23 @@ export class KrRecipeElement extends HTMLElement {
 
   get content(): string | null {
     return this.#content ?? this.#inlineSource;
+  }
+
+  set editable(value: boolean) {
+    const changed = this.#editable !== value;
+    this.#editable = value;
+    if (changed && this.#isConnected) {
+      this.#render();
+    }
+  }
+
+  get editable(): boolean {
+    return this.#editable;
+  }
+
+  /** Commit any in-progress inline edit (saves its value into the markdown). */
+  commitActiveEdit(): void {
+    this.#editSaveActive?.();
   }
 
   refresh(): void {
@@ -1655,6 +1750,7 @@ export class KrRecipeElement extends HTMLElement {
       quantityDisplay,
       layout,
       diagnosticsMode: this.#resolveDiagnosticsMode(),
+      sourceLines: source.split("\n"),
     });
     shadow.innerHTML = html;
 
@@ -1672,6 +1768,37 @@ export class KrRecipeElement extends HTMLElement {
     this.#setupDiagnosticMarkers();
     this.#setupDiagnosticsInteractions();
     this.#setupStepProgressionInteractions();
+
+    // Edit mode setup
+    if (this.#editCleanup) {
+      this.#editCleanup();
+      this.#editCleanup = null;
+      this.#editSaveActive = null;
+    }
+    if (this.#editable) {
+      const article = shadow.querySelector(".kr-root");
+      if (article) {
+        article.setAttribute("data-kr-editable", "");
+      }
+      const spans = computeSourceSpans(source.split("\n"), result);
+      const edit = setupEditInteractions(shadow, result, spans, {
+        getMarkdown: () => this.#content ?? this.#readInlineSource(),
+        applyEdit: (edits) => {
+          const currentMarkdown = this.#content ?? this.#readInlineSource();
+          const newMarkdown = applyLineEdits(currentMarkdown, edits);
+          this.#content = newMarkdown;
+          this.#render();
+          this.dispatchEvent(
+            new CustomEvent("kr:content-change", {
+              detail: { markdown: newMarkdown },
+              bubbles: true,
+            }),
+          );
+        },
+      });
+      this.#editCleanup = edit.cleanup;
+      this.#editSaveActive = edit.saveActive;
+    }
   }
 
   #setupDiagnosticMarkers(): void {
@@ -1797,7 +1924,8 @@ export class KrRecipeElement extends HTMLElement {
 
       step.addEventListener("click", handleStepClick);
       step.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (this.#editable) return;
+        if (e.key === "Enter") {
           e.preventDefault();
           handleStepClick();
         }
@@ -1811,6 +1939,9 @@ export class KrRecipeElement extends HTMLElement {
 
     // Global keyboard handler for navigation
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Disable step navigation in edit mode
+      if (this.#editable) return;
+
       // Only handle if not focused on a specific interactive element
       if (e.target !== this && !(e.target as HTMLElement)?.closest?.('.kr-recipe')) {
         return;

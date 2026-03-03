@@ -273,12 +273,16 @@
   }
 
   /* Ingredient references */
+  .kr-ref-wrap {
+    white-space: nowrap;
+  }
+
   .kr-ref {
     border: none;
     background: none;
-    color: var(--kr-color-accent, #2563eb);
-    text-decoration: underline;
-    text-decoration-color: color-mix(in srgb, var(--kr-color-accent, #2563eb) 40%, transparent);
+    color: inherit;
+    text-decoration: underline dotted;
+    text-decoration-color: var(--kr-color-muted, #6b6b6b);
     text-underline-offset: 2px;
     cursor: pointer;
     font: inherit;
@@ -287,28 +291,31 @@
   }
 
   .kr-ref:hover {
-    text-decoration-color: var(--kr-color-accent, #2563eb);
+    text-decoration-color: var(--kr-color-text, #1a1a1a);
   }
 
   .kr-ref:focus-visible {
-    outline: 2px solid var(--kr-color-accent, #2563eb);
+    outline: 2px solid var(--kr-color-muted, #6b6b6b);
     outline-offset: 2px;
     border-radius: 2px;
   }
 
   .kr-ref--active {
     color: var(--kr-color-text, #1a1a1a);
-    background: var(--kr-color-highlight, rgba(37, 99, 235, 0.1));
-    text-decoration: none;
-    border-radius: 0.25rem;
-    padding: 0.1rem 0.3rem;
-    margin: -0.1rem -0.3rem;
+    text-decoration: underline dotted;
+    text-decoration-color: var(--kr-color-muted, #6b6b6b);
+    text-underline-offset: 2px;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
   }
 
   .kr-target-highlight {
-    background: var(--kr-color-highlight, rgba(37, 99, 235, 0.08));
-    border-radius: 0.375rem;
-    transition: background 0.15s ease;
+    text-decoration: underline dotted;
+    text-decoration-color: var(--kr-color-muted, #6b6b6b);
+    text-underline-offset: 2px;
+    border-radius: 0;
+    transition: text-decoration-color 0.15s ease;
   }
 
   /* Diagnostics panel */
@@ -496,7 +503,7 @@
   }
 
   .kr-ingredient.kr-target-highlight {
-    background: var(--kr-color-highlight, rgba(37, 99, 235, 0.08));
+    background: none;
   }
 
   .kr-ingredient__quantity {
@@ -611,12 +618,28 @@
     gap: var(--kr-section-gap, 1.75rem);
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-auto-rows: min-content;
+    grid-auto-flow: dense;
   }
 
   .kr-recipe[data-kr-layout="two-column"] .kr-recipe__header,
   .kr-recipe[data-kr-layout="ingredients-left"] .kr-recipe__header,
   .kr-recipe[data-kr-layout="steps-left"] .kr-recipe__header {
     grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+
+  .kr-recipe[data-kr-layout="two-column"] .kr-intro,
+  .kr-recipe[data-kr-layout="ingredients-left"] .kr-intro,
+  .kr-recipe[data-kr-layout="steps-left"] .kr-intro {
+    grid-column: 1 / -1;
+    margin-top: calc(-1 * var(--kr-section-gap, 1.75rem) + 0.75rem);
+    margin-bottom: calc(-1 * var(--kr-section-gap, 1.75rem) + 0.75rem);
+  }
+
+  .kr-recipe[data-kr-layout="two-column"] .kr-section,
+  .kr-recipe[data-kr-layout="ingredients-left"] .kr-section,
+  .kr-recipe[data-kr-layout="steps-left"] .kr-section {
+    margin-top: 0;
   }
 
   .kr-recipe[data-kr-layout="two-column"] .kr-section[data-kr-kind="ingredients"],
@@ -723,7 +746,6 @@
 
 /* Step progression */
 .kr-recipe {
-  margin-left: 1.5rem;
   position: relative;
 }
 
@@ -776,4 +798,136 @@
   .kr-ingredient[data-kr-step-highlight="true"] {
     background: transparent;
   }
+}
+
+/* ───────────────────────────────────────────────
+   Edit mode
+   ─────────────────────────────────────────────── */
+
+/* Hover affordance on editable elements */
+[data-kr-editable] .kr-ingredient,
+[data-kr-editable] .kr-step,
+[data-kr-editable] .kr-recipe__title,
+[data-kr-editable] .kr-intro__p,
+[data-kr-editable] .kr-notes__paragraph,
+[data-kr-editable] .kr-notes__list-item,
+[data-kr-editable] .kr-notes__header {
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+[data-kr-editable] .kr-ingredient:hover,
+[data-kr-editable] .kr-step:hover,
+[data-kr-editable] .kr-recipe__title:hover,
+[data-kr-editable] .kr-intro__p:hover,
+[data-kr-editable] .kr-notes__paragraph:hover,
+[data-kr-editable] .kr-notes__list-item:hover,
+[data-kr-editable] .kr-notes__header:hover {
+  background: var(--kr-color-edit-hover, rgba(143, 174, 126, 0.1));
+}
+
+/* Disable step progression clicks in edit mode */
+[data-kr-editable] .kr-step {
+  --kr-step-progression-disabled: 1;
+}
+[data-kr-editable] .kr-step[aria-pressed]::before {
+  display: none;
+}
+
+/* Edit form containers */
+.kr-edit-form {
+  display: contents;
+}
+
+/* Base input style */
+.kr-edit-input {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--kr-color-text, #1a1a1a);
+  background: var(--kr-color-surface, #ffffff);
+  border: 1.5px solid var(--kr-color-accent, #4a7c59);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  outline: none;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.kr-edit-input:focus {
+  border-color: var(--kr-color-accent, #4a7c59);
+  box-shadow: 0 0 0 2px rgba(74, 124, 89, 0.2);
+}
+
+/* Ingredient edit: mimics the ingredient two-column grid */
+.kr-edit-ingredient-form {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+}
+
+.kr-edit-input--quantity {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  width: auto;
+  max-width: 6rem;
+}
+
+.kr-edit-ingredient-content {
+  display: flex;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.kr-edit-input--name {
+  font-weight: 500;
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.kr-edit-input--modifiers {
+  font-style: italic;
+  color: var(--kr-color-muted, #6b6b6b);
+  flex: 1 1 6rem;
+  min-width: 0;
+}
+
+/* Title edit */
+.kr-edit-input--title {
+  font-size: 1.5em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding: 0.125rem 0.375rem;
+}
+
+/* Auto-sizing textareas for steps and text lines */
+.kr-edit-input--step,
+.kr-edit-input--text {
+  resize: none;
+  overflow: hidden;
+  font-family: inherit;
+}
+
+/* Step edit form - needs to span the full width */
+.kr-edit-step-form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Text line edit form (notes, intro) */
+.kr-edit-text-form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Title edit form */
+.kr-edit-title-form {
+  display: flex;
+  width: 100%;
 }

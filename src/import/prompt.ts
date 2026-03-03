@@ -32,6 +32,10 @@ FORMATTING GUIDELINES:
        author: "Author Name"
    \`\`\`
    Or use a simple string/URL for websites: \`source: "https://example.com/recipe"\`
+5. Normalize ALL CAPS titles to title case (capitalize major words).
+   Apply to section headings too. Example: "SPICY CHICKEN TACOS" → "Spicy Chicken Tacos".
+6. Omit generic salt and pepper from the ingredient list when no specific quantity is given
+   (e.g., "salt and pepper to taste", "salt to taste"). They can still appear in step text.
 
 Below is the complete specification for Recipe Markdown. Follow this specification exactly when extracting recipes:
 

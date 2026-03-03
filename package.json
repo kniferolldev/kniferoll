@@ -12,7 +12,8 @@
     "editor": "bun apps/editor/server.ts",
     "import-server": "cd apps/import-server && bun server.ts",
     "screenshot": "bun scripts/screenshot.ts",
-    "build": "bun scripts/build.ts"
+    "build": "bun scripts/build.ts",
+    "sync-imports": "bash scripts/sync-imports.sh"
   },
   "devDependencies": {
     "@types/bun": "latest",
