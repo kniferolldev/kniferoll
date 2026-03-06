@@ -10,7 +10,44 @@ import { buildExtractionPrompt } from "./extract-prompt";
 import { buildFormatPrompt } from "./format-prompt";
 import { resolveInput } from "./utils";
 import { getProvider } from "./providers";
-import { rotateImage, buildRotationDetectionPrompt, ROTATION_DETECTION_MODEL, type RotationAngle } from "./image-processing";
+import { decode, encode } from "jpeg-js";
+import { buildRotationDetectionPrompt, ROTATION_DETECTION_MODEL, type RotationAngle } from "./rotation-prompt";
+
+/**
+ * Rotate a JPEG image by the specified angle (clockwise) using jpeg-js.
+ */
+function rotateImage(data: ArrayBuffer, angle: RotationAngle): ArrayBuffer {
+  if (angle === 0) return data;
+
+  const image = decode(new Uint8Array(data));
+  const { width, height, data: pixels } = image;
+
+  const swap = angle === 90 || angle === 270;
+  const newWidth = swap ? height : width;
+  const newHeight = swap ? width : height;
+  const newPixels = Buffer.alloc(newWidth * newHeight * 4);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const srcIdx = (y * width + x) * 4;
+      let dstX: number, dstY: number;
+      if (angle === 90) { dstX = height - 1 - y; dstY = x; }
+      else if (angle === 180) { dstX = width - 1 - x; dstY = height - 1 - y; }
+      else { dstX = y; dstY = width - 1 - x; } // 270
+      const dstIdx = (dstY * newWidth + dstX) * 4;
+      newPixels[dstIdx] = pixels[srcIdx]!;
+      newPixels[dstIdx + 1] = pixels[srcIdx + 1]!;
+      newPixels[dstIdx + 2] = pixels[srcIdx + 2]!;
+      newPixels[dstIdx + 3] = pixels[srcIdx + 3]!;
+    }
+  }
+
+  const encoded = encode({ data: newPixels, width: newWidth, height: newHeight }, 80);
+  return (encoded.data.buffer as ArrayBuffer).slice(
+    encoded.data.byteOffset,
+    encoded.data.byteOffset + encoded.data.byteLength,
+  );
+}
 
 /**
  * Strip markdown code fences from a string.
@@ -99,7 +136,7 @@ async function correctImageRotation(
     if (angle === 0) {
       correctedImages.push(image);
     } else {
-      const rotatedData = await rotateImage(image.data, angle);
+      const rotatedData = rotateImage(image.data, angle);
       correctedImages.push({
         ...image,
         data: rotatedData,
@@ -187,8 +224,8 @@ export async function importRecipe(
   // Build system prompt
   const systemPrompt = buildSystemPrompt(schema);
 
-  // Resolve input (load lazy images, apply preprocessing if specified)
-  const resolvedInput = await resolveInput(input, options?.preprocess);
+  // Resolve input (load lazy images)
+  const resolvedInput = await resolveInput(input);
 
   // Validate we have something to process
   if (!resolvedInput.text && (!resolvedInput.images || resolvedInput.images.length === 0)) {
@@ -246,8 +283,8 @@ export async function extractRecipe(
   // Build extraction prompt
   const systemPrompt = buildExtractionPrompt();
 
-  // Resolve input (load lazy images, apply preprocessing if specified)
-  const resolvedInput = await resolveInput(input, options?.preprocess);
+  // Resolve input (load lazy images)
+  const resolvedInput = await resolveInput(input);
 
   // Validate we have images
   if (!resolvedInput.images || resolvedInput.images.length === 0) {
@@ -355,8 +392,8 @@ export async function importRecipeTwoStage(
   input: InferenceInput,
   options?: ImportOptions & { formatModel?: string }
 ): Promise<ImportResult & { twoStageMetrics?: TwoStageMetrics; extractedJson?: string }> {
-  // Resolve input first (load lazy images, apply preprocessing)
-  const resolvedInput = await resolveInput(input, options?.preprocess);
+  // Resolve input first (load lazy images)
+  const resolvedInput = await resolveInput(input);
 
   if (!resolvedInput.images || resolvedInput.images.length === 0) {
     throw new Error("No images provided for two-stage import");

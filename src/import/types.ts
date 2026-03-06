@@ -145,20 +145,6 @@ export interface TwoStageMetrics {
   totalOutputTokens: number;
 }
 
-/** Image preprocessing options */
-export interface ImageProcessingOptions {
-  /** Convert to grayscale */
-  grayscale?: boolean;
-  /** Contrast adjustment (1.0 = normal, >1 = more contrast) */
-  contrast?: number;
-  /** Maximum width (maintains aspect ratio) */
-  maxWidth?: number;
-  /** Maximum height (maintains aspect ratio) */
-  maxHeight?: number;
-  /** JPEG quality (1-100, default 80) */
-  quality?: number;
-}
-
 /** Options for importRecipe() */
 export interface ImportOptions {
   /** Model to use, e.g. "openai/gpt-4o". Defaults to DEFAULT_IMPORT_MODEL */
@@ -167,8 +153,6 @@ export interface ImportOptions {
   apiKey?: string;
   /** Schema content. Defaults to loading from SCHEMA.md */
   schema?: string;
-  /** Image preprocessing options */
-  preprocess?: ImageProcessingOptions;
 }
 
 // ============================================================================

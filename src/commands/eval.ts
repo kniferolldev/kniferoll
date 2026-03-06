@@ -28,7 +28,6 @@ import {
   type InferenceInput,
   type LazyImage,
   type InferenceMetrics,
-  type ImageProcessingOptions,
   type ExtractionResult,
 } from "../import";
 
@@ -96,7 +95,6 @@ interface ParsedArgs {
   model: ModelSpec | null;
   judgeModel: ModelSpec | null;
   evalsDir: string;
-  preserveImage: boolean;
   only: string | null;
 }
 
@@ -104,12 +102,6 @@ interface ParseResult {
   args: ParsedArgs;
   error?: string;
 }
-
-/** Default image preprocessing: resize to 1024px wide, 80% quality (~80KB output) */
-const DEFAULT_IMAGE_PREPROCESS: ImageProcessingOptions = {
-  maxWidth: 1024,
-  quality: 80,
-};
 
 function parseArgs(args: string[]): ParseResult {
   let save = false;
@@ -121,7 +113,6 @@ function parseArgs(args: string[]): ParseResult {
   let model: ModelSpec | null = null;
   let judgeModel: ModelSpec | null = null;
   let evalsDir = "evals";
-  let preserveImage = false;
   let only: string | null = null;
   let error: string | undefined;
 
@@ -157,16 +148,13 @@ function parseArgs(args: string[]): ParseResult {
         error = `Invalid judge model format: "${spec}"\nExpected format: <provider>/<model> (e.g., openai/gpt-4o, anthropic/claude-sonnet-4-5)`;
       }
     }
-    else if (arg === "--preserve-image") {
-      preserveImage = true;
-    }
     else if (arg === "--only" && args[i + 1]) {
       only = args[++i]!;
     }
     else if (!arg.startsWith("-")) evalsDir = arg;
   }
 
-  return { args: { save, diff, judge, regenerate, extractOnly, formatOnly, model, judgeModel, evalsDir, preserveImage, only }, error };
+  return { args: { save, diff, judge, regenerate, extractOnly, formatOnly, model, judgeModel, evalsDir, only }, error };
 }
 
 // ============================================================================
@@ -187,7 +175,6 @@ interface ImporterResult {
 async function runImporter(
   model: ModelSpec,
   input: TestCase["input"],
-  preprocess?: ImageProcessingOptions | null
 ): Promise<ImporterResult> {
   // Convert test case input format to InferenceInput
   let inferInput: InferenceInput;
@@ -205,7 +192,6 @@ async function runImporter(
 
   const result = await importRecipe(inferInput, {
     model: formatModelSpec(model),
-    preprocess: preprocess ?? undefined,
   });
 
   return {
@@ -221,7 +207,6 @@ async function runImporter(
 async function runExtractor(
   model: ModelSpec,
   input: TestCase["input"],
-  preprocess?: ImageProcessingOptions | null
 ): Promise<ExtractionResult> {
   if (input.kind === "text") {
     throw new Error("Extraction requires images, not text input");
@@ -235,7 +220,6 @@ async function runExtractor(
 
   return extractRecipe({ images }, {
     model: formatModelSpec(model),
-    preprocess: preprocess ?? undefined,
   });
 }
 
@@ -495,10 +479,7 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     return 2;
   }
 
-  const { save, diff, judge, regenerate, extractOnly, formatOnly, model, judgeModel, evalsDir, preserveImage, only } = parseResult.args;
-
-  // Apply default preprocessing unless --preserve-image is set
-  const preprocess = preserveImage ? null : DEFAULT_IMAGE_PREPROCESS;
+  const { save, diff, judge, regenerate, extractOnly, formatOnly, model, judgeModel, evalsDir, only } = parseResult.args;
 
   // Resolve models: use defaults when not specified
   const importModel = regenerate
@@ -574,9 +555,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
 
     write(`Extracting text from ${imageTestCases.length} image test case(s)...`);
     write(` [model: ${formatModelSpec(importModel!)}]`);
-    if (preserveImage) {
-      write(` [preserve-image]`);
-    }
     write("\n\n");
 
     const extractResults: ExtractionTestResult[] = [];
@@ -585,7 +563,7 @@ export async function runEval(args: string[], io: IO): Promise<number> {
       write(`  ${tc.id}... `);
 
       try {
-        const result = await runExtractor(importModel!, tc.input, preprocess);
+        const result = await runExtractor(importModel!, tc.input);
         const testCaseDir = join(evalsDir, tc.id);
 
         // Save the raw JSON
@@ -792,9 +770,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
   if (regenerate && importModel) {
     write(` [regenerating with ${formatModelSpec(importModel)}]`);
   }
-  if (preserveImage) {
-    write(` [preserve-image]`);
-  }
   if (baselineDate) {
     write(` (comparing to baseline from ${baselineDate})`);
   }
@@ -815,7 +790,7 @@ export async function runEval(args: string[], io: IO): Promise<number> {
 
       if (regenerate) {
         // Re-run the importer and save to actual.md
-        const importResult = await runImporter(importModel!, tc.input, preprocess);
+        const importResult = await runImporter(importModel!, tc.input);
         actual = importResult.markdown;
         importMetrics = importResult.metrics;
         const testCaseDir = join(evalsDir, tc.id);

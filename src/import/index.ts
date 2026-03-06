@@ -34,7 +34,6 @@ export type {
   InferenceResult,
   ImportResult,
   ImportOptions,
-  ImageProcessingOptions,
   ResolvedInput,
   ProviderAdapter,
   ExtractedSection,
@@ -57,6 +56,3 @@ export { buildSystemPrompt } from "./prompt";
 
 // Utilities (for consumers that need to convert Blobs)
 export { blobToLoadedImage, arrayBufferToBase64, resolveInput } from "./utils";
-
-// Image preprocessing
-export { parsePreprocessOptions } from "./image-processing";

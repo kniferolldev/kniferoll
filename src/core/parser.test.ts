@@ -390,8 +390,11 @@ test("references resolve to ingredients in the same recipe", () => {
 
   const result = parseDocument(input);
 
-  // No errors or warnings
-  expect(result.diagnostics).toHaveLength(0);
+  // W0502 orphan warning for Sauce (index 1, not referenced)
+  // Marinade is index 0 (Main is the document title), so no orphan warning
+  expect(byCode(result.diagnostics, "W0502")).toHaveLength(1);
+  // No other diagnostics
+  expect(result.diagnostics.filter((d) => d.code !== "W0502")).toHaveLength(0);
 
   // References should have recipeId set
   expect(result.references).toHaveLength(2);
@@ -508,4 +511,328 @@ test("intro with only whitespace is not captured", () => {
 
   const result = parseDocument(input);
   expect(result.recipes[0]?.intro).toBeUndefined();
+});
+
+test("notes continuation lines are unwrapped and joined for bullets", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Cook.",
+    "## Notes",
+    "- **Storage:** Store leftover pizza in the refrigerator for",
+    "  up to 5 days. Reheat until warm.",
+    "- **Tip:** Pizza sauce is thicker than tomato sauce, and it",
+    "  helps prevent the crust from becoming soggy.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const recipe = result.recipes[0];
+  const notesSection = recipe?.sections.find((s) => s.kind === "notes");
+
+  expect(notesSection).toBeDefined();
+  if (notesSection?.kind === "notes") {
+    const nonEmpty = notesSection.lines.filter((l) => l.text.trim() !== "");
+    // Should have 2 lines (2 bullets), not 4
+    expect(nonEmpty).toHaveLength(2);
+    expect(nonEmpty[0]?.text).toContain("up to 5 days");
+    expect(nonEmpty[1]?.text).toContain("helps prevent");
+  }
+});
+
+test("notes paragraph continuation lines are joined", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Cook.",
+    "## Notes",
+    "",
+    "This is a long paragraph that wraps",
+    "across multiple lines in the source.",
+    "",
+    "This is a second paragraph.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const recipe = result.recipes[0];
+  const notesSection = recipe?.sections.find((s) => s.kind === "notes");
+
+  expect(notesSection).toBeDefined();
+  if (notesSection?.kind === "notes") {
+    const nonEmpty = notesSection.lines.filter((l) => l.text.trim() !== "");
+    expect(nonEmpty).toHaveLength(2);
+    expect(nonEmpty[0]?.text).toBe(
+      "This is a long paragraph that wraps across multiple lines in the source.",
+    );
+    expect(nonEmpty[1]?.text).toBe("This is a second paragraph.");
+  }
+});
+
+test("notes double line break creates separate paragraphs", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Cook.",
+    "## Notes",
+    "",
+    "First paragraph.",
+    "",
+    "Second paragraph.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const recipe = result.recipes[0];
+  const notesSection = recipe?.sections.find((s) => s.kind === "notes");
+
+  expect(notesSection).toBeDefined();
+  if (notesSection?.kind === "notes") {
+    const nonEmpty = notesSection.lines.filter((l) => l.text.trim() !== "");
+    expect(nonEmpty).toHaveLength(2);
+    expect(nonEmpty[0]?.text).toBe("First paragraph.");
+    expect(nonEmpty[1]?.text).toBe("Second paragraph.");
+  }
+});
+
+// ── Compound recipe linking ──────────────────────────────────────────
+
+test("ingredient matching another recipe title gets linkedRecipeId", () => {
+  const input = [
+    "# Detroit-Style Pizza",
+    "",
+    "# Dough",
+    "## Ingredients",
+    "- flour - 500 g",
+    "## Steps",
+    "1. Mix.",
+    "",
+    "# Sauce",
+    "## Ingredients",
+    "- tomatoes - 1 can",
+    "## Steps",
+    "1. Blend.",
+    "",
+    "# Assembly",
+    "## Ingredients",
+    "- Dough - 1 recipe",
+    "- Sauce - 1 cup",
+    "- cheese - 200 g",
+    "## Steps",
+    "1. Assemble.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const assembly = result.recipes.find((r) => r.id === "assembly");
+  const ingSection = assembly?.sections.find((s) => s.kind === "ingredients");
+  if (ingSection?.kind !== "ingredients") throw new Error("missing ingredients");
+
+  const doughIng = ingSection.ingredients.find((i) => i.id === "dough");
+  const sauceIng = ingSection.ingredients.find((i) => i.id === "sauce");
+  const cheeseIng = ingSection.ingredients.find((i) => i.id === "cheese");
+
+  expect(doughIng?.linkedRecipeId).toBe("dough");
+  expect(sauceIng?.linkedRecipeId).toBe("sauce");
+  expect(cheeseIng?.linkedRecipeId).toBeUndefined();
+
+  // recipeLinks should have both entries
+  expect(result.recipeLinks).toHaveLength(2);
+  expect(result.recipeLinks).toContainEqual({
+    fromRecipeId: "assembly",
+    ingredientId: "dough",
+    toRecipeId: "dough",
+  });
+  expect(result.recipeLinks).toContainEqual({
+    fromRecipeId: "assembly",
+    ingredientId: "sauce",
+    toRecipeId: "sauce",
+  });
+});
+
+test("ingredient matching its own recipe title does not self-link", () => {
+  const input = [
+    "# Sauce",
+    "## Ingredients",
+    "- sauce - 1 cup",
+    "## Steps",
+    "1. Cook.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const ing = result.recipes[0]?.sections.find((s) => s.kind === "ingredients");
+  if (ing?.kind !== "ingredients") throw new Error("missing ingredients");
+
+  expect(ing.ingredients[0]?.linkedRecipeId).toBeUndefined();
+  expect(result.recipeLinks).toHaveLength(0);
+});
+
+test("recipe linking is case-insensitive via slug", () => {
+  const input = [
+    "# Detroit-Style Dough",
+    "## Ingredients",
+    "- flour - 500 g",
+    "## Steps",
+    "1. Mix.",
+    "",
+    "# Pizza",
+    "## Ingredients",
+    "- detroit-style dough - 1 recipe",
+    "## Steps",
+    "1. Assemble.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const pizza = result.recipes.find((r) => r.id === "pizza");
+  const ing = pizza?.sections.find((s) => s.kind === "ingredients");
+  if (ing?.kind !== "ingredients") throw new Error("missing ingredients");
+
+  expect(ing.ingredients[0]?.linkedRecipeId).toBe("detroit-style-dough");
+});
+
+test("bidirectional recipe linking", () => {
+  const input = [
+    "# Sauce",
+    "## Ingredients",
+    "- pasta - 1 recipe",
+    "## Steps",
+    "1. Cook.",
+    "",
+    "# Pasta",
+    "## Ingredients",
+    "- sauce - 1 recipe",
+    "## Steps",
+    "1. Boil.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.recipeLinks).toHaveLength(2);
+  expect(result.recipeLinks).toContainEqual({
+    fromRecipeId: "sauce",
+    ingredientId: "pasta",
+    toRecipeId: "pasta",
+  });
+  expect(result.recipeLinks).toContainEqual({
+    fromRecipeId: "pasta",
+    ingredientId: "sauce",
+    toRecipeId: "sauce",
+  });
+});
+
+test("custom id= override on ingredient prevents auto-linking", () => {
+  const input = [
+    "# Sauce",
+    "## Ingredients",
+    "- tomatoes - 1 can",
+    "## Steps",
+    "1. Blend.",
+    "",
+    "# Assembly",
+    "## Ingredients",
+    "- Sauce - 1 cup :: id=red-sauce",
+    "## Steps",
+    "1. Pour.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const assembly = result.recipes.find((r) => r.id === "assembly");
+  const ing = assembly?.sections.find((s) => s.kind === "ingredients");
+  if (ing?.kind !== "ingredients") throw new Error("missing ingredients");
+
+  // Custom id "red-sauce" doesn't match recipe id "sauce", so no link
+  expect(ing.ingredients[0]?.linkedRecipeId).toBeUndefined();
+  expect(result.recipeLinks).toHaveLength(0);
+});
+
+// ── W0501 / W0502 linter warnings ───────────────────────────────────
+
+test("W0501: ingredient with unit recipe/batch but no matching recipe warns", () => {
+  const input = [
+    "# Pizza",
+    "## Ingredients",
+    "- magic dough - 1 recipe",
+    "- secret sauce - 2 batches",
+    "## Steps",
+    "1. Assemble.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const warnings = byCode(result.diagnostics, "W0501");
+  expect(warnings).toHaveLength(2);
+  expect(warnings[0]?.message).toContain("magic dough");
+  expect(warnings[1]?.message).toContain("secret sauce");
+});
+
+test("W0501 negative: ingredient with unit recipe + matching recipe is fine", () => {
+  const input = [
+    "# Dough",
+    "## Ingredients",
+    "- flour - 500 g",
+    "## Steps",
+    "1. Mix.",
+    "",
+    "# Pizza",
+    "## Ingredients",
+    "- Dough - 1 recipe",
+    "## Steps",
+    "1. Assemble.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "W0501")).toHaveLength(0);
+});
+
+test("W0502: orphan recipe at index > 0 not referenced by any ingredient warns", () => {
+  const input = [
+    "# Pizza",
+    "## Ingredients",
+    "- cheese - 200 g",
+    "## Steps",
+    "1. Top.",
+    "",
+    "# Forgotten Sauce",
+    "## Ingredients",
+    "- tomatoes - 1 can",
+    "## Steps",
+    "1. Blend.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const warnings = byCode(result.diagnostics, "W0502");
+  expect(warnings).toHaveLength(1);
+  expect(warnings[0]?.message).toContain("Forgotten Sauce");
+});
+
+test("W0502 negative: first recipe never triggers orphan warning", () => {
+  const input = [
+    "# Solo Recipe",
+    "## Ingredients",
+    "- salt - 1 tsp",
+    "## Steps",
+    "1. Season.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "W0502")).toHaveLength(0);
+});
+
+test("W0502 negative: referenced recipe does not trigger orphan warning", () => {
+  const input = [
+    "# Dough",
+    "## Ingredients",
+    "- flour - 500 g",
+    "## Steps",
+    "1. Mix.",
+    "",
+    "# Pizza",
+    "## Ingredients",
+    "- Dough - 1 recipe",
+    "## Steps",
+    "1. Assemble.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "W0502")).toHaveLength(0);
 });

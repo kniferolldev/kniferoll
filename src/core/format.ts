@@ -26,6 +26,7 @@ const FRACTION_MAP: Record<number, string> = {
 };
 
 const EPSILON = 1e-6;
+const HAS_EXPLICIT_NUMBER = /[\d/]/;
 
 const nearestFraction = (value: number): { whole: number; fraction: string | null } => {
   const whole = Math.trunc(value);
@@ -159,11 +160,13 @@ export const formatQuantity = (
     return null;
   }
 
-  // If not scaling or converting, use the original raw text to preserve
-  // the author's formatting choices (e.g., "pinch" instead of "1 pinch")
+  // If not scaling or converting, use the original raw text for unit-only
+  // quantities (e.g., "pinch" instead of "1 pinch"). For quantities with
+  // explicit numbers, always go through the formatter for consistent spacing.
   const isNotScaling = !options.scaled;
   const isNotConverting = !options.targetUnit && !options.usePreferredUnit;
-  if (isNotScaling && isNotConverting && original.raw) {
+  const hasExplicitNumber = original.raw ? HAS_EXPLICIT_NUMBER.test(original.raw) : false;
+  if (isNotScaling && isNotConverting && original.raw && !hasExplicitNumber) {
     return original.raw;
   }
 
@@ -215,4 +218,13 @@ export const formatQuantity = (
   }
 
   return formatQuantitySingle(quantity, sourceUnit, displayUnit, allowFractions, originalUnit);
+};
+
+/** Format a number as a text fraction string (e.g. 1.333 → "1 1/3") for user-facing inputs. */
+export const numberToFractionText = (value: number): string => {
+  const { whole, fraction } = nearestFraction(value);
+  if (fraction) {
+    return whole > 0 ? `${whole} ${fraction}` : fraction;
+  }
+  return Number.isInteger(value) ? value.toString() : parseFloat(value.toFixed(2)).toString();
 };

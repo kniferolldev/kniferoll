@@ -1,7 +1,6 @@
 import type {
   RoundingProfile,
   UnitDefinition,
-  UnitDimension,
   UnitFamily,
   UnitMatch,
 } from "./types";
@@ -122,6 +121,22 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     rounding: { increment: 1 },
     family: "count",
   }),
+
+  // Recipe/batch (compound recipe references)
+  define({
+    canonical: "recipe",
+    display: "recipe",
+    aliases: ["recipe", "recipes"],
+    dimension: "other",
+    rounding: { increment: 0.5 },
+  }),
+  define({
+    canonical: "batch",
+    display: "batch",
+    aliases: ["batch", "batches"],
+    dimension: "other",
+    rounding: { increment: 0.5 },
+  }),
 ];
 
 const UNIT_INDEX = new Map<string, UnitDefinition>();
@@ -190,6 +205,9 @@ export const roundToProfile = (value: number, profile: RoundingProfile): number 
 
   return rounded;
 };
+
+export const isMetricFamily = (family: UnitFamily | undefined): boolean =>
+  family === "mass" || family === "volume_metric";
 
 export const UNITS = UNIT_DEFINITIONS;
 

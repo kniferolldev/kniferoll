@@ -54,7 +54,7 @@ ${bundleMarkdown(markdown)}
           return !!host?.shadowRoot?.querySelector(".kr-scale-control");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Change to triple preset
@@ -79,7 +79,7 @@ ${bundleMarkdown(markdown)}
           return quantity.includes("3");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       const quantity = await ctx.page.evaluate(() => {
@@ -134,22 +134,16 @@ ${bundleMarkdown(markdown)}
       await ctx.page.waitForFunction(
         () => {
           const host = document.querySelector("kr-recipe");
-          return !!host?.shadowRoot?.querySelector(".kr-quantity-control");
+          return !!host?.shadowRoot?.querySelector(".kr-ingredient__quantity");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
-      // Switch to alt-mass mode
+      // Switch to metric mode via attribute
       await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
-        const select = host?.shadowRoot?.querySelector(
-          ".kr-quantity-control",
-        ) as HTMLSelectElement | null;
-        if (select) {
-          select.value = "alt-mass";
-          select.dispatchEvent(new Event("change", { bubbles: true }));
-        }
+        host?.setAttribute("quantity-display", "metric");
       });
 
       // Wait for quantity to switch to grams
@@ -162,7 +156,7 @@ ${bundleMarkdown(markdown)}
           return quantity.includes("g");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       const quantity = await ctx.page.evaluate(() => {

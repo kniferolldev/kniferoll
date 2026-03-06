@@ -232,6 +232,220 @@
     color: var(--kr-color-muted, #6b6b6b);
   }
 
+  /* Scale widget and header layout */
+  .kr-recipe__header-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .kr-recipe__header-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .kr-scale-widget {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    margin-top: 0.125rem;
+  }
+
+  .kr-scale-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--kr-color-border, rgba(0, 0, 0, 0.12));
+    background: var(--kr-color-surface, #ffffff);
+    color: var(--kr-color-muted, #6b6b6b);
+    font: inherit;
+    font-size: 0.75em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .kr-scale-toggle:hover {
+    color: var(--kr-color-text, #1a1a1a);
+    border-color: var(--kr-color-text, rgba(0, 0, 0, 0.2));
+  }
+
+  .kr-scale-toggle:focus-visible {
+    outline: 2px solid var(--kr-color-accent, #2563eb);
+    outline-offset: 2px;
+  }
+
+  .kr-scale-toggle--open {
+    display: none;
+  }
+
+  /* Scale bar — full pill that replaces the toggle when open */
+  .kr-scale-bar {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    align-items: center;
+    padding: 0.2rem 0.35rem;
+    background: var(--kr-color-surface, #ffffff);
+    border: 1px solid var(--kr-color-border, rgba(0, 0, 0, 0.12));
+    border-radius: 999px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    white-space: nowrap;
+  }
+
+  .kr-scale-bar[hidden] {
+    display: none;
+  }
+
+  .kr-scale-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--kr-color-border, rgba(0, 0, 0, 0.12));
+    background: var(--kr-color-surface, #ffffff);
+    color: var(--kr-color-text, #1a1a1a);
+    font: inherit;
+    font-size: 0.8em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .kr-scale-chip:hover {
+    border-color: var(--kr-color-accent, #2563eb);
+    color: var(--kr-color-accent, #2563eb);
+  }
+
+  .kr-scale-chip:focus-visible {
+    outline: 2px solid var(--kr-color-accent, #2563eb);
+    outline-offset: 2px;
+  }
+
+  .kr-scale-chip--active {
+    background: var(--kr-color-accent, #2563eb);
+    border-color: var(--kr-color-accent, #2563eb);
+    color: #ffffff;
+  }
+
+  .kr-scale-chip--active:hover {
+    background: var(--kr-color-accent, #2563eb);
+    border-color: var(--kr-color-accent, #2563eb);
+    color: #ffffff;
+    filter: brightness(0.9);
+  }
+
+  .kr-scale-divider {
+    width: 1px;
+    height: 1.25rem;
+    background: var(--kr-color-border, rgba(0, 0, 0, 0.12));
+    margin: 0 0.125rem;
+  }
+
+  /* Anchor mode */
+  [data-kr-anchor-mode] .kr-ingredient[data-kr-scalable="true"] {
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+  }
+
+  [data-kr-anchor-mode] .kr-ingredient[data-kr-scalable="true"]:hover {
+    background: rgba(37, 99, 235, 0.06);
+  }
+
+  [data-kr-anchor-mode] .kr-ingredient[data-kr-scalable="false"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .kr-ingredient--anchor {
+    position: relative;
+    background: rgba(37, 99, 235, 0.06);
+    border-radius: 4px;
+  }
+
+  .kr-anchor-icon {
+    position: absolute;
+    left: -1.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    color: var(--kr-color-accent, #2563eb);
+  }
+
+  .kr-ingredient--anchor-hint {
+    position: relative;
+  }
+
+  .kr-anchor-icon--hint {
+    animation: kr-anchor-hint-fade 1.2s ease-in-out;
+  }
+
+  @keyframes kr-anchor-hint-fade {
+    0% { opacity: 0; }
+    15% { opacity: 1; }
+    85% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  .kr-anchor-display {
+    cursor: pointer;
+    border-radius: 4px;
+    color: var(--kr-color-accent, #2563eb);
+    transition: background 0.15s ease;
+  }
+
+  .kr-anchor-display:hover {
+    background: rgba(37, 99, 235, 0.1);
+  }
+
+  .kr-anchor-unit {
+    font-weight: 700;
+    margin-left: 0.15rem;
+  }
+
+  .kr-anchor-input {
+    width: 3ch;
+    min-width: 2ch;
+    box-sizing: content-box;
+    padding: 0.1rem 0.25rem;
+    border: 1.5px solid var(--kr-color-accent, #2563eb);
+    border-radius: 4px;
+    font: inherit;
+    font-size: inherit;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--kr-color-text, #1a1a1a);
+    background: var(--kr-color-surface, #ffffff);
+    outline: none;
+  }
+
+  .kr-anchor-input:focus {
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  }
+
+  /* Unscalable ingredient warning icon in gutter */
+  .kr-ingredient[data-kr-scalable="false"] {
+    position: relative;
+  }
+
+  .kr-noscale-icon {
+    position: absolute;
+    left: -1.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    color: var(--kr-color-warning, #d97706);
+    cursor: help;
+  }
+
   /* Controls */
   .kr-controls {
     display: flex;
@@ -273,11 +487,9 @@
   }
 
   /* Ingredient references */
-  .kr-ref-wrap {
-    white-space: nowrap;
-  }
 
   .kr-ref {
+    display: inline;
     border: none;
     background: none;
     color: inherit;
@@ -513,13 +725,6 @@
     text-align: right;
   }
 
-  .kr-ingredient__quantity-secondary {
-    font-size: 0.8em;
-    color: var(--kr-color-muted, #6b6b6b);
-    font-style: italic;
-    margin-left: 0.25rem;
-  }
-
   .kr-ingredient__content {
     display: flex;
     flex-wrap: wrap;
@@ -529,6 +734,17 @@
 
   .kr-ingredient__name {
     font-weight: 500;
+  }
+
+  .kr-subrecipe-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+  }
+
+  .kr-subrecipe-link:hover {
+    text-decoration-style: solid;
   }
 
   .kr-ingredient__modifiers {
@@ -691,6 +907,70 @@
     .kr-recipe[data-kr-layout="steps-left"] {
       display: block;
     }
+
+    /* Restore header margin — grid gap no longer provides spacing */
+    .kr-recipe[data-kr-layout="two-column"] .kr-recipe__header,
+    .kr-recipe[data-kr-layout="ingredients-left"] .kr-recipe__header,
+    .kr-recipe[data-kr-layout="steps-left"] .kr-recipe__header {
+      margin-bottom: 1.25rem;
+    }
+
+    /* Reset negative intro margins — they only counteract grid gap */
+    .kr-recipe[data-kr-layout="two-column"] .kr-intro,
+    .kr-recipe[data-kr-layout="ingredients-left"] .kr-intro,
+    .kr-recipe[data-kr-layout="steps-left"] .kr-intro {
+      margin-top: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    /* Restore section spacing in block layout */
+    .kr-recipe[data-kr-layout="two-column"] .kr-section + .kr-section,
+    .kr-recipe[data-kr-layout="ingredients-left"] .kr-section + .kr-section,
+    .kr-recipe[data-kr-layout="steps-left"] .kr-section + .kr-section {
+      margin-top: var(--kr-section-gap, 1.75rem);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .kr-recipe {
+      box-shadow: none;
+      border-left: none;
+      border-right: none;
+    }
+
+    .kr-controls {
+      padding-bottom: 0.625rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .kr-recipe__header {
+      margin-bottom: 0.75rem;
+    }
+
+    .kr-recipe__title {
+      font-size: 1.3em;
+    }
+
+    .kr-step[aria-pressed="true"]::before {
+      left: -1rem;
+      font-size: 0.75rem;
+    }
+
+    .kr-edit-ingredient-content {
+      flex-wrap: wrap;
+    }
+
+    .kr-edit-input--name {
+      flex: 1 1 100%;
+    }
+
+    .kr-edit-input--modifiers {
+      flex: 1 1 100%;
+    }
+
+    .kr-edit-input--quantity {
+      max-width: 5rem;
+    }
   }
 
   .kr-empty {
@@ -716,7 +996,8 @@
       box-shadow: none;
     }
 
-    .kr-controls {
+    .kr-controls,
+    .kr-scale-widget {
       display: none !important;
     }
 
@@ -731,10 +1012,6 @@
       border: 1px solid rgba(0, 0, 0, 0.3);
       background: transparent;
       padding: 0.1rem 0.35rem;
-    }
-
-    .kr-ingredient__quantity-secondary {
-      color: rgba(0, 0, 0, 0.6);
     }
 
     .kr-diagnostics {

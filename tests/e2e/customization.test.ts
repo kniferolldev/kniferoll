@@ -54,7 +54,7 @@ ${bundleMarkdown(markdown)}
           return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Test that CSS variables are applied
@@ -128,7 +128,7 @@ ${bundleMarkdown(markdown)}
           return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Test: Content property setter
@@ -151,7 +151,7 @@ ${bundleMarkdown(markdown)}
           );
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       const updatedTitle = await ctx.page.evaluate(() => {

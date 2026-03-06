@@ -2,8 +2,7 @@
  * Utility functions for recipe import
  */
 
-import type { ImageSource, LoadedImage, ResolvedInput, InferenceInput, ImageProcessingOptions } from "./types";
-import { processImage } from "./image-processing";
+import type { ImageSource, LoadedImage, ResolvedInput, InferenceInput } from "./types";
 
 /**
  * Infer MIME type from file extension
@@ -58,11 +57,9 @@ export async function resolveImage(source: ImageSource): Promise<LoadedImage> {
  * both loaded and lazy images.
  *
  * @param input - The inference input with text and/or images
- * @param preprocessOptions - Optional image preprocessing options
  */
 export async function resolveInput(
   input: InferenceInput,
-  preprocessOptions?: ImageProcessingOptions
 ): Promise<ResolvedInput> {
   const resolved: ResolvedInput = {};
 
@@ -72,25 +69,10 @@ export async function resolveInput(
 
   if (input.images && input.images.length > 0) {
     const loadedImages = await Promise.all(input.images.map(resolveImage));
-
-    if (preprocessOptions && Object.keys(preprocessOptions).length > 0) {
-      // Apply preprocessing to each image
-      const processedImages = await Promise.all(
-        loadedImages.map(async (img) => {
-          const processed = await processImage(img.data, img.mimeType, preprocessOptions);
-          return {
-            data: processed.data,
-            mimeType: processed.mimeType,
-          };
-        })
-      );
-      resolved.images = processedImages;
-    } else {
-      resolved.images = loadedImages.map((img) => ({
-        data: img.data,
-        mimeType: img.mimeType,
-      }));
-    }
+    resolved.images = loadedImages.map((img) => ({
+      data: img.data,
+      mimeType: img.mimeType,
+    }));
   }
 
   return resolved;

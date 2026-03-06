@@ -1,7 +1,8 @@
 import { expect, test, describe, beforeEach, afterEach } from "bun:test";
 import { runPromote } from "./promote";
 import type { IO } from "../types";
-import { mkdir, rm, writeFile } from "fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
+import { tmpdir } from "os";
 import { join } from "path";
 
 const writer = () => {
@@ -33,6 +34,22 @@ const stubIO = () => {
   };
   return { io, stdout, stderr };
 };
+
+// Run promote tests in a temp directory so file writes don't trigger
+// Vite's file watcher and cause dev server reloads.
+let tempDir: string;
+let originalCwd: string;
+
+beforeEach(async () => {
+  tempDir = await mkdtemp(join(tmpdir(), "kniferoll-promote-test-"));
+  originalCwd = process.cwd();
+  process.chdir(tempDir);
+});
+
+afterEach(async () => {
+  process.chdir(originalCwd);
+  await rm(tempDir, { recursive: true, force: true });
+});
 
 describe("runPromote", () => {
   describe("argument validation", () => {
@@ -94,18 +111,12 @@ describe("runPromote", () => {
     const testEvalDir = "evals/test-promote-temp";
 
     beforeEach(async () => {
-      // Create test import directory with output.md
+      // Create test import directory with output.md (inside temp dir)
       await mkdir(testImportDir, { recursive: true });
       await writeFile(
         join(testImportDir, "output.md"),
         "# Test Recipe\n\n## Ingredients\n\n- salt\n\n## Steps\n\n1. Add salt."
       );
-    });
-
-    afterEach(async () => {
-      // Cleanup
-      await rm(testImportDir, { recursive: true, force: true });
-      await rm(testEvalDir, { recursive: true, force: true });
     });
 
     test("creates eval directory with golden.md and actual.md", async () => {
@@ -172,9 +183,6 @@ describe("runPromote", () => {
 
       expect(exitCode).toBe(0);
       expect(stdout.read()).toContain("evals/test-recipe-name/");
-
-      // Cleanup the extra directory
-      await rm("evals/test-recipe-name", { recursive: true, force: true });
     });
   });
 });

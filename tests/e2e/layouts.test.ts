@@ -47,7 +47,7 @@ ${bundleMarkdown(markdown)}
           return !!host?.shadowRoot?.querySelector(".kr-recipe");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Test: Layout switching

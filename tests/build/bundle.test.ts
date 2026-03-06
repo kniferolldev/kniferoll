@@ -1,14 +1,16 @@
-import { expect, test, beforeAll } from "bun:test";
-import { mkdir, readFile, rm, stat } from "node:fs/promises";
+import { expect, test, beforeAll, afterAll } from "bun:test";
+import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 
-const DIST_DIR = join(import.meta.dir, "..", "..", "dist");
 const ENTRY_POINT = join(import.meta.dir, "..", "..", "index.ts");
 
+// Build into a temp directory so we don't overwrite dist/ and trigger
+// Vite's dev server reload (publicDir points to dist/).
+let DIST_DIR: string;
+
 beforeAll(async () => {
-  // Build bundles fresh for testing
-  await rm(DIST_DIR, { recursive: true, force: true });
-  await mkdir(DIST_DIR, { recursive: true });
+  DIST_DIR = await mkdtemp(join(tmpdir(), "kniferoll-bundle-test-"));
 
   const variants = [
     { name: "kniferoll.js", minify: false, sourcemap: "inline" as const },
@@ -33,6 +35,10 @@ beforeAll(async () => {
   }
 });
 
+afterAll(async () => {
+  if (DIST_DIR) await rm(DIST_DIR, { recursive: true, force: true });
+});
+
 test("built bundles exist and have reasonable sizes", async () => {
   const devBundle = join(DIST_DIR, "kniferoll.js");
   const minBundle = join(DIST_DIR, "kniferoll.min.js");
@@ -51,8 +57,6 @@ test("built bundles exist and have reasonable sizes", async () => {
   const minKb = minStat.size / 1024;
   expect(minKb).toBeLessThan(200);
 
-  console.log(`  Dev bundle: ${(devStat.size / 1024).toFixed(1)} KB`);
-  console.log(`  Min bundle: ${(minStat.size / 1024).toFixed(1)} KB`);
 });
 
 test("built bundles are valid JavaScript modules", async () => {

@@ -3,8 +3,9 @@
 import { parseDocument } from "../core/parser";
 import { computeScaleFactor } from "../core/scale";
 import { scaleQuantity } from "../core/scale-quantity";
-import { formatQuantity } from "../core/format";
-import { lookupUnit } from "../core/units";
+import { formatQuantity, numberToFractionText } from "../core/format";
+import { isMetricFamily, lookupUnit } from "../core/units";
+import { readNumber } from "../core/quantity";
 import { slug } from "../core/slug";
 import { computeSourceSpans } from "../core/source-spans";
 import { applyLineEdits } from "../core/edit-format";
@@ -26,6 +27,7 @@ import type {
   TimerDuration,
   UnitDimension,
   UnitFamily,
+  ScalePreset,
   ScaleSelection,
   SectionLine,
   Source,
@@ -33,6 +35,13 @@ import type {
 import type { SourceSpan } from "../core/source-spans";
 
 const TAG_NAME = "kr-recipe";
+
+// No separate icon — the scale toggle is a chip showing the current scale label
+
+const CAUTION_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+const ANCHOR_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="3"/><line x1="12" y1="8" x2="12" y2="22"/><path d="M5 12H2a10 10 0 0020 0h-3"/></svg>';
+const ANCHOR_ICON_SMALL_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="3"/><line x1="12" y1="8" x2="12" y2="22"/><path d="M5 12H2a10 10 0 0020 0h-3"/></svg>';
+
 
 const escapeHtml = (value: string): string =>
   value
@@ -315,7 +324,8 @@ const renderNotesSection = (
   return `<section class="kr-section" data-kr-kind="notes">${heading}<div class="kr-section__body">${content}</div></section>`;
 };
 
-type QuantityDisplayMode = "native" | "alt-mass" | "alt-volume";
+type QuantityDisplayMode = "native" | "metric" | "imperial";
+type TemperatureDisplayMode = "F" | "C" | null;
 type LayoutPreset =
   | "stacked"
   | "two-column"
@@ -330,6 +340,7 @@ type TargetInfo = { name: string; type: "ingredient" | "recipe" };
 interface RenderOptions {
   scaleFactor: number;
   quantityDisplay: QuantityDisplayMode;
+  temperatureDisplay: TemperatureDisplayMode;
   layout: LayoutPreset;
   diagnosticsMode: DiagnosticsMode;
   diagnosticsMap?: Map<number, Diagnostic[]>;
@@ -340,6 +351,7 @@ interface RenderOptions {
 const DEFAULT_RENDER_OPTIONS: RenderOptions = {
   scaleFactor: 1,
   quantityDisplay: "native",
+  temperatureDisplay: null,
   layout: "stacked",
   diagnosticsMode: "summary",
 };
@@ -384,6 +396,7 @@ interface AlternateDisplay {
   text: string | null;
   dimension: DimensionKind;
   hasQuantity: boolean;
+  isMetric: boolean;
 }
 
 const pickAlternateDisplay = (
@@ -394,12 +407,12 @@ const pickAlternateDisplay = (
     return null;
   }
 
-  const preferredDimension: DimensionKind = mode === "alt-mass" ? "mass" : "volume";
-  const preferred = candidates.find(
-    (candidate) => candidate.dimension === preferredDimension && candidate.text,
-  );
-  if (preferred) {
-    return preferred;
+  if (mode === "metric") {
+    const preferred = candidates.find((c) => c.isMetric && c.text);
+    if (preferred) return preferred;
+  } else if (mode === "imperial") {
+    const preferred = candidates.find((c) => !c.isMetric && c.hasQuantity && c.text);
+    if (preferred) return preferred;
   }
 
   const withQuantity = candidates.find((candidate) => candidate.hasQuantity && candidate.text);
@@ -591,8 +604,26 @@ const convertTemperature = (value: number, scale: "F" | "C"): { other: number; o
   return { other: Math.round((value * 9) / 5 + 32), otherScale: "F" };
 };
 
-const renderTemperatureToken = (token: DocumentStepTemperatureToken): string => {
+const renderTemperatureToken = (
+  token: DocumentStepTemperatureToken,
+  preferredScale: TemperatureDisplayMode = null,
+): string => {
   const { other, otherScale } = convertTemperature(token.value, token.scale);
+
+  // If preferred scale differs from native, show converted as primary
+  if (preferredScale && preferredScale !== token.scale) {
+    const display = `${other}&deg;${otherScale}`;
+    const nativeDisplay = `${token.value}°${token.scale}`;
+    const ariaLabel = `${other} degrees ${otherScale === "F" ? "Fahrenheit" : "Celsius"} (${token.value} degrees ${token.scale === "F" ? "Fahrenheit" : "Celsius"})`;
+    return `<span class="kr-temperature" data-kr-temperature-scale="${escapeAttr(
+      otherScale,
+    )}" data-kr-temperature-value="${String(other)}" data-kr-temperature-alt-scale="${escapeAttr(
+      token.scale,
+    )}" data-kr-temperature-alt-value="${String(token.value)}" aria-label="${escapeAttr(
+      ariaLabel,
+    )}" title="${escapeAttr(nativeDisplay)}">${display}</span>`;
+  }
+
   const display = `${token.value}&deg;${token.scale}`;
   const ariaLabel = `${token.value} degrees ${token.scale === "F" ? "Fahrenheit" : "Celsius"} (about ${other} degrees ${otherScale === "F" ? "Fahrenheit" : "Celsius"})`;
   return `<span class="kr-temperature" data-kr-temperature-scale="${escapeAttr(
@@ -704,7 +735,7 @@ const renderStepLine = (
       inlineTokens.push({
         start: adjustedStart,
         end,
-        html: renderTemperatureToken(token),
+        html: renderTemperatureToken(token, options.temperatureDisplay),
       });
     }
   }
@@ -759,11 +790,11 @@ const renderStepLine = (
         : `kr-recipe-${target}`
       : null;
 
-    const buttonHtml = `<button type="button" class="kr-ref" data-kr-target="${escapeAttr(
+    const buttonHtml = `<span role="button" tabindex="0" class="kr-ref" data-kr-target="${escapeAttr(
         target,
       )}" data-kr-display="${escapeAttr(display)}"${controlsId ? ` aria-controls="${escapeAttr(
         controlsId,
-      )}"` : ""}>${escapeHtml(display)}</button>`;
+      )}"` : ""}>${escapeHtml(display)}</span>`;
 
     // Grab trailing punctuation so it wraps as a unit with the button
     const trailingPunct = text.slice(end).match(/^[.,;:!?)]+/);
@@ -852,7 +883,9 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
 
   const noscale = ingredient.attributes.some((attr) => attr.key === "noscale");
   const baseQuantity = ingredient.quantity ?? null;
-  const shouldScale = Boolean(baseQuantity) && !noscale && options.scaleFactor !== 1;
+  const scalable = Boolean(baseQuantity) && !noscale;
+  dataAttrs.push(`data-kr-scalable="${scalable}"`);
+  const shouldScale = scalable && options.scaleFactor !== 1;
 
   const scaledQuantity = shouldScale && baseQuantity
     ? scaleQuantity(baseQuantity, options.scaleFactor)
@@ -869,10 +902,12 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
     let dimension: DimensionKind = null;
     let hasQuantity = false;
 
+    let isMetric = false;
     if (attr.quantity) {
       hasQuantity = true;
       const unitInfo = attr.quantity.unit ? lookupUnit(attr.quantity.unit) : null;
       dimension = dimensionFromUnit(unitInfo?.family, unitInfo?.dimension);
+      isMetric = isMetricFamily(unitInfo?.family);
       const scaledAlt =
         shouldScale && attr.quantity ? scaleQuantity(attr.quantity, options.scaleFactor) : null;
       const formatted = formatQuantity(attr.quantity, {
@@ -884,43 +919,36 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
       }
     }
 
-    return { attribute: attr, text, dimension, hasQuantity };
+    return { attribute: attr, text, dimension, hasQuantity, isMetric };
   });
 
   const alternateDisplay = pickAlternateDisplay(alternateDisplays, options.quantityDisplay);
 
   let quantityMode: QuantityDisplayMode = "native";
   let primaryQuantity = nativeQuantityText;
-  let secondaryQuantity: string | null = null;
+  let tooltipQuantity: string | null = null;
 
   if (alternateDisplay && alternateDisplay.text) {
     quantityMode = options.quantityDisplay;
     primaryQuantity = alternateDisplay.text;
     if (nativeQuantityText && nativeQuantityText !== alternateDisplay.text) {
-      secondaryQuantity = `native: ${nativeQuantityText}`;
+      tooltipQuantity = nativeQuantityText;
     }
   }
 
   dataAttrs.push(`data-kr-quantity-mode="${quantityMode}"`);
 
   // Build quantity column (always render, even if empty)
-  const quantityParts: string[] = [];
-  if (primaryQuantity) {
-    quantityParts.push(escapeHtml(primaryQuantity));
-  }
-  if (secondaryQuantity) {
-    quantityParts.push(
-      `<span class="kr-ingredient__quantity-secondary">${escapeHtml(
-        `(${secondaryQuantity})`,
-      )}</span>`,
-    );
-  }
-  const quantityContent = quantityParts.join(" ");
+  const quantityContent = primaryQuantity ? escapeHtml(primaryQuantity) : "";
   const quantityAttr = primaryQuantity ? ` data-kr-quantity="${escapeAttr(primaryQuantity)}"` : "";
-  const quantityCell = `<span class="kr-ingredient__quantity"${quantityAttr}>${quantityContent}</span>`;
+  const titleAttr = tooltipQuantity ? ` title="${escapeAttr(tooltipQuantity)}"` : "";
+  const quantityCell = `<span class="kr-ingredient__quantity"${quantityAttr}${titleAttr}>${quantityContent}</span>`;
 
   // Build content column
-  const name = `<span class="kr-ingredient__name">${escapeHtml(ingredient.name)}</span>`;
+  const nameInner = ingredient.linkedRecipeId
+    ? `<a href="#${escapeAttr(ingredient.linkedRecipeId)}" class="kr-subrecipe-link">${escapeHtml(ingredient.name)}</a>`
+    : escapeHtml(ingredient.name);
+  const name = `<span class="kr-ingredient__name">${nameInner}</span>`;
   const modifiers = ingredient.modifiers
     ? `<span class="kr-ingredient__modifiers">${escapeHtml(ingredient.modifiers)}</span>`
     : "";
@@ -929,11 +957,16 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
   const contentParts = [name, modifiers].filter(Boolean);
   const contentCell = `<span class="kr-ingredient__content">${contentParts.join(" ")}</span>`;
 
+  // Caution icon for unscalable ingredients when recipe is scaled
+  const cautionIcon = !scalable && options.scaleFactor !== 1
+    ? `<span class="kr-noscale-icon" title="This ingredient can't be scaled">${CAUTION_ICON_SVG}</span>`
+    : "";
+
   const elementId = `kr-ingredient-${ingredient.id}`;
   const wrapper = `<div class="kr-ingredient__wrapper">${quantityCell}${contentCell}</div>`;
   return `<li class="kr-ingredient${diagnosticClass}" id="${escapeAttr(elementId)}" tabindex="-1" ${dataAttrs.join(
     " ",
-  )}>${diagnosticContent}${wrapper}</li>`;
+  )}>${cautionIcon}${diagnosticContent}${wrapper}</li>`;
 };
 
 const renderIngredientsSection = (
@@ -1007,6 +1040,22 @@ const renderSection = (
   return `<section class="kr-section" data-kr-kind="${escapeAttr(section.kind)}">${heading}<div class="kr-section__body">${lines}</div></section>`;
 };
 
+const renderScaleWidget = (presets: ScalePreset[]): string => {
+  const chips: string[] = [];
+  chips.push(`<button class="kr-scale-chip" data-kr-scale-value="1" role="radio" aria-checked="false">1\u00d7</button>`);
+  chips.push(`<button class="kr-scale-chip" data-kr-scale-value="0.5" role="radio" aria-checked="false">\u00bd</button>`);
+  chips.push(`<button class="kr-scale-chip" data-kr-scale-value="2" role="radio" aria-checked="false">2\u00d7</button>`);
+  for (let i = 0; i < presets.length; i++) {
+    chips.push(`<button class="kr-scale-chip" data-kr-preset-index="${i}" role="radio" aria-checked="false">${escapeHtml(presets[i]!.name)}</button>`);
+  }
+  chips.push(`<span class="kr-scale-divider"></span>`);
+  chips.push(`<button class="kr-scale-chip kr-scale-chip--anchor" data-kr-scale-mode="by-ingredient" role="radio" aria-checked="false" aria-label="Scale by ingredient">${ANCHOR_ICON_SMALL_SVG}</button>`);
+  const bar = `<div class="kr-scale-bar" role="radiogroup" aria-label="Scale recipe" hidden>${chips.join("")}</div>`;
+  // The toggle chip shows the current scale label — JS updates its text
+  const toggle = `<button class="kr-scale-toggle" aria-label="Scale recipe" aria-expanded="false">1\u00d7</button>`;
+  return `<div class="kr-scale-widget">${bar}${toggle}</div>`;
+};
+
 const renderRecipe = (
   recipe: Recipe,
   index: number,
@@ -1014,6 +1063,7 @@ const renderRecipe = (
   targetMeta: Map<string, TargetInfo>,
   stepTokensByLine: Map<number, DocumentStepToken[]>,
   source?: Source,
+  presets?: ScalePreset[],
 ): string => {
   const sections = recipe.sections
     .map((section) => renderSection(recipe, section, options, targetMeta, stepTokensByLine))
@@ -1047,11 +1097,13 @@ const renderRecipe = (
     introHtml = renderIntro(recipe.intro);
   }
 
+  const scaleWidget = roleAttr === "main" ? renderScaleWidget(presets ?? []) : "";
+
   return `<section class="kr-recipe" id="${escapeAttr(recipeElementId)}" tabindex="-1" data-kr-role="${roleAttr}" data-kr-id="${escapeAttr(
     recipe.id,
-  )}" data-kr-layout="${escapeAttr(options.layout)}"><header class="kr-recipe__header"><h2 class="kr-recipe__title${diagnosticClass}" data-kr-line="${recipe.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(
+  )}" data-kr-layout="${escapeAttr(options.layout)}"><header class="kr-recipe__header"><div class="kr-recipe__header-row"><div class="kr-recipe__header-text"><h2 class="kr-recipe__title${diagnosticClass}" data-kr-line="${recipe.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(
     recipe.title,
-  )}</h2>${sourceHtml}</header>${introHtml}${sections}</section>`;
+  )}</h2>${sourceHtml}</div>${scaleWidget}</div></header>${introHtml}${sections}</section>`;
 };
 
 const renderSource = (source: Source): string => {
@@ -1154,8 +1206,9 @@ export const renderDocument = (
     parts.push(diagnosticsSection);
   }
 
+  const scaledAttr = options.scaleFactor !== 1 ? " data-kr-scaled" : "";
   parts.push(
-    `<article class="kr-root" data-kr-scale="${options.scaleFactor}" data-kr-quantity-display="${options.quantityDisplay}" data-kr-layout="${options.layout}" data-kr-diagnostics-count="${diagnosticsCount}">`,
+    `<article class="kr-root" data-kr-scale="${options.scaleFactor}" data-kr-quantity-display="${options.quantityDisplay}" data-kr-layout="${options.layout}" data-kr-diagnostics-count="${diagnosticsCount}"${scaledAttr}>`,
   );
 
   if (doc.documentTitle) {
@@ -1175,10 +1228,11 @@ export const renderDocument = (
       `<p class="kr-empty" role="status">No recipes found in provided content.</p>`,
     );
   } else {
+    const scalePresets = doc.frontmatter?.scales ?? [];
     doc.recipes.forEach((recipe, index) => {
       // Only show source on the main recipe (index 0)
       const source = index === 0 ? doc.frontmatter?.source : undefined;
-      parts.push(renderRecipe(recipe, index, options, targetMeta, stepTokensByLine, source));
+      parts.push(renderRecipe(recipe, index, options, targetMeta, stepTokensByLine, source, scalePresets));
     });
   }
 
@@ -1196,6 +1250,7 @@ export class KrRecipeElement extends HTMLElement {
       "scale",
       "preset",
       "quantity-display",
+      "temperature-display",
       "layout",
       "diagnostics",
     ];
@@ -1209,6 +1264,17 @@ export class KrRecipeElement extends HTMLElement {
   #editable = false;
   #editCleanup: (() => void) | null = null;
   #editSaveActive: (() => void) | null = null;
+  #scaleMode: "fixed" | "by-ingredient" = "fixed";
+  #scaleBarOpen = false;
+  #anchorIngredientId: string | null = null;
+  #anchorCustomAmount: number | null = null;
+  #anchorDisplayText: string | null = null; // user-facing text for the anchor amount
+  #anchorUnit: string | null = null;
+  #anchorEditing = false; // whether the anchor input is visible
+  #anchorCleanup: (() => void) | null = null;
+  #scaleClickOutsideCleanup: (() => void) | null = null;
+  #lastScaleFactor: number = 1;
+  #suppressAttrCallback = false;
 
   connectedCallback(): void {
     this.#isConnected = true;
@@ -1223,9 +1289,22 @@ export class KrRecipeElement extends HTMLElement {
       this.#editCleanup = null;
       this.#editSaveActive = null;
     }
+    if (this.#anchorCleanup) {
+      this.#anchorCleanup();
+      this.#anchorCleanup = null;
+    }
+    if (this.#scaleClickOutsideCleanup) {
+      this.#scaleClickOutsideCleanup();
+      this.#scaleClickOutsideCleanup = null;
+    }
   }
 
-  attributeChangedCallback(): void {
+  attributeChangedCallback(name: string): void {
+    if (this.#suppressAttrCallback) return;
+    // External scale/preset changes should exit anchor mode
+    if (name === "scale" || name === "preset") {
+      this.#resetScale();
+    }
     if (this.#isConnected) {
       this.#render();
     }
@@ -1246,6 +1325,17 @@ export class KrRecipeElement extends HTMLElement {
     const changed = this.#editable !== value;
     this.#editable = value;
     if (changed && this.#isConnected) {
+      // Entering edit mode resets scale to 1x to avoid conflicts
+      if (value) {
+        this.#resetScale();
+        this.#suppressAttrCallback = true;
+        try {
+          this.removeAttribute("scale");
+          this.removeAttribute("preset");
+        } finally {
+          this.#suppressAttrCallback = false;
+        }
+      }
       this.#render();
     }
   }
@@ -1315,6 +1405,21 @@ export class KrRecipeElement extends HTMLElement {
   }
 
   #resolveScaleFactor(doc: DocumentParseResult): { factor: number; presetIndex: number | null } {
+    // Anchor mode: compute scale from anchor ingredient
+    if (this.#scaleMode === "by-ingredient" && this.#anchorIngredientId && this.#anchorCustomAmount != null) {
+      const result = computeScaleFactor(doc, {
+        anchor: {
+          id: this.#anchorIngredientId,
+          amount: this.#anchorCustomAmount,
+          unit: this.#anchorUnit ?? "",
+        },
+      });
+      if (result.ok) {
+        return { factor: result.factor, presetIndex: null };
+      }
+      console.warn(`[kr-recipe] Anchor scaling: ${result.message}`);
+    }
+
     const directScale = this.#parseScaleAttribute();
     if (directScale !== null) {
       return { factor: directScale, presetIndex: null };
@@ -1340,11 +1445,23 @@ export class KrRecipeElement extends HTMLElement {
     }
 
     const normalized = mode.trim().toLowerCase();
-    if (normalized === "alt-mass" || normalized === "alt-volume") {
+    if (normalized === "metric" || normalized === "imperial") {
       return normalized;
+    }
+    // Backward compat: map legacy values
+    if (normalized === "alt-mass" || normalized === "alt-volume") {
+      return "metric";
     }
 
     return "native";
+  }
+
+  #resolveTemperatureDisplay(): TemperatureDisplayMode {
+    const attr = this.getAttribute("temperature-display");
+    if (!attr) return null;
+    const normalized = attr.trim().toUpperCase();
+    if (normalized === "F" || normalized === "C") return normalized;
+    return null;
   }
 
   #resolveLayout(): LayoutPreset {
@@ -1434,165 +1551,322 @@ export class KrRecipeElement extends HTMLElement {
     };
   }
 
-  #setupControls(
-    doc: DocumentParseResult,
-    scaleResolution: { factor: number; presetIndex: number | null },
-    quantityDisplay: QuantityDisplayMode,
-  ): void {
+  /** Reset all scale state back to 1× */
+  #resetScale(): void {
+    this.#scaleMode = "fixed";
+    this.#scaleBarOpen = false;
+    this.#anchorIngredientId = null;
+    this.#anchorCustomAmount = null;
+    this.#anchorDisplayText = null;
+    this.#anchorUnit = null;
+    this.#anchorEditing = false;
+  }
+
+  /** Suppress attributeChangedCallback during internal attribute updates, then render once. */
+  #withSuppressedCallback(fn: () => void): void {
+    this.#suppressAttrCallback = true;
+    try { fn(); } finally { this.#suppressAttrCallback = false; }
+    this.#render();
+  }
+
+  #pickFixedScale(value: string): void {
+    this.#resetScale();
+    this.#withSuppressedCallback(() => {
+      this.removeAttribute("preset");
+      if (value === "1") {
+        this.removeAttribute("scale");
+      } else {
+        this.setAttribute("scale", value);
+      }
+    });
+  }
+
+  #pickPreset(index: string): void {
+    this.#resetScale();
+    this.#withSuppressedCallback(() => {
+      this.removeAttribute("scale");
+      this.setAttribute("preset", index);
+    });
+  }
+
+  #pickByIngredient(): void {
+    this.#resetScale();
+    this.#scaleMode = "by-ingredient";
+    this.#withSuppressedCallback(() => {
+      this.removeAttribute("scale");
+      this.removeAttribute("preset");
+    });
+  }
+
+  #setupScaleInteractions(doc: DocumentParseResult): void {
     if (typeof document === "undefined" || typeof document.createElement !== "function") {
       return;
     }
 
     const root = this.shadowRoot;
-    if (!root) {
-      return;
+    if (!root) return;
+
+    // Clean up previous listeners on persistent nodes (shadow root)
+    if (this.#scaleClickOutsideCleanup) {
+      this.#scaleClickOutsideCleanup();
+      this.#scaleClickOutsideCleanup = null;
+    }
+    if (this.#anchorCleanup) {
+      this.#anchorCleanup();
+      this.#anchorCleanup = null;
     }
 
-    const article = root.querySelector(".kr-root");
-    if (!article) {
-      return;
+    const toggleBtn = root.querySelector<HTMLElement>(".kr-scale-toggle");
+    const scaleBar = root.querySelector<HTMLElement>(".kr-scale-bar");
+    if (!toggleBtn || !scaleBar) return;
+
+    // --- Derive current label for the collapsed toggle ---
+    const allChips = Array.from(scaleBar.querySelectorAll<HTMLElement>(".kr-scale-chip"));
+    let toggleLabel = "1\u00d7";
+    let activeSelector: string | null = null;
+
+    let toggleIsHtml = false;
+    if (this.#scaleMode === "by-ingredient") {
+      toggleIsHtml = true;
+      activeSelector = '[data-kr-scale-mode="by-ingredient"]';
+    } else {
+      const preset = this.getAttribute("preset");
+      const scale = this.getAttribute("scale");
+      if (preset != null) {
+        activeSelector = `[data-kr-preset-index="${preset}"]`;
+      } else {
+        activeSelector = `[data-kr-scale-value="${scale ?? "1"}"]`;
+      }
     }
 
-    root.querySelector(".kr-controls")?.remove();
-
-    const scalePresets = doc.frontmatter?.scales ?? [];
-    const hasScaleControl = scalePresets.length > 0 || this.getAttribute("scale") !== null;
-    const hasAlternateQuantities =
-      doc.recipes.some((recipe) =>
-        recipe.sections.some(
-          (section) =>
-            section.kind === "ingredients" &&
-            section.ingredients.some((ingredient) =>
-              ingredient.attributes.some((attr) => attr.key === "also"),
-            ),
-        ),
-      ) || quantityDisplay !== "native";
-
-    if (!hasScaleControl && !hasAlternateQuantities) {
-      return;
+    // Mark active chip
+    for (const chip of allChips) {
+      const isActive = activeSelector != null && chip.matches(activeSelector);
+      chip.classList.toggle("kr-scale-chip--active", isActive);
+      chip.setAttribute("aria-checked", String(isActive));
+      if (isActive) {
+        if (toggleIsHtml) {
+          toggleLabel = ANCHOR_ICON_SMALL_SVG;
+        } else if (chip.textContent) {
+          toggleLabel = chip.textContent;
+        }
+      }
     }
 
-    const controls = document.createElement("div");
-    controls.className = "kr-controls";
+    if (toggleIsHtml) {
+      toggleBtn.innerHTML = toggleLabel;
+    } else {
+      toggleBtn.textContent = toggleLabel;
+    }
 
-    const presetAttr = this.getAttribute("preset");
-    const scaleAttr = this.getAttribute("scale");
+    // --- Sync open/closed state ---
+    if (this.#scaleBarOpen) {
+      scaleBar.removeAttribute("hidden");
+      toggleBtn.setAttribute("aria-expanded", "true");
+      toggleBtn.classList.add("kr-scale-toggle--open");
+    }
 
-    if (hasScaleControl) {
-      const label = document.createElement("label");
-      label.className = "kr-control-label";
-      label.textContent = "Scale";
+    // --- Event: toggle click opens/closes bar ---
+    toggleBtn.addEventListener("click", (e: Event) => {
+      e.stopPropagation();
+      this.#scaleBarOpen = !this.#scaleBarOpen;
+      if (this.#scaleBarOpen) {
+        scaleBar.removeAttribute("hidden");
+        toggleBtn.setAttribute("aria-expanded", "true");
+        toggleBtn.classList.add("kr-scale-toggle--open");
+      } else {
+        scaleBar.setAttribute("hidden", "");
+        toggleBtn.setAttribute("aria-expanded", "false");
+        toggleBtn.classList.remove("kr-scale-toggle--open");
+      }
+    });
 
-      const select = document.createElement("select");
-      select.className = "kr-control-select kr-scale-control";
+    // --- Event: click outside closes bar (on shadow root — must be cleaned up) ---
+    const clickOutsideHandler = () => {
+      if (this.#scaleBarOpen) {
+        this.#scaleBarOpen = false;
+        scaleBar.setAttribute("hidden", "");
+        toggleBtn.setAttribute("aria-expanded", "false");
+        toggleBtn.classList.remove("kr-scale-toggle--open");
+      }
+    };
+    root.addEventListener("click", clickOutsideHandler);
+    this.#scaleClickOutsideCleanup = () => root.removeEventListener("click", clickOutsideHandler);
+    scaleBar.addEventListener("click", (e: Event) => e.stopPropagation());
 
-      const addOption = (value: string, text: string) => {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = text;
-        select.append(option);
-      };
+    // --- Event: chip clicks ---
+    for (const chip of allChips) {
+      chip.addEventListener("click", () => {
+        const sv = chip.dataset.krScaleValue;
+        const pi = chip.dataset.krPresetIndex;
+        const sm = chip.dataset.krScaleMode;
 
-      addOption("scale:1", "Original (1×)");
-
-      scalePresets.forEach((preset, index) => {
-        addOption(`preset:${index}`, preset.name);
+        if (sm === "by-ingredient") {
+          this.#pickByIngredient();
+        } else if (pi != null) {
+          this.#pickPreset(pi);
+        } else if (sv != null) {
+          this.#pickFixedScale(sv);
+        }
       });
+    }
 
-      if (scaleAttr && scaleAttr.trim() !== "" && scaleAttr !== "1") {
-        const numeric = Number(scaleAttr);
-        const labelText = Number.isFinite(numeric) ? `${numeric}×` : `${scaleAttr}×`;
-        const existing = Array.from(select.options).some((option) => option.value === `scale:${scaleAttr}`);
-        if (!existing) {
-          addOption(`scale:${scaleAttr}`, labelText);
-        }
+    // --- Anchor mode setup ---
+    if (this.#scaleMode === "by-ingredient") {
+      const krRoot = root.querySelector(".kr-root");
+      if (krRoot) {
+        krRoot.setAttribute("data-kr-anchor-mode", "");
       }
 
-      let matched = false;
-      if (presetAttr) {
-        const normalized = presetAttr.trim();
-        let index = Number(normalized);
-        if (!Number.isInteger(index)) {
-          index = scalePresets.findIndex(
-            (preset) => preset.name.toLowerCase() === normalized.toLowerCase(),
-          );
-        }
-        if (Number.isInteger(index) && index >= 0 && index < scalePresets.length) {
-          select.value = `preset:${index}`;
-          matched = true;
-        }
-      } else if (scaleResolution.presetIndex != null) {
-        select.value = `preset:${scaleResolution.presetIndex}`;
-        matched = true;
-      }
+      const cleanupFns: (() => void)[] = [];
+      const scalableIngredients = Array.from(
+        root.querySelectorAll<HTMLElement>('.kr-ingredient[data-kr-scalable="true"]'),
+      );
 
-      if (!matched && scaleAttr && scaleAttr.trim() !== "") {
-        select.value = `scale:${scaleAttr}`;
-        matched = true;
-      }
-
-      if (!matched) {
-        select.value = "scale:1";
-      }
-
-      select.addEventListener("change", (event) => {
-        const value = (event.target as HTMLSelectElement).value;
-        if (value.startsWith("preset:")) {
-          const index = Number(value.slice("preset:".length));
-          if (Number.isInteger(index) && index >= 0) {
-            this.setAttribute("preset", String(index));
-            this.removeAttribute("scale");
+      for (const ingEl of scalableIngredients) {
+        const handler = () => {
+          const id = ingEl.dataset.krId;
+          if (!id) return;
+          for (const recipe of doc.recipes) {
+            for (const section of recipe.sections) {
+              if (section.kind !== "ingredients") continue;
+              for (const ing of section.ingredients) {
+                if (ing.id === id && ing.quantity?.kind === "single") {
+                  this.#anchorIngredientId = id;
+                  this.#anchorCustomAmount = ing.quantity.value;
+                  this.#anchorDisplayText = numberToFractionText(ing.quantity.value);
+                  this.#anchorUnit = ing.quantity.unit ?? "";
+                  this.#anchorEditing = true;
+                  this.#render();
+                  return;
+                }
+              }
+            }
           }
-          return;
-        }
-
-        if (value.startsWith("scale:")) {
-          const factor = value.slice("scale:".length);
-          this.removeAttribute("preset");
-          if (factor === "1" || factor === "") {
-            this.removeAttribute("scale");
-          } else {
-            this.setAttribute("scale", factor);
-          }
-        }
-      });
-
-      label.append(select);
-      controls.append(label);
-    }
-
-    if (hasAlternateQuantities) {
-      const label = document.createElement("label");
-      label.className = "kr-control-label";
-      label.textContent = "Quantities";
-
-      const select = document.createElement("select");
-      select.className = "kr-control-select kr-quantity-control";
-
-      const options: QuantityDisplayMode[] = ["native", "alt-mass", "alt-volume"];
-      for (const mode of options) {
-        const option = document.createElement("option");
-        option.value = mode;
-        option.textContent =
-          mode === "native" ? "Native" : mode === "alt-mass" ? "Alt mass" : "Alt volume";
-        select.append(option);
+        };
+        ingEl.addEventListener("click", handler);
+        cleanupFns.push(() => ingEl.removeEventListener("click", handler));
       }
-      select.value = quantityDisplay;
 
-      select.addEventListener("change", (event) => {
-        const value = (event.target as HTMLSelectElement).value as QuantityDisplayMode;
-        if (value === "native") {
-          this.removeAttribute("quantity-display");
-        } else {
-          this.setAttribute("quantity-display", value);
-        }
+      this.#anchorCleanup = () => cleanupFns.forEach((fn) => fn());
+
+      if (this.#anchorIngredientId) {
+        this.#renderAnchorInput(root);
+      } else if (scalableIngredients.length > 0) {
+        // Cycle the anchor icon through scalable ingredients as a hint
+        let cycleIndex = 0;
+        let prevIcon: HTMLElement | null = null;
+
+        const showIconAt = (index: number) => {
+          if (prevIcon?.parentElement) {
+            prevIcon.remove();
+          }
+          const el = scalableIngredients[index];
+          if (!el) return;
+          el.classList.add("kr-ingredient--anchor-hint");
+          const icon = document.createElement("span");
+          icon.className = "kr-anchor-icon kr-anchor-icon--hint";
+          icon.innerHTML = ANCHOR_ICON_SVG;
+          el.prepend(icon);
+          prevIcon = icon;
+
+          // Remove class from previous
+          for (const other of scalableIngredients) {
+            if (other !== el) other.classList.remove("kr-ingredient--anchor-hint");
+          }
+        };
+
+        showIconAt(0);
+        const cycleTimer = setInterval(() => {
+          cycleIndex = (cycleIndex + 1) % scalableIngredients.length;
+          showIconAt(cycleIndex);
+        }, 1200);
+
+        cleanupFns.push(() => {
+          clearInterval(cycleTimer);
+          if (prevIcon?.parentElement) prevIcon.remove();
+          for (const el of scalableIngredients) {
+            el.classList.remove("kr-ingredient--anchor-hint");
+          }
+        });
+      }
+    }
+  }
+
+  #renderAnchorInput(root: ShadowRoot): void {
+    if (!this.#anchorIngredientId) return;
+
+    const anchorEl = root.querySelector<HTMLElement>(
+      `.kr-ingredient[data-kr-id="${this.#anchorIngredientId}"]`,
+    );
+    if (!anchorEl) return;
+
+    anchorEl.classList.add("kr-ingredient--anchor");
+    const qtySpan = anchorEl.querySelector<HTMLElement>(".kr-ingredient__quantity");
+    if (!qtySpan) return;
+
+    const displayText = this.#anchorDisplayText ?? numberToFractionText(this.#anchorCustomAmount ?? 1);
+    const unitLabel = this.#anchorUnit ?? "";
+
+    if (!this.#anchorEditing) {
+      // Display mode: pin in gutter, normal quantity text (clickable to edit)
+      // Keep the existing rendered quantity text, just prepend the pin icon
+      const existingText = qtySpan.textContent ?? `${displayText}${unitLabel ? ` ${unitLabel}` : ""}`;
+      qtySpan.innerHTML = `<span class="kr-anchor-icon">${ANCHOR_ICON_SVG}</span>${escapeHtml(existingText)}`;
+      qtySpan.classList.add("kr-anchor-display");
+      qtySpan.addEventListener("click", (e: Event) => {
+        e.stopPropagation();
+        this.#anchorEditing = true;
+        this.#render();
       });
-
-      label.append(select);
-      controls.append(label);
+      return;
     }
 
-    root.insertBefore(controls, article);
+    // Edit mode: pin in gutter, input + unit label
+    const unitSuffix = unitLabel ? ` <span class="kr-anchor-unit">${escapeHtml(unitLabel)}</span>` : "";
+    qtySpan.innerHTML = `<span class="kr-anchor-icon">${ANCHOR_ICON_SVG}</span><input class="kr-anchor-input" type="text" value="${escapeAttr(displayText)}" aria-label="Scale quantity">${unitSuffix}`;
+
+    const input = qtySpan.querySelector<HTMLInputElement>(".kr-anchor-input");
+    if (!input) return;
+
+    // Size input to fit its value
+    const sizeToFit = () => { input.style.width = `${Math.max(2, input.value.length + 1)}ch`; };
+    sizeToFit();
+    input.addEventListener("input", sizeToFit);
+
+    input.select();
+    if (typeof input.focus === "function") {
+      input.focus();
+    }
+
+    const commitAndClose = () => {
+      // Guard against blur firing on a detached input during innerHTML replacement
+      if (!input.isConnected) return;
+      const text = input.value.trim();
+      const val = readNumber(text);
+      if (val != null && val > 0) {
+        this.#anchorCustomAmount = val;
+        this.#anchorDisplayText = text;
+      }
+      this.#anchorEditing = false;
+      this.#render();
+    };
+
+    input.addEventListener("blur", commitAndClose);
+
+    input.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commitAndClose();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        this.#anchorEditing = false;
+        this.#render();
+      }
+    });
+
+    // Prevent ingredient click from triggering while editing
+    input.addEventListener("click", (e: Event) => e.stopPropagation());
   }
 
   #setupReferenceInteractions(): void {
@@ -1606,14 +1880,14 @@ export class KrRecipeElement extends HTMLElement {
     }
 
     const refs = Array.from(
-      root.querySelectorAll<HTMLButtonElement>(".kr-ref[data-kr-target]"),
+      root.querySelectorAll<HTMLElement>(".kr-ref[data-kr-target]"),
     );
     if (refs.length === 0) {
       return;
     }
 
-    let activeRef: HTMLButtonElement | null = null;
-    let lockedRef: HTMLButtonElement | null = null;
+    let activeRef: HTMLElement | null = null;
+    let lockedRef: HTMLElement | null = null;
 
     const clearHighlight = () => {
       if (activeRef) {
@@ -1627,7 +1901,7 @@ export class KrRecipeElement extends HTMLElement {
       activeRef = null;
     };
 
-    const highlight = (ref: HTMLButtonElement, targetId: string, lock: boolean) => {
+    const highlight = (ref: HTMLElement, targetId: string, lock: boolean) => {
       const escaped = cssEscape(targetId);
       const targetNodes = Array.from(
         root.querySelectorAll<HTMLElement>(`[data-kr-id="${escaped}"]`),
@@ -1726,6 +2000,22 @@ export class KrRecipeElement extends HTMLElement {
     });
   }
 
+  #setupSubrecipeLinks(): void {
+    const root = this.shadowRoot;
+    if (!root?.querySelectorAll) return;
+
+    for (const link of Array.from(root.querySelectorAll<HTMLAnchorElement>(".kr-subrecipe-link"))) {
+      link.addEventListener("click", (event: Event) => {
+        event.preventDefault();
+        const href = link.getAttribute("href");
+        if (!href) return;
+        const recipeId = href.slice(1); // strip leading #
+        const target = root.getElementById(`kr-recipe-${recipeId}`);
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }
+
   #render(): void {
     const shadow = this.#ensureShadowRoot();
     const source = (this.#content ?? this.#readInlineSource()).trim();
@@ -1744,10 +2034,12 @@ export class KrRecipeElement extends HTMLElement {
     const result = parseDocument(source);
     const scaleResolution = this.#resolveScaleFactor(result);
     const quantityDisplay = this.#resolveQuantityDisplay();
+    const temperatureDisplay = this.#resolveTemperatureDisplay();
     const layout = this.#resolveLayout();
     const html = renderDocument(result, {
       scaleFactor: scaleResolution.factor,
       quantityDisplay,
+      temperatureDisplay,
       layout,
       diagnosticsMode: this.#resolveDiagnosticsMode(),
       sourceLines: source.split("\n"),
@@ -1762,9 +2054,26 @@ export class KrRecipeElement extends HTMLElement {
       }
     }
 
-    this.#setupControls(result, scaleResolution, quantityDisplay);
+    this.#setupScaleInteractions(result);
+
+    // Dispatch kr:scale-change when factor changes
+    if (scaleResolution.factor !== this.#lastScaleFactor) {
+      this.#lastScaleFactor = scaleResolution.factor;
+      const scaleDetail: { factor: number; mode: string; anchorId?: string } = {
+        factor: scaleResolution.factor,
+        mode: this.#scaleMode,
+      };
+      if (this.#scaleMode === "by-ingredient" && this.#anchorIngredientId) {
+        scaleDetail.anchorId = this.#anchorIngredientId;
+      }
+      this.dispatchEvent(new CustomEvent("kr:scale-change", { detail: scaleDetail }));
+    }
+
     this.#setupTimerInteractions();
-    this.#setupReferenceInteractions();
+    if (!this.#editable) {
+      this.#setupReferenceInteractions();
+      this.#setupSubrecipeLinks();
+    }
     this.#setupDiagnosticMarkers();
     this.#setupDiagnosticsInteractions();
     this.#setupStepProgressionInteractions();
@@ -1914,6 +2223,7 @@ export class KrRecipeElement extends HTMLElement {
     // Click handler for steps
     steps.forEach((step) => {
       const handleStepClick = () => {
+        if (this.#editable) return;
         const recipeId = step.getAttribute("data-kr-recipe-id") ?? "";
         const stepIndex = Number(step.getAttribute("data-kr-step-index"));
 
@@ -1941,6 +2251,11 @@ export class KrRecipeElement extends HTMLElement {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Disable step navigation in edit mode
       if (this.#editable) return;
+
+      // Don't intercept keys when an input/textarea is focused (check composedPath for shadow DOM)
+      const origin = e.composedPath()[0] as HTMLElement | undefined;
+      const originTag = origin?.tagName;
+      if (originTag === "INPUT" || originTag === "TEXTAREA") return;
 
       // Only handle if not focused on a specific interactive element
       if (e.target !== this && !(e.target as HTMLElement)?.closest?.('.kr-recipe')) {

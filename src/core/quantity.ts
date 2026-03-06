@@ -36,7 +36,7 @@ const replaceVulgarFractions = (input: string): string => {
 
 const NUMBER_PATTERN = /^(?:(?<whole>\d+(?:\.\d+)?)(?:\s+(?<num>[1-9]\d*)\/(?<den>[1-9]\d*))?|(?<fracNum>[1-9]\d*)\/(?<fracDen>[1-9]\d*))$/;
 
-const readNumber = (input: string): number | null => {
+export const readNumber = (input: string): number | null => {
   const candidate = input.trim();
   const match = NUMBER_PATTERN.exec(candidate);
   if (!match || !match.groups) {

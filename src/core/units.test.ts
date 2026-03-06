@@ -3,6 +3,7 @@ import {
   UNITS,
   choosePreferredUnit,
   fromBaseValue,
+  isMetricFamily,
   lookupUnit,
   roundToProfile,
   toBaseValue,
@@ -42,4 +43,12 @@ test("choosePreferredUnit selects preferred unit based on thresholds", () => {
 test("choosePreferredUnit returns null when no preferred unit", () => {
   const count = lookupUnit("each")!;
   expect(choosePreferredUnit(10, count.family)).toBeNull();
+});
+
+test("isMetricFamily identifies metric unit families", () => {
+  expect(isMetricFamily("mass")).toBe(true);
+  expect(isMetricFamily("volume_metric")).toBe(true);
+  expect(isMetricFamily("volume_us")).toBe(false);
+  expect(isMetricFamily("count")).toBe(false);
+  expect(isMetricFamily(undefined)).toBe(false);
 });

@@ -10,6 +10,7 @@ import type {
   IngredientsSection,
   ParseOptions,
   Recipe,
+  RecipeLink,
   RecipeSection,
   SectionKind,
   StepsSection,
@@ -18,6 +19,7 @@ import type {
   SectionLine,
   ReferenceToken,
 } from "./types";
+import { lookupUnit } from "./units";
 import { createIdRegistry } from "./id-registry";
 
 const SECTION_MAP: Record<string, SectionKind> = {
@@ -27,6 +29,8 @@ const SECTION_MAP: Record<string, SectionKind> = {
 };
 
 const STEP_NUMBER_RE = /^\s*\d+\.\s+/;
+const BULLET_RE = /^[-*]\s+/;
+const NOTES_HEADER_RE = /^#{3,4}\s+/;
 
 const error = (code: string, message: string, line: number): Diagnostic => ({
   code,
@@ -98,6 +102,68 @@ const unwrapStepLines = (lines: SectionLine[]): SectionLine[] => {
   }
 
   // Don't forget the last step if any
+  if (current) {
+    unwrapped.push(current);
+  }
+
+  return unwrapped;
+};
+
+/**
+ * Reflows notes text by joining continuation lines.
+ * Bullets (- or *), ordered list items (1.), and headers (### or ####)
+ * start new blocks. Plain text continues the previous block.
+ * Empty lines create paragraph breaks.
+ */
+const unwrapNotesLines = (lines: SectionLine[]): SectionLine[] => {
+  const unwrapped: SectionLine[] = [];
+  let current: SectionLine | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.text.trim();
+
+    // Empty lines end the current block
+    if (trimmed === "") {
+      if (current) {
+        unwrapped.push(current);
+        current = null;
+      }
+      unwrapped.push(line);
+      continue;
+    }
+
+    // Headers are always standalone — flush and emit immediately
+    if (NOTES_HEADER_RE.test(trimmed)) {
+      if (current) {
+        unwrapped.push(current);
+        current = null;
+      }
+      unwrapped.push({ text: trimmed, line: line.line });
+      continue;
+    }
+
+    // Bullets and ordered list items start a new block
+    if (BULLET_RE.test(trimmed) || STEP_NUMBER_RE.test(trimmed)) {
+      if (current) {
+        unwrapped.push(current);
+      }
+      current = { text: trimmed, line: line.line };
+      continue;
+    }
+
+    // Continuation line — join to current block
+    if (current) {
+      current = {
+        text: current.text + " " + trimmed,
+        line: current.line,
+      };
+      continue;
+    }
+
+    // Start a new paragraph block
+    current = { text: trimmed, line: line.line };
+  }
+
   if (current) {
     unwrapped.push(current);
   }
@@ -193,8 +259,11 @@ export const parseDocument = (
     const trimmed = line.trim();
 
     if (trimmed === "") {
-      // Capture empty lines for intro (to preserve paragraph breaks)
-      if (currentRecipe && !currentSection) {
+      if (currentSection) {
+        // Preserve blank lines in sections (notes uses them for paragraph breaks)
+        currentSection.lines.push({ text: "", line: actualLine });
+      } else if (currentRecipe) {
+        // Capture empty lines for intro (to preserve paragraph breaks)
         currentRecipe.introLines.push(line);
       }
       continue;
@@ -330,6 +399,9 @@ export const parseDocument = (
       } else if (section.kind === "steps") {
         // Unwrap continuation lines in steps
         section.lines = unwrapStepLines(section.lines);
+      } else if (section.kind === "notes") {
+        // Unwrap continuation lines in notes
+        section.lines = unwrapNotesLines(section.lines);
       }
     }
   }
@@ -510,6 +582,66 @@ export const parseDocument = (
     );
   }
 
+  // ── Recipe linking pass ───────────────────────────────────────────
+  const recipeLinks: RecipeLink[] = [];
+  const recipeById = new Map<string, Recipe>();
+  for (const recipe of recipes) {
+    recipeById.set(recipe.id, recipe);
+  }
+
+  const linkedRecipeIds = new Set<string>();
+
+  for (const recipe of recipes) {
+    for (const section of recipe.sections) {
+      if (section.kind !== "ingredients") continue;
+      for (const ingredient of section.ingredients) {
+        const targetRecipe = recipeById.get(ingredient.id);
+        if (targetRecipe && targetRecipe.id !== recipe.id) {
+          ingredient.linkedRecipeId = targetRecipe.id;
+          recipeLinks.push({
+            fromRecipeId: recipe.id,
+            ingredientId: ingredient.id,
+            toRecipeId: targetRecipe.id,
+          });
+          linkedRecipeIds.add(targetRecipe.id);
+        } else {
+          // W0501: unit is recipe/batch but no matching recipe found
+          const unit = ingredient.quantity?.unit;
+          if (unit) {
+            const unitInfo = lookupUnit(unit);
+            if (
+              unitInfo &&
+              (unitInfo.canonical === "recipe" || unitInfo.canonical === "batch")
+            ) {
+              diagnostics.push(
+                warning(
+                  "W0501",
+                  `Ingredient "${ingredient.name}" uses unit "${unit}" but no matching recipe was found.`,
+                  ingredient.line,
+                ),
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // W0502: orphan recipes (index > 0, not referenced, and not referencing others)
+  const recipesWithOutgoingLinks = new Set(recipeLinks.map((l) => l.fromRecipeId));
+  for (let i = 1; i < recipes.length; i++) {
+    const recipe = recipes[i]!;
+    if (!linkedRecipeIds.has(recipe.id) && !recipesWithOutgoingLinks.has(recipe.id)) {
+      diagnostics.push(
+        warning(
+          "W0502",
+          `Recipe "${recipe.title}" is not referenced by any ingredient in another recipe.`,
+          recipe.line,
+        ),
+      );
+    }
+  }
+
   return {
     frontmatter: frontmatterResult.frontmatter,
     body: frontmatterResult.body,
@@ -519,5 +651,6 @@ export const parseDocument = (
     recipes,
     stepTokens,
     references,
+    recipeLinks,
   };
 };

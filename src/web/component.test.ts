@@ -11,6 +11,7 @@ class FakeHTMLElement {
   shadowRoot: FakeShadowRoot | null = null;
   #text = "";
   #attributes = new Map<string, string>();
+  #listeners = new Map<string, Set<(e: Event) => void>>();
 
   get textContent(): string {
     return this.#text;
@@ -25,6 +26,27 @@ class FakeHTMLElement {
       this.shadowRoot = new FakeShadowRoot();
     }
     return this.shadowRoot;
+  }
+
+  addEventListener(type: string, listener: (e: Event) => void) {
+    if (!this.#listeners.has(type)) {
+      this.#listeners.set(type, new Set());
+    }
+    this.#listeners.get(type)!.add(listener);
+  }
+
+  removeEventListener(type: string, listener: (e: Event) => void) {
+    this.#listeners.get(type)?.delete(listener);
+  }
+
+  dispatchEvent(event: Event): boolean {
+    const listeners = this.#listeners.get(event.type);
+    if (listeners) {
+      for (const listener of listeners) {
+        listener(event);
+      }
+    }
+    return true;
   }
 
   setAttribute(name: string, value: string) {
@@ -316,11 +338,19 @@ test("KrRecipeElement responds to scale and quantity-display attributes", () => 
   const scaled = element.shadowRoot?.innerHTML ?? "";
   expect(scaled).toContain('data-kr-quantity="3 cup"');
 
+  // "metric" mode shows alternate mass quantity, native in tooltip
+  element.setAttribute("quantity-display", "metric");
+  const metricHtml = element.shadowRoot?.innerHTML ?? "";
+  expect(metricHtml).toContain('data-kr-quantity-mode="metric"');
+  expect(metricHtml).toContain('data-kr-quantity="270 g"');
+  expect(metricHtml).toContain('title="3 cup"');
+  expect(metricHtml).not.toContain("kr-ingredient__quantity-secondary");
+
+  // Backward compat: "alt-mass" treated as "metric"
   element.setAttribute("quantity-display", "alt-mass");
-  const alt = element.shadowRoot?.innerHTML ?? "";
-  expect(alt).toContain('data-kr-quantity-mode="alt-mass"');
-  expect(alt).toContain('data-kr-quantity="270 g"');
-  expect(alt).toContain("native: 3 cup");
+  const altMassHtml = element.shadowRoot?.innerHTML ?? "";
+  expect(altMassHtml).toContain('data-kr-quantity-mode="metric"');
+  expect(altMassHtml).toContain('data-kr-quantity="270 g"');
 
   element.setAttribute("layout", "two-column");
   const layoutHtml = element.shadowRoot?.innerHTML ?? "";
@@ -369,11 +399,11 @@ test("renderDocument applies scale factor and alternate quantity display", () =>
   expect(scaledHtml).toContain('data-kr-quantity-mode="native"');
 
   const altHtml = componentModule.renderDocument(parsed, {
-    quantityDisplay: "alt-mass",
+    quantityDisplay: "metric",
   });
-  expect(altHtml).toContain('data-kr-quantity-mode="alt-mass"');
+  expect(altHtml).toContain('data-kr-quantity-mode="metric"');
   expect(altHtml).toContain('data-kr-quantity="120 g"');
-  expect(altHtml).toContain("native: 1 cup");
+  expect(altHtml).toContain('title="1 cup"');
 
   const layoutHtml = componentModule.renderDocument(parsed, {
     layout: "two-column",
@@ -418,9 +448,9 @@ test("trailing punctuation after reference wraps as a unit with the reference", 
 
   const html = componentModule.renderDocument(parseDocument(markdown));
   // Comma after [[chard]] must be inside the nowrap span so it doesn't wrap separately
-  expect(html).toMatch(/chard<\/button>,<\/span>/);
+  expect(html).toMatch(/chard<\/span>,<\/span>/);
   // Period after [[broth]] must also be kept with the reference
-  expect(html).toMatch(/broth<\/button>\.<\/span>/);
+  expect(html).toMatch(/broth<\/span>\.<\/span>/);
 });
 
 test("ingredients render with wrapper div for highlight compatibility", () => {
@@ -735,6 +765,236 @@ test("renderDocument renders steps with inline formatting", () => {
   expect(html).toContain("<em>italic</em>");
   expect(html).toContain('href="https://example.com"');
   expect(html).toContain(">this link</a>");
+});
+
+test("imperial quantity-display prefers non-metric also values", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Demo",
+    "",
+    "# Bread",
+    "## Ingredients",
+    '- flour - 500 g :: also="4 cup"',
+    "## Steps",
+    "1. Mix.",
+  ].join("\n");
+
+  const parsed = parseDocument(markdown);
+  const html = componentModule.renderDocument(parsed, {
+    quantityDisplay: "imperial",
+  });
+  expect(html).toContain('data-kr-quantity-mode="imperial"');
+  expect(html).toContain('data-kr-quantity="4 cup"');
+  expect(html).toContain('title="500 g"');
+});
+
+test("temperature-display C converts F temperatures", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Demo",
+    "",
+    "# Roast",
+    "## Steps",
+    "1. Preheat @350F.",
+  ].join("\n");
+
+  const parsed = parseDocument(markdown);
+  const html = componentModule.renderDocument(parsed, {
+    temperatureDisplay: "C",
+  });
+  // 350F → ~177C
+  expect(html).toContain("177&deg;C");
+  expect(html).toContain('title="350\u00b0F"');
+});
+
+test("temperature-display F converts C temperatures", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Demo",
+    "",
+    "# Roast",
+    "## Steps",
+    "1. Preheat @180C.",
+  ].join("\n");
+
+  const parsed = parseDocument(markdown);
+  const html = componentModule.renderDocument(parsed, {
+    temperatureDisplay: "F",
+  });
+  // 180C → 356F
+  expect(html).toContain("356&deg;F");
+  expect(html).toContain('title="180\u00b0C"');
+});
+
+test("temperature-display unset shows native temperature", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Demo",
+    "",
+    "# Roast",
+    "## Steps",
+    "1. Preheat @350F.",
+  ].join("\n");
+
+  const parsed = parseDocument(markdown);
+  const html = componentModule.renderDocument(parsed);
+  expect(html).toContain("350&deg;F");
+  // Native mode: tooltip shows approx conversion, not native temp
+  expect(html).not.toContain('title="350\u00b0F"');
+});
+
+test("KrRecipeElement responds to temperature-display attribute", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const { KrRecipeElement } = componentModule;
+  const element = new KrRecipeElement();
+  element.content = [
+    "# Demo",
+    "",
+    "# Roast",
+    "## Steps",
+    "1. Preheat @350F.",
+  ].join("\n");
+
+  element.connectedCallback();
+
+  const native = element.shadowRoot?.innerHTML ?? "";
+  expect(native).toContain("350&deg;F");
+  expect(native).not.toContain('title="350\u00b0F"');
+
+  element.setAttribute("temperature-display", "C");
+  const celsiusHtml = element.shadowRoot?.innerHTML ?? "";
+  expect(celsiusHtml).toContain("177&deg;C");
+  expect(celsiusHtml).toContain('title="350\u00b0F"');
+});
+
+// ─── Interactive Recipe Scaling ───
+
+test("renderDocument emits data-kr-scalable on ingredients", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const markdown = `# Demo\n\n# R\n## Ingredients\n- flour - 2 cups\n- salt\n- parmesan - 30 g :: noscale\n## Steps\n1. Mix.`;
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  // flour has quantity, no noscale → scalable
+  expect(html).toMatch(/data-kr-id="flour"[^>]*data-kr-scalable="true"/);
+  // salt has no quantity → not scalable
+  expect(html).toMatch(/data-kr-id="salt"[^>]*data-kr-scalable="false"/);
+  // parmesan has quantity but noscale → not scalable
+  expect(html).toMatch(/data-kr-id="parmesan"[^>]*data-kr-scalable="false"/);
+});
+
+test("renderDocument includes scale toggle button in main recipe header", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const markdown = `# Demo\n\n# Soup\n## Ingredients\n- salt - 1 tsp\n## Steps\n1. Stir.`;
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  // Extract content after </style>
+  const content = html.slice(html.indexOf("</style>") + 8);
+
+  expect(content).toContain('class="kr-scale-toggle"');
+  expect(content).toContain('aria-label="Scale recipe"');
+  // Only one toggle (main recipe only)
+  expect(content.match(/class="kr-scale-toggle"/g)).toHaveLength(1);
+});
+
+test("renderDocument does not show scale toggle for secondary recipes", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const markdown = `# Doc\n\n# Main\n## Ingredients\n- salt - 1 tsp\n## Steps\n1. A.\n\n# Side\n## Ingredients\n- pepper\n## Steps\n1. B.`;
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  const content = html.slice(html.indexOf("</style>") + 8);
+
+  // One toggle only (on the main recipe)
+  expect(content.match(/class="kr-scale-toggle"/g)).toHaveLength(1);
+});
+
+test("renderDocument includes hidden scale bar with canned options", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const markdown = `# Demo\n\n# Soup\n## Ingredients\n- salt - 1 tsp\n## Steps\n1. Stir.`;
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  expect(html).toContain('class="kr-scale-bar"');
+  expect(html).toContain("hidden");
+  // Canned chips
+  expect(html).toContain('data-kr-scale-value="1"');
+  expect(html).toContain('data-kr-scale-value="0.5"');
+  expect(html).toContain('data-kr-scale-value="2"');
+  // By-ingredient option
+  expect(html).toContain('data-kr-scale-mode="by-ingredient"');
+});
+
+test("renderDocument includes named presets in scale bar", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const markdown = `---\nversion: 1\nscales:\n  - name: Family Size\n    anchor: { id: oats, amount: 900, unit: g }\n---\n# Demo\n\n# Porridge\n## Ingredients\n- oats - 300 g\n## Steps\n1. Cook.`;
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  expect(html).toContain('data-kr-preset-index="0"');
+  expect(html).toContain("Family Size");
+});
+
+test("data-kr-scaled attribute appears on root when factor != 1", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const markdown = `# Demo\n\n# R\n## Ingredients\n- flour - 2 cups\n## Steps\n1. Mix.`;
+  const parsed = parseDocument(markdown);
+
+  const scaledHtml = componentModule.renderDocument(parsed, { scaleFactor: 2 });
+  const scaledContent = scaledHtml.slice(scaledHtml.indexOf("</style>") + 8);
+  expect(scaledContent).toContain("data-kr-scaled");
+
+  const unscaledHtml = componentModule.renderDocument(parsed, { scaleFactor: 1 });
+  const unscaledContent = unscaledHtml.slice(unscaledHtml.indexOf("</style>") + 8);
+  expect(unscaledContent).not.toContain("data-kr-scaled");
+});
+
+test("KrRecipeElement fires kr:scale-change when scale changes", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const { KrRecipeElement } = componentModule;
+  const el = new KrRecipeElement();
+  el.content = `# Demo\n\n# R\n## Ingredients\n- flour - 2 cups\n## Steps\n1. Mix.`;
+  el.connectedCallback();
+
+  let detail: unknown = null;
+  el.addEventListener("kr:scale-change", (e: Event) => {
+    detail = (e as CustomEvent).detail;
+  });
+  el.setAttribute("scale", "2");
+  expect(detail).toEqual({ factor: 2, mode: "fixed" });
+});
+
+test("setting scale attribute externally exits anchor mode", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const { KrRecipeElement } = componentModule;
+  const el = new KrRecipeElement();
+  el.content = `# Demo\n\n# R\n## Ingredients\n- flour - 2 cups\n- sugar - 1 cup\n## Steps\n1. Mix.`;
+  el.connectedCallback();
+
+  // Set scale externally — the scale bar chip for by-ingredient should not be active
+  el.setAttribute("scale", "2");
+  const html = el.shadowRoot?.innerHTML ?? "";
+  // The article element should not have data-kr-anchor-mode as an attribute
+  expect(html).toMatch(/class="kr-root"[^>]*data-kr-scaled/);
+  // The by-ingredient chip should not be active
+  expect(html).not.toMatch(/kr-scale-chip--active[^"]*"[^>]*data-kr-scale-mode="by-ingredient"/);
 });
 
 test("steps inline formatting works alongside references and timers", () => {

@@ -48,7 +48,7 @@ ${bundleMarkdown(markdown)}
           return !!host?.shadowRoot?.querySelector(".kr-ref");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Click reference and check activation

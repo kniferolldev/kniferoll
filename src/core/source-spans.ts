@@ -62,9 +62,18 @@ export function computeSourceSpans(
         for (const ingredient of section.ingredients) {
           elementLines.push(ingredient.line);
         }
+      } else if (section.kind === "notes") {
+        // After unwrapping, each non-empty line is a logical block
+        for (const line of section.lines) {
+          if (line.text.trim() !== "") {
+            elementLines.push(line.line);
+          }
+        }
       } else {
         for (const line of section.lines) {
-          elementLines.push(line.line);
+          if (line.text.trim() !== "") {
+            elementLines.push(line.line);
+          }
         }
       }
     }

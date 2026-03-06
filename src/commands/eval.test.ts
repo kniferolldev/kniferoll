@@ -142,28 +142,6 @@ describe("eval argument parsing", () => {
   });
 });
 
-describe("parsePreprocessOptions", () => {
-  test("parses grayscale flag", async () => {
-    const { parsePreprocessOptions } = await import("../import");
-    const opts = parsePreprocessOptions("grayscale");
-    expect(opts.grayscale).toBe(true);
-  });
-
-  test("parses multiple options", async () => {
-    const { parsePreprocessOptions } = await import("../import");
-    const opts = parsePreprocessOptions("grayscale,contrast=1.5,maxWidth=1024");
-    expect(opts.grayscale).toBe(true);
-    expect(opts.contrast).toBe(1.5);
-    expect(opts.maxWidth).toBe(1024);
-  });
-
-  test("parses quality option", async () => {
-    const { parsePreprocessOptions } = await import("../import");
-    const opts = parsePreprocessOptions("quality=90");
-    expect(opts.quality).toBe(90);
-  });
-});
-
 describe("InferenceMetrics", () => {
   test("metrics type has required fields", async () => {
     // Create a mock metrics object to verify the shape

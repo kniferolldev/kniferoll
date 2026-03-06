@@ -123,4 +123,41 @@ describe("computeSourceSpans", () => {
     expect(spans.get(5)).toEqual({ startLine: 5, endLine: 5 });
     expect(spans.get(6)).toEqual({ startLine: 6, endLine: 6 });
   });
+
+  it("handles continuation lines in notes bullets", () => {
+    const md = [
+      "# Recipe",              // 1
+      "",                      // 2
+      "## Ingredients",        // 3
+      "",                      // 4
+      "- salt",                // 5
+      "",                      // 6
+      "## Steps",              // 7
+      "",                      // 8
+      "1. Cook.",              // 9
+      "",                      // 10
+      "## Notes",              // 11
+      "",                      // 12
+      "- **Storage:** Keep in the fridge for", // 13
+      "  up to 5 days.",       // 14
+      "- **Tip:** Use fresh ingredients",      // 15
+      "  for best results.",   // 16
+    ].join("\n");
+
+    const lines = md.split("\n");
+    const result = parseDocument(md);
+    const spans = computeSourceSpans(lines, result);
+
+    // First bullet starts at line 13, spans to line 14
+    const firstSpan = spans.get(13);
+    expect(firstSpan).toBeDefined();
+    expect(firstSpan!.startLine).toBe(13);
+    expect(firstSpan!.endLine).toBe(14);
+
+    // Second bullet starts at line 15, spans to line 16
+    const secondSpan = spans.get(15);
+    expect(secondSpan).toBeDefined();
+    expect(secondSpan!.startLine).toBe(15);
+    expect(secondSpan!.endLine).toBe(16);
+  });
 });

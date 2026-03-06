@@ -53,7 +53,7 @@ ${bundleMarkdown(markdown)}
           return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Test: Document title
@@ -126,7 +126,7 @@ ${bundleMarkdown(markdown)}
           return !!host?.shadowRoot?.querySelector(".kr-step");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       const getActiveStepIndex = async () => {
@@ -219,7 +219,7 @@ ${bundleMarkdown(markdown)}
           return !!host?.shadowRoot?.querySelector(".kr-step");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       const getActiveStepIndex = async () => {
@@ -314,7 +314,7 @@ ${bundleMarkdown(markdown)}
           return !!host?.shadowRoot?.querySelector(".kr-step");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       const getActiveStepIndex = async () => {
@@ -402,7 +402,7 @@ ${bundleMarkdown(markdown)}
           return !!host?.shadowRoot?.querySelector(".kr-step");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Focus the component and select the first step
@@ -423,7 +423,7 @@ ${bundleMarkdown(markdown)}
           return !!step;
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Test: Ingredient is highlighted when step is selected
@@ -529,7 +529,7 @@ ${bundleMarkdown(cookbookMarkdown)}
           return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Test: Cookbook source is displayed correctly in recipe header
@@ -603,7 +603,7 @@ ${bundleMarkdown(urlMarkdown)}
           return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Test: URL source has a link in recipe header
@@ -683,7 +683,7 @@ ${bundleMarkdown(textMarkdown)}
           return !!host?.shadowRoot?.querySelector(".kr-recipe__title");
         },
         undefined,
-        { timeout: 5000 },
+        { timeout: 1000 },
       );
 
       // Test: Text source is displayed in recipe header

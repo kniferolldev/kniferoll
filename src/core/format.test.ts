@@ -58,6 +58,16 @@ test("formatQuantity preserves 1/3 cup with usePreferredUnit", () => {
   expect(formatQuantity(q, { usePreferredUnit: true })).toBe("1/3 cup");
 });
 
+test("formatQuantity normalizes spacing between number and unit", () => {
+  const q = quantity("153g");
+  expect(formatQuantity(q)).toBe("153 g");
+  const q2 = quantity("2cups");
+  expect(formatQuantity(q2)).toBe("2 cups");
+  // Already-spaced is unchanged
+  const q3 = quantity("2 cups");
+  expect(formatQuantity(q3)).toBe("2 cups");
+});
+
 test("formatQuantity preserves unit-only quantities without scaling", () => {
   const q = quantity("pinch");
   expect(formatQuantity(q)).toBe("pinch");

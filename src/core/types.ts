@@ -144,6 +144,13 @@ export interface Ingredient {
   quantity: Quantity | null;
   modifiers: string | null;
   attributes: IngredientAttribute[];
+  linkedRecipeId?: string;
+}
+
+export interface RecipeLink {
+  fromRecipeId: string;
+  ingredientId: string;
+  toRecipeId: string;
 }
 
 interface RecipeSectionBase {
@@ -295,4 +302,5 @@ export interface DocumentParseResult extends FrontmatterParseResult {
   recipes: Recipe[];
   references: ReferenceToken[];
   stepTokens: DocumentStepToken[];
+  recipeLinks: RecipeLink[];
 }
