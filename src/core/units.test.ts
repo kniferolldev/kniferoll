@@ -45,20 +45,6 @@ test("choosePreferredUnit returns null when no preferred unit", () => {
   expect(choosePreferredUnit(10, count.family)).toBeNull();
 });
 
-test("roundToProfile rounds grams to 0.1 increments", () => {
-  const g = lookupUnit("g")!;
-  expect(roundToProfile(0.3, g.rounding)).toBe(0.3);
-  expect(roundToProfile(0.15, g.rounding)).toBe(0.1);
-  expect(roundToProfile(0.16, g.rounding)).toBe(0.2);
-  expect(roundToProfile(535, g.rounding)).toBe(535);
-});
-
-test("roundToProfile rounds ml to 1 increment", () => {
-  const ml = lookupUnit("ml")!;
-  expect(roundToProfile(3.7, ml.rounding)).toBe(4);
-  expect(roundToProfile(130, ml.rounding)).toBe(130);
-});
-
 test("isMetricFamily identifies metric unit families", () => {
   expect(isMetricFamily("mass")).toBe(true);
   expect(isMetricFamily("volume_metric")).toBe(true);

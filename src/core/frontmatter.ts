@@ -1,4 +1,4 @@
-import { parse as parseYaml } from "yaml";
+import { parseYamlSubset as parseYaml } from "./yaml-subset";
 import type {
   Diagnostic,
   Frontmatter,

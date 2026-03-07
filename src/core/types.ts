@@ -191,12 +191,7 @@ export interface StepTemperatureToken extends StepTokenBase {
   scale: "F" | "C";
 }
 
-export interface StepQuantityToken extends StepTokenBase {
-  kind: "quantity";
-  quantity: Quantity;
-}
-
-export type StepToken = StepTemperatureToken | StepQuantityToken;
+export type StepToken = StepTemperatureToken;
 
 export type InvalidStepToken = StepTokenBase;
 
@@ -207,14 +202,7 @@ export interface DocumentStepTemperatureToken extends StepTemperatureToken {
   recipeTitle: string;
 }
 
-export interface DocumentStepQuantityToken extends StepQuantityToken {
-  line: number;
-  column: number;
-  recipeId: string;
-  recipeTitle: string;
-}
-
-export type DocumentStepToken = DocumentStepTemperatureToken | DocumentStepQuantityToken;
+export type DocumentStepToken = DocumentStepTemperatureToken;
 
 export interface IngredientReference {
   id: string;

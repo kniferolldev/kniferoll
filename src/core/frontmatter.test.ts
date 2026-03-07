@@ -385,3 +385,281 @@ test("parses valid scales array", () => {
   expect(result.diagnostics).toHaveLength(0);
 });
 
+// --- No frontmatter ---
+
+test("bare document with no frontmatter", () => {
+  const result = extractFrontmatter("Just some text.");
+  expect(result.frontmatter).toBeNull();
+  expect(result.body).toBe("Just some text.");
+  expect(result.diagnostics).toHaveLength(0);
+  expect(result.bodyStartLine).toBe(1);
+});
+
+test("document starting with heading and no frontmatter", () => {
+  const result = extractFrontmatter("# My Recipe\n\n## Ingredients\n");
+  expect(result.frontmatter).toBeNull();
+  expect(result.body).toBe("# My Recipe\n\n## Ingredients\n");
+  expect(result.bodyStartLine).toBe(1);
+});
+
+// --- Empty frontmatter ---
+
+test("empty frontmatter block treated as no frontmatter", () => {
+  // ---\n---\n has no content line between delimiters, so regex doesn't match
+  const result = extractFrontmatter("---\n---\n# Body\n");
+  expect(result.frontmatter).toBeNull();
+  expect(result.diagnostics).toHaveLength(0);
+  expect(result.bodyStartLine).toBe(1);
+});
+
+test("frontmatter with only blank line triggers version error", () => {
+  // ---\n\n---\n has a blank line, regex matches, but no version
+  const result = extractFrontmatter("---\n\n---\n# Body\n");
+  expect(result.frontmatter).toBeNull();
+  expect(result.diagnostics.length).toBeGreaterThan(0);
+  expect(result.bodyStartLine).toBe(4);
+});
+
+// --- Scalar values ---
+
+test("unquoted string source", () => {
+  const result = extractFrontmatter(doc("version: 1\nsource: Grandma"));
+  expect(result.frontmatter?.source).toEqual({ kind: "text", value: "Grandma" });
+});
+
+test("quoted string source", () => {
+  const result = extractFrontmatter(doc('version: 1\nsource: "My Grandma\'s Recipe"'));
+  expect(result.frontmatter?.source).toEqual({ kind: "text", value: "My Grandma's Recipe" });
+});
+
+test("integer version value", () => {
+  const result = extractFrontmatter(doc("version: 1"));
+  expect(result.frontmatter?.version).toBe(1);
+});
+
+test("bare URL in source flow object", () => {
+  const result = extractFrontmatter(
+    doc('version: 1\nsource: { url: "https://example.com/recipe?id=123&lang=en" }'),
+  );
+  expect(result.frontmatter?.source).toEqual({
+    kind: "url",
+    url: "https://example.com/recipe?id=123&lang=en",
+  });
+});
+
+// --- Inline flow objects ---
+
+test("inline flow source with url only", () => {
+  const result = extractFrontmatter(
+    doc('version: 1\nsource: { url: "https://example.com" }'),
+  );
+  expect(result.frontmatter?.source).toEqual({ kind: "url", url: "https://example.com" });
+});
+
+test("inline flow source with all fields", () => {
+  const result = extractFrontmatter(
+    doc('version: 1\nsource: { url: "https://example.com/pancakes", title: "Perfect Pancakes", accessed: "2024-10-01" }'),
+  );
+  expect(result.frontmatter?.source).toEqual({
+    kind: "url",
+    url: "https://example.com/pancakes",
+    title: "Perfect Pancakes",
+    accessed: "2024-10-01",
+  });
+});
+
+// --- Block mappings ---
+
+test("block mapping cookbook source", () => {
+  const result = extractFrontmatter(
+    doc([
+      "version: 1",
+      "source:",
+      "  cookbook:",
+      "    title: The Superiority Burger Cookbook",
+      "    author: Brooks Headley",
+      '    pages: "112-115"',
+    ].join("\n")),
+  );
+  expect(result.frontmatter?.source).toEqual({
+    kind: "cookbook",
+    title: "The Superiority Burger Cookbook",
+    author: "Brooks Headley",
+    pages: "112-115",
+  });
+});
+
+test("block mapping cookbook with numeric pages", () => {
+  const result = extractFrontmatter(
+    doc([
+      "version: 1",
+      "source:",
+      "  cookbook:",
+      "    title: Bakes",
+      "    pages: 42",
+    ].join("\n")),
+  );
+  expect(result.frontmatter?.source).toEqual({
+    kind: "cookbook",
+    title: "Bakes",
+    pages: 42,
+  });
+});
+
+// --- Arrays of objects (scales) ---
+
+test("scales with flow anchor objects", () => {
+  const result = extractFrontmatter(
+    doc([
+      "version: 1",
+      "scales:",
+      "  - name: Family size",
+      "    anchor: { id: oats, amount: 900, unit: g }",
+    ].join("\n")),
+  );
+  expect(result.frontmatter?.scales).toEqual([
+    { name: "Family size", anchor: { id: "oats", amount: 900, unit: "g" } },
+  ]);
+});
+
+test("multiple scale presets", () => {
+  const result = extractFrontmatter(
+    doc([
+      "version: 1",
+      "scales:",
+      "  - name: Half",
+      "    anchor: { id: flour, amount: 90, unit: g }",
+      "  - name: Double",
+      "    anchor: { id: flour, amount: 360, unit: g }",
+      "  - name: Party",
+      "    anchor: { id: flour, amount: 720, unit: g }",
+    ].join("\n")),
+  );
+  expect(result.frontmatter?.scales).toHaveLength(3);
+  expect(result.frontmatter?.scales?.[2]?.name).toBe("Party");
+  expect(result.frontmatter?.scales?.[2]?.anchor.amount).toBe(720);
+});
+
+// --- Whitespace variations ---
+
+test("trailing spaces after --- delimiter", () => {
+  const result = extractFrontmatter("---   \nversion: 1\n---   \n# Body\n");
+  expect(result.frontmatter?.version).toBe(1);
+});
+
+test("blank lines in YAML block are tolerated", () => {
+  const result = extractFrontmatter("---\nversion: 1\n\nsource: Grandma\n---\n# Body\n");
+  expect(result.frontmatter?.version).toBe(1);
+  expect(result.frontmatter?.source).toEqual({ kind: "text", value: "Grandma" });
+});
+
+// --- Frontmatter delimiter edge cases ---
+
+test("--- not at start of file returns no frontmatter", () => {
+  const result = extractFrontmatter("some text\n---\nversion: 1\n---\n# Body\n");
+  expect(result.frontmatter).toBeNull();
+  expect(result.bodyStartLine).toBe(1);
+});
+
+// --- bodyStartLine correctness ---
+
+test("bodyStartLine for minimal frontmatter", () => {
+  const result = extractFrontmatter("---\nversion: 1\n---\n# Body\n");
+  expect(result.bodyStartLine).toBe(4);
+});
+
+test("bodyStartLine for multi-line frontmatter", () => {
+  const result = extractFrontmatter(
+    doc([
+      "version: 1",
+      "source:",
+      "  cookbook:",
+      "    title: Test",
+      "    author: Me",
+    ].join("\n")),
+  );
+  // ---\n + 5 yaml lines + \n---\n = 8 lines, body starts at line 8
+  expect(result.bodyStartLine).toBe(8);
+});
+
+// --- Round-trip value handling ---
+
+test("version 01 is parsed as integer 1", () => {
+  const result = extractFrontmatter(doc("version: 1"));
+  expect(result.frontmatter?.version).toBe(1);
+  expect(typeof result.frontmatter?.version).toBe("number");
+});
+
+test("accessed date is preserved as string", () => {
+  const result = extractFrontmatter(
+    doc('version: 1\nsource: { url: "https://example.com", accessed: "2024-10-01" }'),
+  );
+  expect(result.frontmatter?.source).toBeDefined();
+  if (result.frontmatter?.source?.kind === "url") {
+    expect(result.frontmatter.source.accessed).toBe("2024-10-01");
+  }
+});
+
+test("decimal anchor amount is parsed correctly", () => {
+  const result = extractFrontmatter(
+    doc([
+      "version: 1",
+      "scales:",
+      "  - name: Precise",
+      "    anchor: { id: salt, amount: 2.5, unit: g }",
+    ].join("\n")),
+  );
+  expect(result.frontmatter?.scales?.[0]?.anchor.amount).toBe(2.5);
+});
+
+// --- YAML comment handling ---
+
+test("inline YAML comments are stripped", () => {
+  const result = extractFrontmatter(
+    "---\nversion: 1  # spec version\nsource: Grandma  # attribution\n---\n# Body\n",
+  );
+  expect(result.frontmatter?.version).toBe(1);
+  expect(result.frontmatter?.source).toEqual({ kind: "text", value: "Grandma" });
+});
+
+// --- Boolean and null values ---
+
+test("boolean true is not a string", () => {
+  const result = extractFrontmatter(doc("version: 1\nsource: true"));
+  // true is not a string, so it should fail source validation
+  expect(result.diagnostics.some((d) => d.message.includes("source must be"))).toBe(true);
+});
+
+test("null source is treated as undefined", () => {
+  const result = extractFrontmatter(doc("version: 1\nsource: null"));
+  expect(result.frontmatter?.source).toBeUndefined();
+});
+
+// --- Full end-to-end from SCHEMA.md examples ---
+
+test("SCHEMA.md example: simple text source", () => {
+  const input = "---\nversion: 1\nsource: Grandma\nscales:\n  - name: Family size\n    anchor: { id: oats, amount: 900, unit: g }\n---\n# Recipe\n";
+  const result = extractFrontmatter(input);
+  expect(result.frontmatter?.version).toBe(1);
+  expect(result.frontmatter?.source).toEqual({ kind: "text", value: "Grandma" });
+  expect(result.frontmatter?.scales).toHaveLength(1);
+  expect(result.diagnostics).toHaveLength(0);
+});
+
+test("SCHEMA.md example: url source with accessed date", () => {
+  const input = '---\nversion: 1\nsource: { url: "https://example.com/pancakes", title: "Perfect Pancakes", accessed: "2024-10-01" }\n---\n# Recipe\n';
+  const result = extractFrontmatter(input);
+  expect(result.frontmatter?.source).toEqual({
+    kind: "url",
+    url: "https://example.com/pancakes",
+    title: "Perfect Pancakes",
+    accessed: "2024-10-01",
+  });
+});
+
+test("SCHEMA.md example: cookbook source block mapping", () => {
+  const input = "---\nversion: 1\nsource:\n  cookbook:\n    title: The Superiority Burger Cookbook\n    author: Brooks Headley\n    pages: \"112\\u2013115\"\n---\n# Recipe\n";
+  const result = extractFrontmatter(input);
+  expect(result.frontmatter?.source?.kind).toBe("cookbook");
+});
+

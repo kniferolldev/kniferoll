@@ -1,22 +1,18 @@
 import type {
   InvalidStepToken,
-  StepQuantityToken,
   StepTemperatureToken,
   StepToken,
 } from "./types";
-import { parseQuantity } from "./quantity";
 
-const TEMPERATURE_PATTERN = /^(-?\d+(?:\.\d+)?)[FCfc]$/;
-const TOKEN_MATCHER = /\{([^}]+)\}/g;
+const TEMPERATURE_PATTERN = /^(\d+)(?:°)?([FC])$/i;
+const TOKEN_MATCHER = /@(?=\d)([0-9a-z°\-–]+)(?=[\s),.;:!?\-–]|$)/gi;
 
 export type ExtractStepTokensResult = {
   tokens: StepToken[];
   invalid: InvalidStepToken[];
 };
 
-const parseTokenBody = (
-  body: string,
-): { kind: "temperature"; value: number; scale: "F" | "C" } | null => {
+const parseTokenBody = (body: string): { kind: "temperature"; value: number; scale: "F" | "C" } | null => {
   const trimmed = body.trim();
   if (trimmed === "") {
     return null;
@@ -24,16 +20,11 @@ const parseTokenBody = (
 
   const tempMatch = TEMPERATURE_PATTERN.exec(trimmed);
   if (tempMatch) {
-    const [, value] = tempMatch;
-    if (!value) {
+    const [, value, scaleRaw] = tempMatch;
+    if (!value || !scaleRaw) {
       return null;
     }
-    const scaleChar = trimmed[trimmed.length - 1]!;
-    return {
-      kind: "temperature",
-      value: Number(value),
-      scale: scaleChar.toUpperCase() as "F" | "C",
-    };
+    return { kind: "temperature", value: Number(value), scale: scaleRaw.toUpperCase() as "F" | "C" };
   }
 
   return null;
@@ -48,10 +39,7 @@ export const extractStepTokens = (line: string): ExtractStepTokensResult => {
     if (!full || !body) {
       continue;
     }
-    const index =
-      typeof match.index === "number" ? match.index : line.indexOf(full);
-
-    // Try temperature first
+    const index = typeof match.index === "number" ? match.index : line.indexOf(full);
     const parsed = parseTokenBody(body);
     if (parsed) {
       const token: StepTemperatureToken = {
@@ -60,29 +48,6 @@ export const extractStepTokens = (line: string): ExtractStepTokensResult => {
         index,
         value: parsed.value,
         scale: parsed.scale,
-      };
-      results.push(token);
-      continue;
-    }
-
-    // Try quantity — body must contain at least one digit to be a valid inline quantity
-    const trimmedBody = body.trim();
-    if (!/\d/.test(trimmedBody)) {
-      invalid.push({ raw: full, index });
-      continue;
-    }
-
-    const quantityResult = parseQuantity(trimmedBody, {
-      line: 0,
-      invalid: { code: "W0403", message: "Unparseable inline value" },
-    });
-
-    if (quantityResult.quantity && quantityResult.diagnostics.length === 0) {
-      const token: StepQuantityToken = {
-        kind: "quantity",
-        raw: full,
-        index,
-        quantity: quantityResult.quantity,
       };
       results.push(token);
     } else {
@@ -99,8 +64,6 @@ export const extractStepTokens = (line: string): ExtractStepTokensResult => {
 
 const TIMER_SEGMENT_PATTERN =
   /^(?:(?<hours>\d+)(?:h|hr))?(?:(?<minutes>\d+)(?:m|min))?(?:(?<seconds>\d+)(?:s|sec))?$/i;
-
-const OLD_TEMPERATURE_PATTERN = /^(\d+)(?:°)?([FC])$/i;
 
 interface TimerParts {
   hours: number;
@@ -157,7 +120,7 @@ export const timerTokenToProse = (token: string): string | null => {
   if (!body) return null;
 
   // Check for temperature patterns — leave those alone
-  if (OLD_TEMPERATURE_PATTERN.test(body)) return null;
+  if (TEMPERATURE_PATTERN.test(body)) return null;
 
   const parsed = parseTimerSegment(body);
   if (parsed) {

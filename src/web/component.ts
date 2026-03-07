@@ -15,7 +15,6 @@ import type {
   Diagnostic,
   DocumentParseResult,
   DocumentStepTemperatureToken,
-  DocumentStepQuantityToken,
   DocumentStepToken,
   Ingredient,
   IngredientAttribute,
@@ -153,19 +152,15 @@ const renderIntro = (
 // Notes section markdown rendering
 type NotesBlockType = "paragraph" | "header" | "ul" | "ol";
 
-interface NotesBlockLine extends SectionLine {
-  prefixLength: number;
-}
-
 interface NotesBlock {
   type: NotesBlockType;
-  lines: NotesBlockLine[];
+  lines: SectionLine[];
   level?: number; // for headers (3 = ###, 4 = ####)
 }
 
 const getLineType = (
   text: string,
-): { type: NotesBlockType; level?: number; content: string; prefixLength: number } => {
+): { type: NotesBlockType; level?: number; content: string } => {
   // Headers: ### or ####
   const headerMatch = text.match(/^(#{3,4})\s+(.*)$/);
   if (headerMatch) {
@@ -173,21 +168,20 @@ const getLineType = (
       type: "header",
       level: headerMatch[1]!.length,
       content: headerMatch[2]!,
-      prefixLength: text.length - headerMatch[2]!.length,
     };
   }
   // Unordered list: - or *
-  const ulMatch = text.match(/^([-*]\s+)(.*)$/);
+  const ulMatch = text.match(/^[-*]\s+(.*)$/);
   if (ulMatch) {
-    return { type: "ul", content: ulMatch[2]!, prefixLength: ulMatch[1]!.length };
+    return { type: "ul", content: ulMatch[1]! };
   }
   // Ordered list: 1. 2. etc
-  const olMatch = text.match(/^(\d+\.\s+)(.*)$/);
+  const olMatch = text.match(/^\d+\.\s+(.*)$/);
   if (olMatch) {
-    return { type: "ol", content: olMatch[2]!, prefixLength: olMatch[1]!.length };
+    return { type: "ol", content: olMatch[1]! };
   }
   // Paragraph
-  return { type: "paragraph", content: text, prefixLength: 0 };
+  return { type: "paragraph", content: text };
 };
 
 const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
@@ -206,7 +200,7 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
       continue;
     }
 
-    const { type, level, content, prefixLength } = getLineType(trimmed);
+    const { type, level, content } = getLineType(trimmed);
 
     // Headers are always their own block
     if (type === "header") {
@@ -216,7 +210,7 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
       blocks.push({
         type: "header",
         level,
-        lines: [{ ...line, text: content, prefixLength }],
+        lines: [{ ...line, text: content }],
       });
       currentBlock = null;
       continue;
@@ -225,24 +219,24 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
     // Lists: group consecutive items of same type
     if (type === "ul" || type === "ol") {
       if (currentBlock && currentBlock.type === type) {
-        currentBlock.lines.push({ ...line, text: content, prefixLength });
+        currentBlock.lines.push({ ...line, text: content });
       } else {
         if (currentBlock) {
           blocks.push(currentBlock);
         }
-        currentBlock = { type, lines: [{ ...line, text: content, prefixLength }] };
+        currentBlock = { type, lines: [{ ...line, text: content }] };
       }
       continue;
     }
 
     // Paragraphs: group consecutive non-empty lines
     if (currentBlock && currentBlock.type === "paragraph") {
-      currentBlock.lines.push({ ...line, prefixLength: 0 });
+      currentBlock.lines.push(line);
     } else {
       if (currentBlock) {
         blocks.push(currentBlock);
       }
-      currentBlock = { type: "paragraph", lines: [{ ...line, prefixLength: 0 }] };
+      currentBlock = { type: "paragraph", lines: [line] };
     }
   }
 
@@ -253,56 +247,7 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
   return blocks;
 };
 
-const renderNotesInline = (
-  text: string,
-  tokens: DocumentStepToken[],
-  options: RenderOptions,
-  prefixLength: number,
-): string => {
-  if (tokens.length === 0) {
-    return renderMarkdownInline(text);
-  }
-
-  type InlineToken = { start: number; end: number; html: string };
-  const inlineTokens: InlineToken[] = [];
-
-  for (const token of tokens) {
-    const start = token.index - prefixLength;
-    const end = token.index + token.raw.length - prefixLength;
-    if (end <= 0) continue;
-    const adjustedStart = Math.max(0, start);
-    if (token.kind === "temperature") {
-      inlineTokens.push({
-        start: adjustedStart,
-        end,
-        html: renderTemperatureToken(token, options.temperatureDisplay),
-      });
-    } else if (token.kind === "quantity") {
-      inlineTokens.push({
-        start: adjustedStart,
-        end,
-        html: renderQuantityToken(token, options.scaleFactor),
-      });
-    }
-  }
-
-  inlineTokens.sort((a, b) => a.start - b.start);
-
-  const parts: string[] = [];
-  let cursor = 0;
-  for (const tok of inlineTokens) {
-    if (tok.start < cursor) continue;
-    const prefix = text.slice(cursor, tok.start);
-    if (prefix) parts.push(renderMarkdownInline(prefix));
-    parts.push(tok.html);
-    cursor = tok.end;
-  }
-  const remainder = text.slice(cursor);
-  if (remainder) parts.push(renderMarkdownInline(remainder));
-  return parts.join("");
-};
-
-const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensByLine: Map<number, DocumentStepToken[]>): string => {
+const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => {
   const renderInlineDiagnostics = (lineNum: number) => {
     if (options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
       return null;
@@ -326,8 +271,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
     case "header": {
       const line = block.lines[0]!;
       const tag = block.level === 4 ? "h5" : "h4";
-      const lineTokens = stepTokensByLine.get(line.line) ?? [];
-      const content = renderNotesInline(line.text, lineTokens, options, line.prefixLength);
+      const content = renderMarkdownInline(line.text);
       return `<${tag} class="kr-notes__header" data-kr-line="${line.line}">${content}</${tag}>`;
     }
     case "ul":
@@ -341,8 +285,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
             ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
             : "";
           const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-          const lineTokens = stepTokensByLine.get(line.line) ?? [];
-          const content = renderNotesInline(line.text, lineTokens, options, line.prefixLength);
+          const content = renderMarkdownInline(line.text);
           return `<li class="kr-notes__list-item${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${content}</li>`;
         })
         .join("");
@@ -358,8 +301,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
         ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
         : "";
       const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-      const lineTokens = stepTokensByLine.get(firstLine.line) ?? [];
-      const content = renderNotesInline(text, lineTokens, options, firstLine.prefixLength);
+      const content = renderMarkdownInline(text);
       return `<p class="kr-notes__paragraph${diagnosticClass}" data-kr-line="${firstLine.line}"${diagnosticAttr}>${diagnosticContent}${content}</p>`;
     }
   }
@@ -368,7 +310,6 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
 const renderNotesSection = (
   section: NotesSection,
   options: RenderOptions,
-  stepTokensByLine: Map<number, DocumentStepToken[]>,
 ): string => {
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
   if (!section.lines.length) {
@@ -376,7 +317,7 @@ const renderNotesSection = (
   }
 
   const blocks = parseNotesBlocks(section.lines);
-  const content = blocks.map((block) => renderNotesBlock(block, options, stepTokensByLine)).join("");
+  const content = blocks.map((block) => renderNotesBlock(block, options)).join("");
 
   return `<section class="kr-section" data-kr-kind="notes">${heading}<div class="kr-section__body">${content}</div></section>`;
 };
@@ -465,12 +406,19 @@ const pickAlternateDisplay = (
   }
 
   if (mode === "metric") {
-    return candidates.find((c) => c.isMetric && c.text) ?? null;
+    const preferred = candidates.find((c) => c.isMetric && c.text);
+    if (preferred) return preferred;
   } else if (mode === "imperial") {
-    return candidates.find((c) => !c.isMetric && c.hasQuantity && c.text) ?? null;
+    const preferred = candidates.find((c) => !c.isMetric && c.hasQuantity && c.text);
+    if (preferred) return preferred;
   }
 
-  return null;
+  const withQuantity = candidates.find((candidate) => candidate.hasQuantity && candidate.text);
+  if (withQuantity) {
+    return withQuantity;
+  }
+
+  return candidates.find((candidate) => candidate.text) ?? candidates[0] ?? null;
 };
 
 export interface AnchorTarget {
@@ -505,12 +453,17 @@ export const resolveAnchorTarget = (
       return { altQty, isMetric: isMetricFamily(unitInfo?.family) };
     });
 
-  // Prefer mode-matching alternate; fall back to native if none matches
+  // 1. Mode-preferred match
   const preferred = alternates.find((a) =>
     quantityDisplay === "metric" ? a.isMetric : !a.isMetric && !!a.altQty.unit,
   );
   if (preferred) return anchorFromQty(preferred.altQty);
 
+  // 2. Any alternate with a parsed quantity (matches pickAlternateDisplay fallback)
+  const anyAlt = alternates[0];
+  if (anyAlt) return anchorFromQty(anyAlt.altQty);
+
+  // 3. Native fallback
   return anchorFromQty(nativeQty);
 };
 
@@ -646,23 +599,6 @@ const renderTemperatureToken = (
   )}" title="${escapeAttr(`approx. ${other}${otherScale}`)}">${display}</span>`;
 };
 
-const renderQuantityToken = (
-  token: DocumentStepQuantityToken,
-  scaleFactor: number,
-): string => {
-  const scaled = scaleFactor !== 1 ? scaleQuantity(token.quantity, scaleFactor) : null;
-  const formatted = formatQuantity(token.quantity, {
-    scaled: scaled ?? undefined,
-    usePreferredUnit: true,
-  });
-  const display = formatted ? escapeHtml(formatted) : escapeHtml(token.raw);
-  if (scaleFactor !== 1 && scaled) {
-    const original = formatQuantity(token.quantity) ?? token.quantity.raw;
-    return `<span class="kr-inline-quantity" title="${escapeAttr(original)}">${display}</span>`;
-  }
-  return `<span class="kr-inline-quantity">${display}</span>`;
-};
-
 const renderIngredientAttributes = (
   attributes: IngredientAttribute[],
   options: {
@@ -739,12 +675,6 @@ const renderStepLine = (
         start: adjustedStart,
         end,
         html: renderTemperatureToken(token, options.temperatureDisplay),
-      });
-    } else if (token.kind === "quantity") {
-      inlineTokens.push({
-        start: adjustedStart,
-        end,
-        html: renderQuantityToken(token, options.scaleFactor),
       });
     }
   }
@@ -1024,7 +954,7 @@ const renderSection = (
   }
 
   if (section.kind === "notes") {
-    return renderNotesSection(section, options, stepTokensByLine);
+    return renderNotesSection(section, options);
   }
 
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;

@@ -233,7 +233,7 @@ test("renderDocument renders temperature tokens", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat to {350F}.",
+    "1. Preheat @350F.",
     "2. Bake 35 minutes until browned.",
     "3. Rest 10 minutes before slicing.",
   ].join("\n");
@@ -800,7 +800,7 @@ test("temperature-display C converts F temperatures", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat to {350F}.",
+    "1. Preheat @350F.",
   ].join("\n");
 
   const parsed = parseDocument(markdown);
@@ -822,7 +822,7 @@ test("temperature-display F converts C temperatures", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat to {180C}.",
+    "1. Preheat @180C.",
   ].join("\n");
 
   const parsed = parseDocument(markdown);
@@ -844,7 +844,7 @@ test("temperature-display unset shows native temperature", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat to {350F}.",
+    "1. Preheat @350F.",
   ].join("\n");
 
   const parsed = parseDocument(markdown);
@@ -866,7 +866,7 @@ test("KrRecipeElement responds to temperature-display attribute", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat to {350F}.",
+    "1. Preheat @350F.",
   ].join("\n");
 
   element.connectedCallback();
@@ -1024,10 +1024,10 @@ test("resolveAnchorTarget returns metric alternate in metric mode", () => {
   expect(target!.unit).toBe("g");
 });
 
-test("resolveAnchorTarget falls back to native when no mode-matching alternate exists", () => {
+test("resolveAnchorTarget uses non-preferred alternate when no mode match (like pickAlternateDisplay)", () => {
   if (!componentModule) throw new Error("Component module was not initialized");
 
-  // Imperial mode but only metric also= available — should keep native (cups), not swap to grams
+  // Imperial mode but only metric also= available — should use the metric alternate (not native)
   const doc = parseDocument('# Demo\n\n# R\n## Ingredients\n- sauce - 1 1/3 cup :: id=sauce also="300 g"\n## Steps\n1. Mix.');
   const ing = doc.recipes[0]!.sections[0]!;
   if (ing.kind !== "ingredients") throw new Error("Expected ingredients section");
@@ -1035,8 +1035,8 @@ test("resolveAnchorTarget falls back to native when no mode-matching alternate e
 
   const target = componentModule.resolveAnchorTarget(sauce, "imperial");
   expect(target).toBeTruthy();
-  expect(target!.amount).toBeCloseTo(1.333, 2);
-  expect(target!.unit).toBe("cup");
+  expect(target!.amount).toBe(300);
+  expect(target!.unit).toBe("g");
 });
 
 test("resolveAnchorTarget falls back to native when no alternates exist", () => {
@@ -1065,7 +1065,7 @@ test("steps inline formatting works alongside references and temperatures", () =
     "## Ingredients",
     "- salt",
     "## Steps",
-    "1. Add [[salt]] and stir **vigorously** at {350F} for 5 minutes.",
+    "1. Add [[salt]] and stir **vigorously** at @350F for 5 minutes.",
   ].join("\n");
 
   const html = componentModule.renderDocument(parseDocument(markdown));
@@ -1074,30 +1074,4 @@ test("steps inline formatting works alongside references and temperatures", () =
   expect(html).toContain('data-kr-target="salt"');
   expect(html).toContain("<strong>vigorously</strong>");
   expect(html).toContain('class="kr-temperature"');
-});
-
-test("renderDocument renders inline value tokens in notes bullet items", () => {
-  if (!componentModule) {
-    throw new Error("Component module was not initialized");
-  }
-
-  const markdown = [
-    "# Pizza",
-    "## Ingredients",
-    "- cheese - 340 g",
-    "## Steps",
-    "1. Assemble and bake at {500F}.",
-    "## Notes",
-    "- **Cheese Substitution:** Replace with {1 1/2 cups} ({170g}) mozzarella.",
-  ].join("\n");
-
-  const html = componentModule.renderDocument(parseDocument(markdown));
-
-  // Should render the quantity tokens properly (not garbled)
-  expect(html).toContain('class="kr-inline-quantity"');
-  expect(html).toContain("1½ cup");
-  expect(html).toContain("170 g");
-  // Should NOT contain raw curly brace tokens in the output
-  expect(html).not.toContain("{1 1/2 cups}");
-  expect(html).not.toContain("{170g}");
 });

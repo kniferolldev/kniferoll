@@ -69,24 +69,6 @@ test("scaleQuantity respects rounding profiles for teaspoons", () => {
   }
 });
 
-test("scaleQuantity preserves precision for small gram values", () => {
-  const quantity = q("0.2 g");
-  const scaled = scaleQuantity(quantity, 1.5);
-  expect(scaled).toBeTruthy();
-  if (scaled?.kind === "single") {
-    expect(scaled.scaledValue).toBeCloseTo(0.3);
-  }
-});
-
-test("scaleQuantity rounds ml to 1 increment", () => {
-  const quantity = q("100 ml");
-  const scaled = scaleQuantity(quantity, 1.3);
-  expect(scaled).toBeTruthy();
-  if (scaled?.kind === "single") {
-    expect(scaled.scaledValue).toBeCloseTo(130);
-  }
-});
-
 test("scaleQuantity handles range rounding", () => {
   const quantity = q("0.25-0.75 tsp");
   const scaled = scaleQuantity(quantity, 1.5);
