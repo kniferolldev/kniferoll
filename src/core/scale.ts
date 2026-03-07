@@ -169,6 +169,41 @@ export const computeScaleFactor = (
     : ingredientUnit === null;
 
   if (!unitsMatch) {
+    // Check alternate quantities from also= attributes
+    const alternateMatch = ingredient.attributes
+      .filter((attr) => attr.key === "also" && attr.quantity?.kind === "single")
+      .find((attr) => {
+        const altUnit = normalizeUnit((attr.quantity as QuantitySingle).unit);
+        return anchorUnit ? altUnit === anchorUnit : altUnit === null;
+      });
+
+    if (alternateMatch) {
+      const altQty = alternateMatch.quantity as QuantitySingle;
+      if (altQty.value === 0) {
+        return {
+          ok: false,
+          reason: "zero-quantity",
+          message: "Alternate ingredient quantity is zero and cannot be scaled.",
+        };
+      }
+      const factor = anchor.amount / altQty.value;
+      return {
+        ok: true,
+        factor,
+        source,
+        anchor,
+        ingredient: {
+          id: ingredient.id,
+          name: ingredient.name,
+          line: ingredient.line,
+          recipeId,
+          recipeTitle,
+          quantity: ingredient.quantity,
+        },
+        preset: presetMeta,
+      };
+    }
+
     return {
       ok: false,
       reason: "unit-mismatch",

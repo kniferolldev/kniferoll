@@ -9,12 +9,12 @@
     "test": "bun test",
     "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage",
     "typecheck": "bunx tsc --noEmit && bunx tsc --noEmit --project apps/homeplate/tsconfig.json",
-    "editor": "bun apps/editor/server.ts",
     "screenshot": "bun scripts/screenshot.ts",
     "build": "bun scripts/build.ts && bun run --cwd apps/homeplate build"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "linkedom": "^0.18.12",
     "playwright": "^1.56.1"
   },
   "peerDependencies": {
@@ -23,7 +23,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@google/generative-ai": "^0.24.1",
-"jpeg-js": "^0.4.4",
+    "jpeg-js": "^0.4.4",
     "openai": "^6.10.0",
     "yaml": "^2.8.1"
   }

@@ -24,7 +24,6 @@
    *
    * Semantic (auto-derived, but overridable):
    *   --kr-color-quantity    Quantity/measurement color
-   *   --kr-color-timer       Timer chip background
    *   --kr-color-temperature Temperature chip background
    */
 
@@ -393,14 +392,14 @@
     100% { opacity: 0; }
   }
 
-  .kr-anchor-display {
+  .kr-ingredient__quantity.kr-anchor-display {
     cursor: pointer;
     border-radius: 4px;
     color: var(--kr-color-accent, #2563eb);
     transition: background 0.15s ease;
   }
 
-  .kr-anchor-display:hover {
+  .kr-ingredient__quantity.kr-anchor-display:hover {
     background: rgba(37, 99, 235, 0.1);
   }
 
@@ -776,43 +775,6 @@
     font-weight: 700;
   }
 
-  /* Timer chips */
-  .kr-timer-group {
-    display: inline-flex;
-    gap: 0.25rem;
-    align-items: center;
-  }
-
-  .kr-timer {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.6rem;
-    border-radius: 999px;
-    border: none;
-    background: var(--kr-color-timer, rgba(37, 99, 235, 0.1));
-    color: var(--kr-color-timer-text, #1d4ed8);
-    font: inherit;
-    font-size: 0.85em;
-    font-weight: 600;
-    line-height: 1.2;
-    cursor: pointer;
-    transition: background 0.15s ease;
-  }
-
-  .kr-timer:not(:disabled):hover {
-    background: var(--kr-color-timer-hover, rgba(37, 99, 235, 0.18));
-  }
-
-  .kr-timer:focus-visible {
-    outline: 2px solid var(--kr-color-accent, #2563eb);
-    outline-offset: 2px;
-  }
-
-  .kr-timer__label {
-    font-variant-numeric: tabular-nums;
-  }
-
   /* Temperature chips */
   .kr-temperature {
     display: inline-flex;
@@ -1006,8 +968,6 @@
       text-decoration: none;
     }
 
-    .kr-timer,
-    .kr-timer-group,
     .kr-temperature {
       border: 1px solid rgba(0, 0, 0, 0.3);
       background: transparent;

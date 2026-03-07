@@ -62,7 +62,6 @@ Try the [interactive playground](http://127.0.0.1:5173/) (`bun run demo`) to:
 
 | Event | Detail | When |
 |-------|--------|------|
-| `kr:timer-start` | `{ timerId, durationMs, label, startedAt }` | User clicks a timer chip |
 | `kr:ref-focus` | `{ targetId, display }` | User activates an ingredient reference |
 | `kr:diagnostic-click` | `{ line, code, severity, message }` | User clicks a diagnostic marker |
 
@@ -94,8 +93,6 @@ kr-recipe {
   --kr-card-padding: 2rem;
 
   /* Chips */
-  --kr-color-timer: #fef3c7;
-  --kr-color-timer-text: #92400e;
   --kr-color-temperature: #dbeafe;
   --kr-color-temperature-text: #1e40af;
 }
@@ -144,11 +141,6 @@ recipe.content = `
 
 ```javascript
 const recipe = document.querySelector('kr-recipe');
-
-recipe.addEventListener('kr:timer-start', (event) => {
-  const { label, durationMs } = event.detail;
-  console.log(`Timer started: ${label} for ${durationMs}ms`);
-});
 
 recipe.addEventListener('kr:ref-focus', (event) => {
   const { targetId } = event.detail;

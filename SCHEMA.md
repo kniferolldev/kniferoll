@@ -43,7 +43,7 @@ A file with a single recipe and no frontmatter:
 ## Steps
 
 1. Heat oil; sauté [[garlic]].
-2. Add tomatoes; simmer @15–20m. Toss with [[pasta]].
+2. Add tomatoes; simmer 15–20 minutes. Toss with [[pasta]].
 ```
 
 ---
@@ -240,38 +240,54 @@ A numbered Markdown list (`1.`, `2.`, …). Free text with optional markup.
   `3. Spread the [[ mustard ]] on the bread.`,
   `2. Slice the [["Japanese scallions"->tokyo-negi]] thinly`.
 
-### 4.2 Timers
+### 4.2 Inline values
 
-- Format: `@10m`/`@10min`, `@45s`/`@45sec`, `@3h`, `@2h30m`, `@5m30s`
+Wrap a value in curly braces to mark it as an **inline value** the renderer
+should process. Values are either temperatures or scalable quantities.
 
-**When to use timer tokens:**
+**Temperatures**: `{350F}`, `{190C}`, `{63.3C}`, `{-18C}` — number immediately
+followed by F or C (case-insensitive). Renderers may convert between F and C.
 
-Use timer tokens for operations where you would realistically set a timer and walk away:
-- Baking, roasting, or simmering
-- Resting dough or batter
-- Marinating or steeping
-- Cooling periods
+**Scalable quantities**: `{20}`, `{3 cups}`, `{500ml}`, `{2-3 oz}` — anything
+that isn't a temperature. Syntax follows the same rules as ingredient quantities
+(amount, fraction, range, optional unit). These values scale by the same factor
+as ingredient quantities.
 
-**When NOT to use timer tokens:**
+Allowed in: steps, notes.
 
-Do not use timer tokens for operations requiring active monitoring or visual cues:
-- Sautéing (watch for color/aroma)
-- Browning or caramelizing (watch for doneness)
-- Quick tasks under 1 minute (you're standing there)
-- Operations with visual cues like "until fragrant" or "until golden"
+#### When to use inline values
 
-For these cases, write the duration as prose: "Sauté garlic until fragrant, about 2 minutes."
+Tag quantities that should scale with the recipe and temperatures that should
+convert between units.
 
-### 4.3 Temperatures
+**Do tag:**
 
-- `@375F` or `@375°F`, `@190C` or `@190°C` (degree symbol optional)
+- Yield counts: `This recipe makes about {20} meatballs.`
+- Portion instructions: `Divide the dough into {4} equal portions.`
+- Descriptive output quantities: `You should have about {3 cups} of sauce.`
+- Temperatures: `Heat the oven to {350F}.` or `Sous vide at {63.3C}.`
+
+**Don't tag:**
+
+- Cooking times: "simmer for 30 minutes" — time doesn't change with batch size
+- Cut sizes: "cut into 1-inch cubes" — piece dimensions are fixed
+- Ratios or fractions of the whole: "add half the flour" — the fraction stays the same
+- Sequence or repetition: "repeat 3 times", "in 2 batches"
+- Equipment dimensions: "use a 12-inch skillet"
+
+The rule of thumb: tag a value if it represents an *amount of stuff* that changes
+when scaling (or a temperature that benefits from unit conversion). Don't tag
+values that describe process, geometry, or time.
+
+**Disambiguation**: `{3C}` → temperature (3°C). `{3 c}` → 3 cups (space before
+unit). No space + F/C suffix = temperature.
 
 **Example**
 
 ```
 1. Whisk [[all-purpose-flour]] with sugar, baking powder, and salt.
-2. Add milk and eggs; rest @10m.
-3. Bake @350F until golden, 30–35 minutes. Frost with [[frosting]].
+2. Add milk and eggs; rest 10 minutes.
+3. Bake at {350F} until golden, 30–35 minutes. Frost with [[frosting]].
 ```
 
 ---
@@ -418,8 +434,8 @@ rest before cooking.
 ## Steps
 
 1. Whisk [[all-purpose-flour]] with sugar, baking powder, baking soda, and salt.
-2. Add milk and egg; rest @10m.
-3. Heat pan @375F. Oil lightly. Cook 2–3 min/side.
+2. Add milk and egg; rest 10 minutes.
+3. Heat pan {375F}. Oil lightly. Cook 2–3 min/side.
 ```
 
 ### B) Overall title + two recipes
@@ -452,7 +468,7 @@ scales:
 ## Steps
 
 1. Mix dry; add eggs, milk, butter.
-2. Bake @350F @30–35m; cool. Top with [[frosting]].
+2. Bake at {350F} for 30–35 minutes; cool. Top with [[frosting]].
 
 # Frosting
 

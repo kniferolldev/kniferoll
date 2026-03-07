@@ -177,8 +177,6 @@ export interface UnknownSection extends RecipeSectionBase {
   kind: "unknown";
 }
 
-export type TimerDuration = { hours: number; minutes: number; seconds: number };
-
 export interface StepTokenBase {
   raw: string;
   /**
@@ -187,27 +185,20 @@ export interface StepTokenBase {
   index: number;
 }
 
-export interface StepTimerToken extends StepTokenBase {
-  kind: "timer";
-  start: TimerDuration;
-}
-
 export interface StepTemperatureToken extends StepTokenBase {
   kind: "temperature";
   value: number;
   scale: "F" | "C";
 }
 
-export type StepToken = StepTimerToken | StepTemperatureToken;
+export interface StepQuantityToken extends StepTokenBase {
+  kind: "quantity";
+  quantity: Quantity;
+}
+
+export type StepToken = StepTemperatureToken | StepQuantityToken;
 
 export type InvalidStepToken = StepTokenBase;
-
-export interface DocumentStepTimerToken extends StepTimerToken {
-  line: number;
-  column: number;
-  recipeId: string;
-  recipeTitle: string;
-}
 
 export interface DocumentStepTemperatureToken extends StepTemperatureToken {
   line: number;
@@ -216,9 +207,14 @@ export interface DocumentStepTemperatureToken extends StepTemperatureToken {
   recipeTitle: string;
 }
 
-export type DocumentStepToken =
-  | DocumentStepTimerToken
-  | DocumentStepTemperatureToken;
+export interface DocumentStepQuantityToken extends StepQuantityToken {
+  line: number;
+  column: number;
+  recipeId: string;
+  recipeTitle: string;
+}
+
+export type DocumentStepToken = DocumentStepTemperatureToken | DocumentStepQuantityToken;
 
 export interface IngredientReference {
   id: string;

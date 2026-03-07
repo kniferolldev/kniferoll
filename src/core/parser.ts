@@ -4,6 +4,8 @@ import { slug } from "./slug";
 import { extractStepTokens } from "./steps";
 import type {
   DocumentStepToken,
+  DocumentStepTemperatureToken,
+  DocumentStepQuantityToken,
   DocumentParseResult,
   DocumentTitle,
   Diagnostic,
@@ -497,9 +499,11 @@ export const parseDocument = (
 
   for (const recipe of recipes) {
     for (const section of recipe.sections) {
-      if (section.kind !== "steps") {
+      if (section.kind !== "steps" && section.kind !== "notes") {
         continue;
       }
+
+      const sectionLabel = section.kind === "steps" ? "steps" : "notes";
 
       for (const line of section.lines) {
         const { tokens: extractedTokens, invalid } = extractStepTokens(line.text);
@@ -508,20 +512,34 @@ export const parseDocument = (
           diagnostics.push(
             warning(
               "W0402",
-              `Invalid timer token "${bad.raw}" in steps for recipe "${recipe.title}".`,
+              `Unknown inline value "${bad.raw}" in ${sectionLabel} for recipe "${recipe.title}".`,
               line.line,
             ),
           );
         }
 
         for (const token of extractedTokens) {
-          stepTokens.push({
-            ...token,
-            line: line.line,
-            column: token.index + 1,
-            recipeId: recipe.id,
-            recipeTitle: recipe.title,
-          });
+          if (token.kind === "temperature") {
+            stepTokens.push({
+              ...token,
+              line: line.line,
+              column: token.index + 1,
+              recipeId: recipe.id,
+              recipeTitle: recipe.title,
+            } satisfies DocumentStepTemperatureToken);
+          } else {
+            stepTokens.push({
+              ...token,
+              line: line.line,
+              column: token.index + 1,
+              recipeId: recipe.id,
+              recipeTitle: recipe.title,
+            } satisfies DocumentStepQuantityToken);
+          }
+        }
+
+        if (section.kind !== "steps") {
+          continue;
         }
 
         referencePattern.lastIndex = 0;

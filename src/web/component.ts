@@ -15,7 +15,7 @@ import type {
   Diagnostic,
   DocumentParseResult,
   DocumentStepTemperatureToken,
-  DocumentStepTimerToken,
+  DocumentStepQuantityToken,
   DocumentStepToken,
   Ingredient,
   IngredientAttribute,
@@ -24,7 +24,6 @@ import type {
   Recipe,
   RecipeSection,
   Quantity,
-  TimerDuration,
   UnitDimension,
   UnitFamily,
   ScalePreset,
@@ -154,15 +153,19 @@ const renderIntro = (
 // Notes section markdown rendering
 type NotesBlockType = "paragraph" | "header" | "ul" | "ol";
 
+interface NotesBlockLine extends SectionLine {
+  prefixLength: number;
+}
+
 interface NotesBlock {
   type: NotesBlockType;
-  lines: SectionLine[];
+  lines: NotesBlockLine[];
   level?: number; // for headers (3 = ###, 4 = ####)
 }
 
 const getLineType = (
   text: string,
-): { type: NotesBlockType; level?: number; content: string } => {
+): { type: NotesBlockType; level?: number; content: string; prefixLength: number } => {
   // Headers: ### or ####
   const headerMatch = text.match(/^(#{3,4})\s+(.*)$/);
   if (headerMatch) {
@@ -170,20 +173,21 @@ const getLineType = (
       type: "header",
       level: headerMatch[1]!.length,
       content: headerMatch[2]!,
+      prefixLength: text.length - headerMatch[2]!.length,
     };
   }
   // Unordered list: - or *
-  const ulMatch = text.match(/^[-*]\s+(.*)$/);
+  const ulMatch = text.match(/^([-*]\s+)(.*)$/);
   if (ulMatch) {
-    return { type: "ul", content: ulMatch[1]! };
+    return { type: "ul", content: ulMatch[2]!, prefixLength: ulMatch[1]!.length };
   }
   // Ordered list: 1. 2. etc
-  const olMatch = text.match(/^\d+\.\s+(.*)$/);
+  const olMatch = text.match(/^(\d+\.\s+)(.*)$/);
   if (olMatch) {
-    return { type: "ol", content: olMatch[1]! };
+    return { type: "ol", content: olMatch[2]!, prefixLength: olMatch[1]!.length };
   }
   // Paragraph
-  return { type: "paragraph", content: text };
+  return { type: "paragraph", content: text, prefixLength: 0 };
 };
 
 const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
@@ -202,7 +206,7 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
       continue;
     }
 
-    const { type, level, content } = getLineType(trimmed);
+    const { type, level, content, prefixLength } = getLineType(trimmed);
 
     // Headers are always their own block
     if (type === "header") {
@@ -212,7 +216,7 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
       blocks.push({
         type: "header",
         level,
-        lines: [{ ...line, text: content }],
+        lines: [{ ...line, text: content, prefixLength }],
       });
       currentBlock = null;
       continue;
@@ -221,24 +225,24 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
     // Lists: group consecutive items of same type
     if (type === "ul" || type === "ol") {
       if (currentBlock && currentBlock.type === type) {
-        currentBlock.lines.push({ ...line, text: content });
+        currentBlock.lines.push({ ...line, text: content, prefixLength });
       } else {
         if (currentBlock) {
           blocks.push(currentBlock);
         }
-        currentBlock = { type, lines: [{ ...line, text: content }] };
+        currentBlock = { type, lines: [{ ...line, text: content, prefixLength }] };
       }
       continue;
     }
 
     // Paragraphs: group consecutive non-empty lines
     if (currentBlock && currentBlock.type === "paragraph") {
-      currentBlock.lines.push(line);
+      currentBlock.lines.push({ ...line, prefixLength: 0 });
     } else {
       if (currentBlock) {
         blocks.push(currentBlock);
       }
-      currentBlock = { type: "paragraph", lines: [line] };
+      currentBlock = { type: "paragraph", lines: [{ ...line, prefixLength: 0 }] };
     }
   }
 
@@ -249,7 +253,56 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
   return blocks;
 };
 
-const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => {
+const renderNotesInline = (
+  text: string,
+  tokens: DocumentStepToken[],
+  options: RenderOptions,
+  prefixLength: number,
+): string => {
+  if (tokens.length === 0) {
+    return renderMarkdownInline(text);
+  }
+
+  type InlineToken = { start: number; end: number; html: string };
+  const inlineTokens: InlineToken[] = [];
+
+  for (const token of tokens) {
+    const start = token.index - prefixLength;
+    const end = token.index + token.raw.length - prefixLength;
+    if (end <= 0) continue;
+    const adjustedStart = Math.max(0, start);
+    if (token.kind === "temperature") {
+      inlineTokens.push({
+        start: adjustedStart,
+        end,
+        html: renderTemperatureToken(token, options.temperatureDisplay),
+      });
+    } else if (token.kind === "quantity") {
+      inlineTokens.push({
+        start: adjustedStart,
+        end,
+        html: renderQuantityToken(token, options.scaleFactor),
+      });
+    }
+  }
+
+  inlineTokens.sort((a, b) => a.start - b.start);
+
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const tok of inlineTokens) {
+    if (tok.start < cursor) continue;
+    const prefix = text.slice(cursor, tok.start);
+    if (prefix) parts.push(renderMarkdownInline(prefix));
+    parts.push(tok.html);
+    cursor = tok.end;
+  }
+  const remainder = text.slice(cursor);
+  if (remainder) parts.push(renderMarkdownInline(remainder));
+  return parts.join("");
+};
+
+const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensByLine: Map<number, DocumentStepToken[]>): string => {
   const renderInlineDiagnostics = (lineNum: number) => {
     if (options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
       return null;
@@ -273,7 +326,8 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => 
     case "header": {
       const line = block.lines[0]!;
       const tag = block.level === 4 ? "h5" : "h4";
-      const content = renderMarkdownInline(line.text);
+      const lineTokens = stepTokensByLine.get(line.line) ?? [];
+      const content = renderNotesInline(line.text, lineTokens, options, line.prefixLength);
       return `<${tag} class="kr-notes__header" data-kr-line="${line.line}">${content}</${tag}>`;
     }
     case "ul":
@@ -287,7 +341,8 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => 
             ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
             : "";
           const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-          const content = renderMarkdownInline(line.text);
+          const lineTokens = stepTokensByLine.get(line.line) ?? [];
+          const content = renderNotesInline(line.text, lineTokens, options, line.prefixLength);
           return `<li class="kr-notes__list-item${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${content}</li>`;
         })
         .join("");
@@ -303,7 +358,8 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => 
         ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
         : "";
       const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-      const content = renderMarkdownInline(text);
+      const lineTokens = stepTokensByLine.get(firstLine.line) ?? [];
+      const content = renderNotesInline(text, lineTokens, options, firstLine.prefixLength);
       return `<p class="kr-notes__paragraph${diagnosticClass}" data-kr-line="${firstLine.line}"${diagnosticAttr}>${diagnosticContent}${content}</p>`;
     }
   }
@@ -312,6 +368,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => 
 const renderNotesSection = (
   section: NotesSection,
   options: RenderOptions,
+  stepTokensByLine: Map<number, DocumentStepToken[]>,
 ): string => {
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
   if (!section.lines.length) {
@@ -319,7 +376,7 @@ const renderNotesSection = (
   }
 
   const blocks = parseNotesBlocks(section.lines);
-  const content = blocks.map((block) => renderNotesBlock(block, options)).join("");
+  const content = blocks.map((block) => renderNotesBlock(block, options, stepTokensByLine)).join("");
 
   return `<section class="kr-section" data-kr-kind="notes">${heading}<div class="kr-section__body">${content}</div></section>`;
 };
@@ -408,19 +465,53 @@ const pickAlternateDisplay = (
   }
 
   if (mode === "metric") {
-    const preferred = candidates.find((c) => c.isMetric && c.text);
-    if (preferred) return preferred;
+    return candidates.find((c) => c.isMetric && c.text) ?? null;
   } else if (mode === "imperial") {
-    const preferred = candidates.find((c) => !c.isMetric && c.hasQuantity && c.text);
-    if (preferred) return preferred;
+    return candidates.find((c) => !c.isMetric && c.hasQuantity && c.text) ?? null;
   }
 
-  const withQuantity = candidates.find((candidate) => candidate.hasQuantity && candidate.text);
-  if (withQuantity) {
-    return withQuantity;
+  return null;
+};
+
+export interface AnchorTarget {
+  amount: number;
+  displayText: string;
+  unit: string;
+}
+
+export const resolveAnchorTarget = (
+  ingredient: Ingredient,
+  quantityDisplay: QuantityDisplayMode,
+): AnchorTarget | null => {
+  if (ingredient.quantity?.kind !== "single") return null;
+
+  const nativeQty = ingredient.quantity;
+  const anchorFromQty = (qty: { value: number; unit: string | null }): AnchorTarget => ({
+    amount: qty.value,
+    displayText: numberToFractionText(qty.value),
+    unit: qty.unit ?? "",
+  });
+
+  if (quantityDisplay === "native") {
+    return anchorFromQty(nativeQty);
   }
 
-  return candidates.find((candidate) => candidate.text) ?? candidates[0] ?? null;
+  // Mirror pickAlternateDisplay: prefer mode-matching alternate, then any alternate with a quantity
+  const alternates = ingredient.attributes
+    .filter((attr) => attr.key === "also" && attr.quantity?.kind === "single")
+    .map((attr) => {
+      const altQty = attr.quantity as import("../core/types").QuantitySingle;
+      const unitInfo = altQty.unit ? lookupUnit(altQty.unit) : null;
+      return { altQty, isMetric: isMetricFamily(unitInfo?.family) };
+    });
+
+  // Prefer mode-matching alternate; fall back to native if none matches
+  const preferred = alternates.find((a) =>
+    quantityDisplay === "metric" ? a.isMetric : !a.isMetric && !!a.altQty.unit,
+  );
+  if (preferred) return anchorFromQty(preferred.altQty);
+
+  return anchorFromQty(nativeQty);
 };
 
 const formatDiagnosticsSummary = (diagnostics: Diagnostic[]): {
@@ -517,86 +608,6 @@ const renderInlineDiagnostics = (
   return { popover, severity, controlsId: markerId };
 };
 
-const durationToSeconds = (duration: TimerDuration): number =>
-  duration.hours * 3600 + duration.minutes * 60 + duration.seconds;
-
-const durationToMilliseconds = (duration: TimerDuration): number =>
-  durationToSeconds(duration) * 1000;
-
-const formatDurationDisplay = (duration: TimerDuration): string => {
-  const parts: string[] = [];
-  if (duration.hours) {
-    parts.push(`${duration.hours}h`);
-  }
-  if (duration.minutes) {
-    parts.push(`${duration.minutes}m`);
-  }
-  if (duration.seconds) {
-    parts.push(`${duration.seconds}s`);
-  }
-  if (parts.length === 0) {
-    parts.push("0s");
-  }
-  return parts.join(" ");
-};
-
-const formatDurationAria = (duration: TimerDuration): string => {
-  const parts: string[] = [];
-  if (duration.hours) {
-    parts.push(`${duration.hours} ${duration.hours === 1 ? "hour" : "hours"}`);
-  }
-  if (duration.minutes) {
-    parts.push(`${duration.minutes} ${duration.minutes === 1 ? "minute" : "minutes"}`);
-  }
-  if (duration.seconds || parts.length === 0) {
-    const seconds = duration.seconds;
-    parts.push(`${seconds} ${seconds === 1 ? "second" : "seconds"}`);
-  }
-  return parts.join(" ");
-};
-
-interface TimerTokenContext {
-  recipeId: string;
-  recipeTitle: string;
-  lineNumber: number;
-  tokenIndex: number;
-}
-
-const renderTimerToken = (
-  token: DocumentStepTimerToken,
-  context: TimerTokenContext,
-): string => {
-  const baseId = `${context.recipeId}:${context.lineNumber}:${context.tokenIndex}`;
-  const timerId = `${baseId}:single`;
-  const durationMs = durationToMilliseconds(token.start);
-  const display = formatDurationDisplay(token.start);
-  const ariaDuration = formatDurationAria(token.start);
-  const ariaLabel = `Start ${ariaDuration} timer`;
-
-  const dataAttrs = [
-    `type="button"`,
-    `class="kr-timer"`,
-    `data-kr-timer-id="${escapeAttr(timerId)}"`,
-    `data-kr-timer-duration="${String(durationMs)}"`,
-    `data-kr-timer-label="${escapeAttr(display)}"`,
-    `data-kr-timer-line="${String(context.lineNumber)}"`,
-    `data-kr-timer-column="${String(token.column)}"`,
-    `data-kr-timer-recipe-id="${escapeAttr(context.recipeId)}"`,
-    `data-kr-timer-recipe-title="${escapeAttr(context.recipeTitle)}"`,
-    `data-kr-timer-variant="single"`,
-    `data-kr-timer-hours="${String(token.start.hours)}"`,
-    `data-kr-timer-minutes="${String(token.start.minutes)}"`,
-    `data-kr-timer-seconds="${String(token.start.seconds)}"`,
-    `data-kr-timer-raw="${escapeAttr(token.raw)}"`,
-  ];
-
-  return `<button ${dataAttrs.join(" ")} aria-label="${escapeAttr(
-    ariaLabel,
-  )}" data-kr-timer-range-role="single"><span class="kr-timer__label">${escapeHtml(
-    display,
-  )}</span></button>`;
-};
-
 const convertTemperature = (value: number, scale: "F" | "C"): { other: number; otherScale: "F" | "C" } => {
   if (scale === "F") {
     return { other: Math.round(((value - 32) * 5) / 9), otherScale: "C" };
@@ -635,18 +646,22 @@ const renderTemperatureToken = (
   )}" title="${escapeAttr(`approx. ${other}${otherScale}`)}">${display}</span>`;
 };
 
-interface TimerStartDetail {
-  timerId: string;
-  recipeId: string;
-  recipeTitle: string;
-  line: number;
-  column: number;
-  variant: "single";
-  durationMs: number;
-  duration: { hours: number; minutes: number; seconds: number };
-  label: string;
-  startedAt: number;
-}
+const renderQuantityToken = (
+  token: DocumentStepQuantityToken,
+  scaleFactor: number,
+): string => {
+  const scaled = scaleFactor !== 1 ? scaleQuantity(token.quantity, scaleFactor) : null;
+  const formatted = formatQuantity(token.quantity, {
+    scaled: scaled ?? undefined,
+    usePreferredUnit: true,
+  });
+  const display = formatted ? escapeHtml(formatted) : escapeHtml(token.raw);
+  if (scaleFactor !== 1 && scaled) {
+    const original = formatQuantity(token.quantity) ?? token.quantity.raw;
+    return `<span class="kr-inline-quantity" title="${escapeAttr(original)}">${display}</span>`;
+  }
+  return `<span class="kr-inline-quantity">${display}</span>`;
+};
 
 const renderIngredientAttributes = (
   attributes: IngredientAttribute[],
@@ -712,7 +727,6 @@ const renderStepLine = (
     .slice()
     .sort((a, b) => a.index - b.index);
 
-  let timerIndex = 0;
   for (const token of recipeTokens) {
     // Adjust indices for stripped step number prefix
     const start = token.index - stepPrefixLength;
@@ -720,22 +734,17 @@ const renderStepLine = (
     // Skip tokens that fall within the stripped prefix
     if (end <= 0) continue;
     const adjustedStart = Math.max(0, start);
-    if (token.kind === "timer") {
-      inlineTokens.push({
-        start: adjustedStart,
-        end,
-        html: renderTimerToken(token, {
-          recipeId: context.recipeId,
-          recipeTitle: context.recipeTitle,
-          lineNumber: line.line,
-          tokenIndex: timerIndex++,
-        }),
-      });
-    } else if (token.kind === "temperature") {
+    if (token.kind === "temperature") {
       inlineTokens.push({
         start: adjustedStart,
         end,
         html: renderTemperatureToken(token, options.temperatureDisplay),
+      });
+    } else if (token.kind === "quantity") {
+      inlineTokens.push({
+        start: adjustedStart,
+        end,
+        html: renderQuantityToken(token, options.scaleFactor),
       });
     }
   }
@@ -1015,7 +1024,7 @@ const renderSection = (
   }
 
   if (section.kind === "notes") {
-    return renderNotesSection(section, options);
+    return renderNotesSection(section, options, stepTokensByLine);
   }
 
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
@@ -1260,6 +1269,7 @@ export class KrRecipeElement extends HTMLElement {
   #inlineSource: string | null = null;
   #isConnected = false;
   #currentStepIndex: Map<string, number> = new Map(); // recipeId → current step index
+  #activeRecipeId: string | null = null; // which recipe currently owns the step pointer
   #stepKeyboardHandler: ((e: KeyboardEvent) => void) | null = null;
   #editable = false;
   #editCleanup: (() => void) | null = null;
@@ -1501,56 +1511,6 @@ export class KrRecipeElement extends HTMLElement {
     return "summary";
   }
 
-  #setupTimerInteractions(): void {
-    if (typeof document === "undefined") {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    if (typeof (root as ShadowRoot).querySelectorAll !== "function") {
-      return;
-    }
-
-    const buttons = Array.from(
-      root.querySelectorAll<HTMLButtonElement>(".kr-timer"),
-    );
-    if (buttons.length === 0) {
-      return;
-    }
-
-    buttons.forEach((button) => {
-      button.addEventListener("click", () => {
-        const detail = this.#buildTimerDetail(button);
-        this.dispatchEvent(new CustomEvent("kr:timer-start", { detail }));
-      });
-    });
-  }
-
-  #buildTimerDetail(button: HTMLButtonElement): TimerStartDetail {
-    const variant = "single" as const;
-    const durationMs = Number(button.dataset.krTimerDuration ?? "0");
-    const hours = Number(button.dataset.krTimerHours ?? "0");
-    const minutes = Number(button.dataset.krTimerMinutes ?? "0");
-    const seconds = Number(button.dataset.krTimerSeconds ?? "0");
-
-    return {
-      timerId: button.dataset.krTimerId ?? "",
-      recipeId: button.dataset.krTimerRecipeId ?? "",
-      recipeTitle: button.dataset.krTimerRecipeTitle ?? "",
-      line: Number(button.dataset.krTimerLine ?? "0"),
-      column: Number(button.dataset.krTimerColumn ?? "0"),
-      variant,
-      durationMs,
-      duration: { hours, minutes, seconds },
-      label: button.dataset.krTimerLabel ?? button.textContent ?? "",
-      startedAt: Date.now(),
-    };
-  }
-
   /** Reset all scale state back to 1× */
   #resetScale(): void {
     this.#scaleMode = "fixed";
@@ -1723,19 +1683,30 @@ export class KrRecipeElement extends HTMLElement {
         root.querySelectorAll<HTMLElement>('.kr-ingredient[data-kr-scalable="true"]'),
       );
 
+      const quantityDisplay = this.#resolveQuantityDisplay();
       for (const ingEl of scalableIngredients) {
         const handler = () => {
           const id = ingEl.dataset.krId;
           if (!id) return;
+
+          // If this ingredient is already the anchor, just open the editor
+          if (id === this.#anchorIngredientId) {
+            this.#anchorEditing = true;
+            this.#render();
+            return;
+          }
+
           for (const recipe of doc.recipes) {
             for (const section of recipe.sections) {
               if (section.kind !== "ingredients") continue;
               for (const ing of section.ingredients) {
-                if (ing.id === id && ing.quantity?.kind === "single") {
+                if (ing.id === id) {
+                  const target = resolveAnchorTarget(ing, quantityDisplay);
+                  if (!target) return;
                   this.#anchorIngredientId = id;
-                  this.#anchorCustomAmount = ing.quantity.value;
-                  this.#anchorDisplayText = numberToFractionText(ing.quantity.value);
-                  this.#anchorUnit = ing.quantity.unit ?? "";
+                  this.#anchorCustomAmount = target.amount;
+                  this.#anchorDisplayText = target.displayText;
+                  this.#anchorUnit = target.unit;
                   this.#anchorEditing = true;
                   this.#render();
                   return;
@@ -2069,7 +2040,6 @@ export class KrRecipeElement extends HTMLElement {
       this.dispatchEvent(new CustomEvent("kr:scale-change", { detail: scaleDetail }));
     }
 
-    this.#setupTimerInteractions();
     if (!this.#editable) {
       this.#setupReferenceInteractions();
       this.#setupSubrecipeLinks();
@@ -2268,7 +2238,11 @@ export class KrRecipeElement extends HTMLElement {
       if (isArrowKey || isSpace) {
         e.preventDefault();
 
-        if (e.key === "ArrowDown" || e.key === "ArrowRight" || e.key === " ") {
+        if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowRight")) {
+          this.#jumpToNextRecipe();
+        } else if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowLeft")) {
+          this.#jumpToPreviousRecipe();
+        } else if (e.key === "ArrowDown" || e.key === "ArrowRight" || e.key === " ") {
           this.#advanceToNextStep();
         } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
           this.#advanceToPreviousStep();
@@ -2302,18 +2276,35 @@ export class KrRecipeElement extends HTMLElement {
       return;
     }
 
-    // Update stored index
+    // Clear active step in all other recipes
+    if (this.#activeRecipeId && this.#activeRecipeId !== recipeId) {
+      const oldSteps = Array.from(
+        root.querySelectorAll<HTMLElement>(`.kr-step[data-kr-recipe-id="${cssEscape(this.#activeRecipeId)}"]`)
+      );
+      oldSteps.forEach((step) => step.setAttribute("aria-pressed", "false"));
+    }
+
+    // Update stored index and active recipe
+    this.#activeRecipeId = recipeId;
     this.#currentStepIndex.set(recipeId, stepIndex);
 
     // Update aria-pressed on all steps for this recipe
     const steps = Array.from(
-      root.querySelectorAll<HTMLElement>(`.kr-step[data-kr-recipe-id="${CSS.escape(recipeId)}"]`)
+      root.querySelectorAll<HTMLElement>(`.kr-step[data-kr-recipe-id="${cssEscape(recipeId)}"]`)
     );
 
+    let activeStep: HTMLElement | null = null;
     steps.forEach((step) => {
       const thisStepIndex = Number(step.getAttribute("data-kr-step-index"));
-      step.setAttribute("aria-pressed", thisStepIndex === stepIndex ? "true" : "false");
+      const isActive = thisStepIndex === stepIndex;
+      step.setAttribute("aria-pressed", isActive ? "true" : "false");
+      if (isActive) activeStep = step;
     });
+
+    // Scroll the active step into view if needed
+    if (activeStep && typeof (activeStep as HTMLElement).scrollIntoView === "function") {
+      (activeStep as HTMLElement).scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
 
     // Highlight ingredients referenced in current step
     this.#updateIngredientHighlights(recipeId, stepIndex);
@@ -2329,28 +2320,22 @@ export class KrRecipeElement extends HTMLElement {
       return;
     }
 
-    // Find current step
-    const currentStep = root.querySelector<HTMLElement>('.kr-step[aria-pressed="true"]');
-    if (!currentStep) {
-      // No current step, activate first step
+    const recipeId = this.#activeRecipeId;
+    if (!recipeId) {
+      // No active recipe, activate first step of first recipe
       const firstStep = root.querySelector<HTMLElement>(".kr-step[data-kr-step-index]");
       if (firstStep) {
-        const recipeId = firstStep.getAttribute("data-kr-recipe-id") ?? "";
-        this.#setCurrentStep(recipeId, 0);
+        const id = firstStep.getAttribute("data-kr-recipe-id") ?? "";
+        this.#setCurrentStep(id, 0);
       }
       return;
     }
 
-    const recipeId = currentStep.getAttribute("data-kr-recipe-id") ?? "";
-    const currentIndex = Number(currentStep.getAttribute("data-kr-step-index"));
-
-    if (Number.isNaN(currentIndex)) {
-      return;
-    }
+    const currentIndex = this.#currentStepIndex.get(recipeId) ?? 0;
 
     // Find next step in same recipe
     const nextStep = root.querySelector<HTMLElement>(
-      `.kr-step[data-kr-recipe-id="${CSS.escape(recipeId)}"][data-kr-step-index="${currentIndex + 1}"]`
+      `.kr-step[data-kr-recipe-id="${cssEscape(recipeId)}"][data-kr-step-index="${currentIndex + 1}"]`
     );
 
     if (nextStep) {
@@ -2360,32 +2345,60 @@ export class KrRecipeElement extends HTMLElement {
   }
 
   #advanceToPreviousStep(): void {
+    const recipeId = this.#activeRecipeId;
+    if (!recipeId) {
+      return;
+    }
+
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
 
-    // Find current step
-    const currentStep = root.querySelector<HTMLElement>('.kr-step[aria-pressed="true"]');
-    if (!currentStep) {
-      return;
-    }
+    const currentIndex = this.#currentStepIndex.get(recipeId) ?? 0;
 
-    const recipeId = currentStep.getAttribute("data-kr-recipe-id") ?? "";
-    const currentIndex = Number(currentStep.getAttribute("data-kr-step-index"));
-
-    if (Number.isNaN(currentIndex) || currentIndex === 0) {
+    if (currentIndex === 0) {
       return; // Already at first step
     }
 
     // Find previous step in same recipe
     const prevStep = root.querySelector<HTMLElement>(
-      `.kr-step[data-kr-recipe-id="${CSS.escape(recipeId)}"][data-kr-step-index="${currentIndex - 1}"]`
+      `.kr-step[data-kr-recipe-id="${cssEscape(recipeId)}"][data-kr-step-index="${currentIndex - 1}"]`
     );
 
     if (prevStep) {
       this.#setCurrentStep(recipeId, currentIndex - 1);
     }
+  }
+
+  #getRecipeIds(): string[] {
+    const root = this.shadowRoot;
+    if (!root) return [];
+    const steps = Array.from(root.querySelectorAll<HTMLElement>(".kr-step[data-kr-recipe-id]"));
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const step of steps) {
+      const id = step.getAttribute("data-kr-recipe-id") ?? "";
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        ids.push(id);
+      }
+    }
+    return ids;
+  }
+
+  #jumpToNextRecipe(): void {
+    const recipeIds = this.#getRecipeIds();
+    const currentIdx = this.#activeRecipeId ? recipeIds.indexOf(this.#activeRecipeId) : -1;
+    if (currentIdx < 0 || currentIdx >= recipeIds.length - 1) return;
+    this.#setCurrentStep(recipeIds[currentIdx + 1]!, 0);
+  }
+
+  #jumpToPreviousRecipe(): void {
+    const recipeIds = this.#getRecipeIds();
+    const currentIdx = this.#activeRecipeId ? recipeIds.indexOf(this.#activeRecipeId) : -1;
+    if (currentIdx <= 0) return;
+    this.#setCurrentStep(recipeIds[currentIdx - 1]!, 0);
   }
 
   #updateIngredientHighlights(recipeId: string, stepIndex: number): void {
@@ -2396,7 +2409,7 @@ export class KrRecipeElement extends HTMLElement {
 
     // Get the current step element
     const step = root.querySelector<HTMLElement>(
-      `.kr-step[data-kr-recipe-id="${CSS.escape(recipeId)}"][data-kr-step-index="${stepIndex}"]`
+      `.kr-step[data-kr-recipe-id="${cssEscape(recipeId)}"][data-kr-step-index="${stepIndex}"]`
     );
 
     // Clear all highlights first
@@ -2415,7 +2428,7 @@ export class KrRecipeElement extends HTMLElement {
     // Highlight corresponding ingredients
     targetIds.forEach((targetId) => {
       const ingredient = root.querySelector<HTMLElement>(
-        `.kr-ingredient[data-kr-id="${CSS.escape(targetId!)}"]`
+        `.kr-ingredient[data-kr-id="${cssEscape(targetId!)}"]`
       );
       if (ingredient) {
         ingredient.setAttribute("data-kr-step-highlight", "true");

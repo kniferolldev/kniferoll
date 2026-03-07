@@ -88,11 +88,6 @@ export function setupEditInteractions(
       ".kr-notes__paragraph, .kr-notes__list-item, .kr-notes__header",
     );
 
-    // Don't intercept clicks on timers in edit mode
-    if (target.closest(".kr-timer")) {
-      return;
-    }
-
     if (ingredient) {
       e.preventDefault();
       e.stopPropagation();

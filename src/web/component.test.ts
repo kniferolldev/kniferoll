@@ -223,7 +223,7 @@ test("ingredients render quantity, modifiers, and attributes", () => {
   expect(html).toContain('data-kr-quantity-mode="native"');
 });
 
-test("renderDocument renders timer and temperature tokens", () => {
+test("renderDocument renders temperature tokens", () => {
   if (!componentModule) {
     throw new Error("Component module was not initialized");
   }
@@ -233,17 +233,16 @@ test("renderDocument renders timer and temperature tokens", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat @350F.",
-    "2. Bake @35m until browned.",
-    "3. Rest @10m before slicing.",
+    "1. Preheat to {350F}.",
+    "2. Bake 35 minutes until browned.",
+    "3. Rest 10 minutes before slicing.",
   ].join("\n");
 
   const html = componentModule.renderDocument(parseDocument(markdown));
 
   expect(html).toContain('class="kr-temperature"');
   expect(html).toContain('data-kr-temperature-scale="F"');
-  expect(html).toContain('class="kr-timer"');
-  expect(html).toContain('data-kr-timer-variant="single"');
+  expect(html).not.toContain('class="kr-timer"');
 });
 
 test("renderDocument renders diagnostics controls according to mode", () => {
@@ -801,7 +800,7 @@ test("temperature-display C converts F temperatures", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat @350F.",
+    "1. Preheat to {350F}.",
   ].join("\n");
 
   const parsed = parseDocument(markdown);
@@ -823,7 +822,7 @@ test("temperature-display F converts C temperatures", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat @180C.",
+    "1. Preheat to {180C}.",
   ].join("\n");
 
   const parsed = parseDocument(markdown);
@@ -845,7 +844,7 @@ test("temperature-display unset shows native temperature", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat @350F.",
+    "1. Preheat to {350F}.",
   ].join("\n");
 
   const parsed = parseDocument(markdown);
@@ -867,7 +866,7 @@ test("KrRecipeElement responds to temperature-display attribute", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat @350F.",
+    "1. Preheat to {350F}.",
   ].join("\n");
 
   element.connectedCallback();
@@ -997,7 +996,64 @@ test("setting scale attribute externally exits anchor mode", () => {
   expect(html).not.toMatch(/kr-scale-chip--active[^"]*"[^>]*data-kr-scale-mode="by-ingredient"/);
 });
 
-test("steps inline formatting works alongside references and timers", () => {
+test("resolveAnchorTarget returns native quantity in native mode", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const doc = parseDocument('# Demo\n\n# R\n## Ingredients\n- flour - 2 cups :: id=flour also="240 g"\n## Steps\n1. Mix.');
+  const ing = doc.recipes[0]!.sections[0]!;
+  if (ing.kind !== "ingredients") throw new Error("Expected ingredients section");
+  const flour = ing.ingredients.find((i) => i.id === "flour")!;
+
+  const target = componentModule.resolveAnchorTarget(flour, "native");
+  expect(target).toBeTruthy();
+  expect(target!.amount).toBe(2);
+  expect(target!.unit).toBe("cups");
+});
+
+test("resolveAnchorTarget returns metric alternate in metric mode", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const doc = parseDocument('# Demo\n\n# R\n## Ingredients\n- flour - 1 cup :: id=flour also="120 g"\n## Steps\n1. Mix.');
+  const ing = doc.recipes[0]!.sections[0]!;
+  if (ing.kind !== "ingredients") throw new Error("Expected ingredients section");
+  const flour = ing.ingredients.find((i) => i.id === "flour")!;
+
+  const target = componentModule.resolveAnchorTarget(flour, "metric");
+  expect(target).toBeTruthy();
+  expect(target!.amount).toBe(120);
+  expect(target!.unit).toBe("g");
+});
+
+test("resolveAnchorTarget falls back to native when no mode-matching alternate exists", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  // Imperial mode but only metric also= available — should keep native (cups), not swap to grams
+  const doc = parseDocument('# Demo\n\n# R\n## Ingredients\n- sauce - 1 1/3 cup :: id=sauce also="300 g"\n## Steps\n1. Mix.');
+  const ing = doc.recipes[0]!.sections[0]!;
+  if (ing.kind !== "ingredients") throw new Error("Expected ingredients section");
+  const sauce = ing.ingredients.find((i) => i.id === "sauce")!;
+
+  const target = componentModule.resolveAnchorTarget(sauce, "imperial");
+  expect(target).toBeTruthy();
+  expect(target!.amount).toBeCloseTo(1.333, 2);
+  expect(target!.unit).toBe("cup");
+});
+
+test("resolveAnchorTarget falls back to native when no alternates exist", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const doc = parseDocument('# Demo\n\n# R\n## Ingredients\n- flour - 2 cups :: id=flour\n## Steps\n1. Mix.');
+  const ing = doc.recipes[0]!.sections[0]!;
+  if (ing.kind !== "ingredients") throw new Error("Expected ingredients section");
+  const flour = ing.ingredients.find((i) => i.id === "flour")!;
+
+  const target = componentModule.resolveAnchorTarget(flour, "metric");
+  expect(target).toBeTruthy();
+  expect(target!.amount).toBe(2);
+  expect(target!.unit).toBe("cups");
+});
+
+test("steps inline formatting works alongside references and temperatures", () => {
   if (!componentModule) {
     throw new Error("Component module was not initialized");
   }
@@ -1009,14 +1065,39 @@ test("steps inline formatting works alongside references and timers", () => {
     "## Ingredients",
     "- salt",
     "## Steps",
-    "1. Add [[salt]] and stir **vigorously** for @5m.",
+    "1. Add [[salt]] and stir **vigorously** at {350F} for 5 minutes.",
   ].join("\n");
 
   const html = componentModule.renderDocument(parseDocument(markdown));
 
-  // Should have all: reference, bold formatting, and timer
   expect(html).toContain('class="kr-ref"');
   expect(html).toContain('data-kr-target="salt"');
   expect(html).toContain("<strong>vigorously</strong>");
-  expect(html).toContain('class="kr-timer"');
+  expect(html).toContain('class="kr-temperature"');
+});
+
+test("renderDocument renders inline value tokens in notes bullet items", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Pizza",
+    "## Ingredients",
+    "- cheese - 340 g",
+    "## Steps",
+    "1. Assemble and bake at {500F}.",
+    "## Notes",
+    "- **Cheese Substitution:** Replace with {1 1/2 cups} ({170g}) mozzarella.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  // Should render the quantity tokens properly (not garbled)
+  expect(html).toContain('class="kr-inline-quantity"');
+  expect(html).toContain("1½ cup");
+  expect(html).toContain("170 g");
+  // Should NOT contain raw curly brace tokens in the output
+  expect(html).not.toContain("{1 1/2 cups}");
+  expect(html).not.toContain("{170g}");
 });

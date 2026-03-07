@@ -11,6 +11,7 @@ import type {
 import {
   choosePreferredUnit,
   fromBaseValue,
+  isMetricFamily,
   lookupUnit,
   roundToProfile,
   toBaseValue,
@@ -23,6 +24,15 @@ const FRACTION_MAP: Record<number, string> = {
   0.5: "1/2",
   0.6666666666: "2/3",
   0.75: "3/4",
+};
+
+const VULGAR_FRACTIONS: Record<string, string> = {
+  "1/8": "⅛",
+  "1/4": "¼",
+  "1/3": "⅓",
+  "1/2": "½",
+  "2/3": "⅔",
+  "3/4": "¾",
 };
 
 const EPSILON = 1e-6;
@@ -57,7 +67,8 @@ const nearestFraction = (value: number): { whole: number; fraction: string | nul
 };
 
 const formatNumber = (value: number, unitInfo: UnitMatch | null, allowFractions = false): string => {
-  const fractionEnabled = allowFractions || unitInfo?.rounding.precision === undefined;
+  const isMetric = unitInfo && isMetricFamily(unitInfo.family);
+  const fractionEnabled = !isMetric;
   const absValue = Math.abs(value);
 
   // Try to match fractions first, before rounding
@@ -65,10 +76,11 @@ const formatNumber = (value: number, unitInfo: UnitMatch | null, allowFractions 
     const fractionCandidate = nearestFraction(absValue);
 
     if (fractionCandidate.fraction) {
+      const vulgar = VULGAR_FRACTIONS[fractionCandidate.fraction] ?? fractionCandidate.fraction;
       if (fractionCandidate.whole === 0) {
-        return `${value < 0 ? "-" : ""}${fractionCandidate.fraction}`;
+        return `${value < 0 ? "-" : ""}${vulgar}`;
       }
-      return `${value < 0 ? "-" : ""}${Math.abs(fractionCandidate.whole)} ${fractionCandidate.fraction}`;
+      return `${value < 0 ? "-" : ""}${Math.abs(fractionCandidate.whole)}${vulgar}`;
     }
   }
 

@@ -239,7 +239,7 @@ test("numbered steps with indented continuation lines pass", () => {
     "## Steps",
     "1. Combine dry ingredients in a bowl,",
     "   then stir gently to mix.",
-    "2. Bake @300F for @40m.",
+    "2. Bake at {300F} for 40 minutes.",
   ].join("\n");
 
   const result = parseDocument(input);
@@ -270,50 +270,37 @@ test("step continuation lines are unwrapped and joined", () => {
   }
 });
 
-test("invalid timer token emits W0402", () => {
+test("unknown inline value emits W0402", () => {
   const input = [
     "# Roast",
     "## Ingredients",
     "- chicken",
     "## Steps",
-    "1. Rest @10mm before slicing.",
+    "1. Rest {???} before slicing.",
   ].join("\n");
 
   const result = parseDocument(input);
   expect(byCode(result.diagnostics, "W0402").length).toBe(1);
 });
 
-test("valid timer forms are accepted", () => {
+test("step tokens capture temperatures", () => {
   const input = [
     "# Roast",
     "## Ingredients",
     "- chicken",
     "## Steps",
-    "1. Rest @10min before slicing.",
-    "2. Cook @1h15min until tender.",
+    "1. Preheat to {375F}.",
+    "2. Cook for 1 hour 10 minutes until done.",
   ].join("\n");
 
   const result = parseDocument(input);
-  expect(byCode(result.diagnostics, "W0402").length).toBe(0);
-});
+  const temps = result.stepTokens.filter((t) => t.kind === "temperature");
+  expect(temps.length).toBe(1);
 
-test("step tokens capture timers and temperatures", () => {
-  const input = [
-    "# Roast",
-    "## Ingredients",
-    "- chicken",
-    "## Steps",
-    "1. Preheat to @375F.",
-    "2. Cook for @1h10m–@1h20m until done.",
-  ].join("\n");
-
-  const result = parseDocument(input);
-  expect(result.stepTokens.length).toBe(3);
-
-  const temp = result.stepTokens.find((token) => token.kind === "temperature");
-  expect(temp).toBeTruthy();
+  const temp = temps[0];
   expect(temp).toEqual(
     expect.objectContaining({
+      kind: "temperature",
       value: 375,
       scale: "F",
       line: 5,
@@ -321,21 +308,47 @@ test("step tokens capture timers and temperatures", () => {
       recipeTitle: "Roast",
     }),
   );
+});
 
-  const timers = result.stepTokens.filter((token) => token.kind === "timer");
-  expect(timers.length).toBe(2);
-  expect(timers[0]).toEqual(
+test("step tokens capture quantities", () => {
+  const input = [
+    "# Meatballs",
+    "## Ingredients",
+    "- ground beef - 500 g",
+    "## Steps",
+    "1. Form into {20} meatballs.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const quantities = result.stepTokens.filter((t) => t.kind === "quantity");
+  expect(quantities.length).toBe(1);
+  expect(quantities[0]).toEqual(
     expect.objectContaining({
-      start: expect.objectContaining({ hours: 1, minutes: 10 }),
-      line: 6,
+      kind: "quantity",
+      line: 5,
+      recipeId: "meatballs",
     }),
   );
-  expect(timers[1]).toEqual(
-    expect.objectContaining({
-      start: expect.objectContaining({ hours: 1, minutes: 20 }),
-      line: 6,
-    }),
-  );
+});
+
+test("inline values in notes are extracted", () => {
+  const input = [
+    "# Cake",
+    "## Ingredients",
+    "- flour - 200 g",
+    "## Steps",
+    "1. Mix and bake at {350F}.",
+    "## Notes",
+    "- Makes about {12} servings.",
+    "- Store at {-18C} for up to 3 months.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.stepTokens.length).toBe(3);
+  const temps = result.stepTokens.filter((t) => t.kind === "temperature");
+  const quantities = result.stepTokens.filter((t) => t.kind === "quantity");
+  expect(temps.length).toBe(2); // 350F and -18C
+  expect(quantities.length).toBe(1); // 12
 });
 
 test("same ingredient name in different recipes does not conflict", () => {

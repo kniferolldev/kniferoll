@@ -357,6 +357,60 @@ test("matches null units when anchor has no unit", () => {
   }
 });
 
+test("anchor matches alternate unit from also= attribute", () => {
+  const doc = docFrom(
+    [
+      "# Test Recipe",
+      "## Ingredients",
+      '- flour - 1 cup :: id=flour also="120 g"',
+    ].join("\n"),
+  );
+
+  const result = computeScaleFactor(doc, {
+    anchor: { id: "flour", amount: 240, unit: "g" },
+  });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.factor).toBe(2);
+  }
+});
+
+test("anchor matches alternate unitless quantity from also= attribute", () => {
+  const doc = docFrom(
+    [
+      "# Test Recipe",
+      "## Ingredients",
+      '- sausage - 6 oz :: id=sausage also="2 links"',
+    ].join("\n"),
+  );
+
+  const result = computeScaleFactor(doc, {
+    anchor: { id: "sausage", amount: 4, unit: "links" },
+  });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.factor).toBe(2);
+  }
+});
+
+test("anchor prefers native unit match over alternate", () => {
+  const doc = docFrom(
+    [
+      "# Test Recipe",
+      "## Ingredients",
+      '- flour - 2 cup :: id=flour also="240 g"',
+    ].join("\n"),
+  );
+
+  const result = computeScaleFactor(doc, {
+    anchor: { id: "flour", amount: 4, unit: "cup" },
+  });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.factor).toBe(2);
+  }
+});
+
 test("resolves preset by name case-insensitively", () => {
   const doc = docFrom(
     [
