@@ -28,7 +28,7 @@ scales:
 3. Pour the liquid mixture into the dry ingredients and mix thoroughly to coat
    evenly.
 4. Spread the mixture onto a parchment-lined sheet pan.
-5. Bake @300F for @40m, stirring or turning halfway through.
+5. Bake at {300F} for 40 minutes, stirring or turning halfway through.
 6. Cool slightly, then mix in [[dried-fruit]].
 
 ## Notes

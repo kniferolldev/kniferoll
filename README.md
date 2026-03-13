@@ -1,6 +1,6 @@
 # kniferoll
 
-A single-tag web component (`<kr-recipe>`) that renders Recipe Markdown offline in the browser.
+A single-tag web component (`<kr-recipe>`) that renders Kniferoll Markdown offline in the browser.
 
 ## Getting Started
 
@@ -120,7 +120,7 @@ Displays doubled quantities (2 cups flour, 2 cups milk, 4 eggs).
 
 ```html
 <kr-recipe layout="two-column">
-<!-- recipe markdown -->
+<!-- kniferoll markdown -->
 </kr-recipe>
 ```
 

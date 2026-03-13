@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { parseDocument } from "../core/parser";
 
 class FakeShadowRoot {
@@ -233,7 +233,7 @@ test("renderDocument renders temperature tokens", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat @350F.",
+    "1. Preheat to {350F}.",
     "2. Bake 35 minutes until browned.",
     "3. Rest 10 minutes before slicing.",
   ].join("\n");
@@ -800,7 +800,7 @@ test("temperature-display C converts F temperatures", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat @350F.",
+    "1. Preheat to {350F}.",
   ].join("\n");
 
   const parsed = parseDocument(markdown);
@@ -822,7 +822,7 @@ test("temperature-display F converts C temperatures", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat @180C.",
+    "1. Preheat to {180C}.",
   ].join("\n");
 
   const parsed = parseDocument(markdown);
@@ -844,7 +844,7 @@ test("temperature-display unset shows native temperature", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat @350F.",
+    "1. Preheat to {350F}.",
   ].join("\n");
 
   const parsed = parseDocument(markdown);
@@ -866,7 +866,7 @@ test("KrRecipeElement responds to temperature-display attribute", () => {
     "",
     "# Roast",
     "## Steps",
-    "1. Preheat @350F.",
+    "1. Preheat to {350F}.",
   ].join("\n");
 
   element.connectedCallback();
@@ -1024,10 +1024,10 @@ test("resolveAnchorTarget returns metric alternate in metric mode", () => {
   expect(target!.unit).toBe("g");
 });
 
-test("resolveAnchorTarget uses non-preferred alternate when no mode match (like pickAlternateDisplay)", () => {
+test("resolveAnchorTarget falls back to native when no mode-matching alternate exists", () => {
   if (!componentModule) throw new Error("Component module was not initialized");
 
-  // Imperial mode but only metric also= available — should use the metric alternate (not native)
+  // Imperial mode but only metric also= available — should keep native (cups), not swap to grams
   const doc = parseDocument('# Demo\n\n# R\n## Ingredients\n- sauce - 1 1/3 cup :: id=sauce also="300 g"\n## Steps\n1. Mix.');
   const ing = doc.recipes[0]!.sections[0]!;
   if (ing.kind !== "ingredients") throw new Error("Expected ingredients section");
@@ -1035,8 +1035,8 @@ test("resolveAnchorTarget uses non-preferred alternate when no mode match (like 
 
   const target = componentModule.resolveAnchorTarget(sauce, "imperial");
   expect(target).toBeTruthy();
-  expect(target!.amount).toBe(300);
-  expect(target!.unit).toBe("g");
+  expect(target!.amount).toBeCloseTo(1.333, 2);
+  expect(target!.unit).toBe("cup");
 });
 
 test("resolveAnchorTarget falls back to native when no alternates exist", () => {
@@ -1065,7 +1065,7 @@ test("steps inline formatting works alongside references and temperatures", () =
     "## Ingredients",
     "- salt",
     "## Steps",
-    "1. Add [[salt]] and stir **vigorously** at @350F for 5 minutes.",
+    "1. Add [[salt]] and stir **vigorously** at {350F} for 5 minutes.",
   ].join("\n");
 
   const html = componentModule.renderDocument(parseDocument(markdown));
@@ -1074,4 +1074,309 @@ test("steps inline formatting works alongside references and temperatures", () =
   expect(html).toContain('data-kr-target="salt"');
   expect(html).toContain("<strong>vigorously</strong>");
   expect(html).toContain('class="kr-temperature"');
+});
+
+test("renderDocument renders inline value tokens in notes bullet items", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Pizza",
+    "## Ingredients",
+    "- cheese - 340 g",
+    "## Steps",
+    "1. Assemble and bake at {500F}.",
+    "## Notes",
+    "- **Cheese Substitution:** Replace with {1 1/2 cups} ({170g}) mozzarella.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  // Should render the quantity tokens properly (not garbled)
+  expect(html).toContain('class="kr-inline-quantity"');
+  expect(html).toContain("1½ cup");
+  expect(html).toContain("170 g");
+  // Should NOT contain raw curly brace tokens in the output
+  expect(html).not.toContain("{1 1/2 cups}");
+  expect(html).not.toContain("{170g}");
+});
+
+test("inline quantity tokens in steps render and scale", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Meatballs",
+    "## Ingredients",
+    "- beef - 500 g",
+    "## Steps",
+    "1. Form into {20} meatballs of about {25g} each.",
+  ].join("\n");
+
+  // Unscaled: quantities render at 1x
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  expect(html).toContain('class="kr-inline-quantity"');
+  expect(html).toContain(">20<");
+  expect(html).toContain(">25 g<");
+  expect(html).not.toContain("{20}");
+  expect(html).not.toContain("{25g}");
+
+  // Scaled: quantities double at 2x
+  const scaled = componentModule.renderDocument(parseDocument(markdown), { scaleFactor: 2 });
+  expect(scaled).toContain(">40<");
+  expect(scaled).toContain(">50 g<");
+});
+
+test("inline temperature tokens in notes render correctly", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Cake",
+    "## Ingredients",
+    "- flour - 200 g",
+    "## Steps",
+    "1. Mix and bake.",
+    "## Notes",
+    "- Bake at {350F} until golden.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  expect(html).toContain('class="kr-temperature"');
+  expect(html).toContain("350");
+  expect(html).not.toContain("{350F}");
+});
+
+test("inline value tokens in notes numbered list items", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Cake",
+    "## Ingredients",
+    "- flour - 200 g",
+    "## Steps",
+    "1. Mix and bake.",
+    "## Notes",
+    "1. Makes {12} servings.",
+    "2. Reheat at {350F}.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  expect(html).toContain('class="kr-inline-quantity"');
+  expect(html).toContain('class="kr-temperature"');
+  expect(html).not.toContain("{12}");
+  expect(html).not.toContain("{350F}");
+});
+
+test("inline value tokens in notes paragraphs", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Cake",
+    "## Ingredients",
+    "- flour - 200 g",
+    "## Steps",
+    "1. Mix and bake.",
+    "## Notes",
+    "This recipe makes about {12} servings. Store leftovers at {-18C}.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  expect(html).toContain('class="kr-inline-quantity"');
+  expect(html).toContain('class="kr-temperature"');
+  expect(html).not.toContain("{12}");
+  expect(html).not.toContain("{-18C}");
+});
+
+test("inline value tokens in notes headers", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Cake",
+    "## Ingredients",
+    "- flour - 200 g",
+    "## Steps",
+    "1. Mix and bake.",
+    "## Notes",
+    "### Makes {12} servings",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  expect(html).toContain('class="kr-inline-quantity"');
+  expect(html).not.toContain("{12}");
+});
+
+test("scaled inline quantities in notes", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Meatballs",
+    "## Ingredients",
+    "- beef - 500 g",
+    "## Steps",
+    "1. Form into meatballs.",
+    "## Notes",
+    "- Makes about {20} meatballs, roughly {25g} each.",
+  ].join("\n");
+
+  const scaled = componentModule.renderDocument(parseDocument(markdown), { scaleFactor: 2 });
+  expect(scaled).toContain(">40<");
+  expect(scaled).toContain(">50 g<");
+});
+
+test("inline value tokens in multi-line continuation notes", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Cake",
+    "## Ingredients",
+    "- flour - 200 g",
+    "## Steps",
+    "1. Mix and bake.",
+    "## Notes",
+    "- **Substitution:** Use {1 1/2 cups} ({170g})",
+    "  shredded mozzarella instead.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  expect(html).toContain('class="kr-inline-quantity"');
+  expect(html).toContain("1½ cup");
+  expect(html).toContain("170 g");
+  expect(html).not.toContain("{1 1/2 cups}");
+  expect(html).not.toContain("{170g}");
+});
+
+// ---------- Attribute chips ----------
+
+describe("attribute chips", () => {
+  const render = (md: string, opts?: Record<string, unknown>) => {
+    if (!componentModule) throw new Error("Component module was not initialized");
+    return componentModule.renderDocument(parseDocument(md), opts);
+  };
+
+  const attrMd = [
+    "# Test",
+    "",
+    "# Salad",
+    "## Ingredients",
+    "- sugar - 1 cup, finely ground :: id=super-sugar also=200g noscale",
+    "- lettuce",
+    "## Steps",
+    "1. Toss.",
+  ].join("\n");
+
+  const scalableMd = [
+    "# Test",
+    "",
+    "# Bread",
+    "## Ingredients",
+    "- flour - 1 cup :: also=200g",
+    "## Steps",
+    "1. Mix.",
+  ].join("\n");
+
+  test("default (no showAttributes): no chip container", () => {
+    expect(render(attrMd)).not.toContain('class="kr-ingredient__attributes"');
+  });
+
+  test("renders also and noscale chips, omits id", () => {
+    const html = render(attrMd, { showAttributes: true });
+    expect(html).toContain('class="kr-ingredient__attributes"');
+    expect(html).toContain('data-kr-attribute="also"');
+    expect(html).toContain('data-kr-attribute="noscale"');
+    expect(html).not.toContain('data-kr-attribute="id"');
+  });
+
+  test("metric display: picked also is omitted from chips", () => {
+    const html = render(attrMd, { showAttributes: true, quantityDisplay: "metric" });
+    expect(html).not.toContain('data-kr-attribute="also"');
+    expect(html).toContain('data-kr-attribute="noscale"');
+  });
+
+  test("imperial display: unpicked metric also stays as chip", () => {
+    const html = render(attrMd, { showAttributes: true, quantityDisplay: "imperial" });
+    expect(html).toContain('data-kr-attribute="also"');
+  });
+
+  test("scaled chip values reflect scaleFactor", () => {
+    const html = render(scalableMd, { showAttributes: true, scaleFactor: 2 });
+    expect(html).toContain("400 g");
+  });
+
+  test("scaled + metric: also deduped, primary shows scaled value", () => {
+    const html = render(scalableMd, {
+      showAttributes: true,
+      scaleFactor: 2,
+      quantityDisplay: "metric",
+    });
+    expect(html).not.toContain('data-kr-attribute="also"');
+    expect(html).toContain("400 g");
+  });
+
+  test("ingredient with no attributes: no chip container", () => {
+    const html = render(attrMd, { showAttributes: true });
+    // Only sugar has attributes; lettuce should not get a container
+    const matches = html.match(/class="kr-ingredient__attributes"/g);
+    expect(matches?.length).toBe(1);
+  });
+
+  test("ingredient with only id=: no chip container (all filtered)", () => {
+    const md = [
+      "# Test",
+      "",
+      "# Soup",
+      "## Ingredients",
+      "- salt :: id=sea-salt",
+      "## Steps",
+      "1. Stir.",
+    ].join("\n");
+    const html = render(md, { showAttributes: true });
+    expect(html).not.toContain('class="kr-ingredient__attributes"');
+  });
+
+  test("multiple also= attributes: all rendered in native mode", () => {
+    const md = [
+      "# Test",
+      "",
+      "# Bread",
+      "## Ingredients",
+      "- flour - 2 cups :: also=240g also=8oz",
+      "## Steps",
+      "1. Mix.",
+    ].join("\n");
+    const html = render(md, { showAttributes: true });
+    const alsoMatches = html.match(/data-kr-attribute="also"/g);
+    expect(alsoMatches?.length).toBe(2);
+  });
+
+  test("noscale renders as valueless chip", () => {
+    const html = render(attrMd, { showAttributes: true });
+    expect(html).toMatch(/data-kr-attribute="noscale">noscale<\/span>/);
+  });
+
+  test("KrRecipeElement: show-attributes toggles chips", () => {
+    if (!componentModule) throw new Error("Component module was not initialized");
+    const { KrRecipeElement } = componentModule;
+    const element = new KrRecipeElement();
+    element.content = attrMd;
+    element.setAttribute("show-attributes", "");
+    element.connectedCallback();
+    expect(element.shadowRoot?.innerHTML).toContain('class="kr-ingredient__attributes"');
+
+    element.removeAttribute("show-attributes");
+    expect(element.shadowRoot?.innerHTML).not.toContain('class="kr-ingredient__attributes"');
+  });
 });

@@ -162,13 +162,13 @@ async function correctImageRotation(
  *
  * For image inputs, uses a two-stage pipeline:
  * - Stage 1: Extract text from images (vision model)
- * - Stage 2: Format extracted text into Recipe Markdown (text model)
+ * - Stage 2: Format extracted text into Kniferoll Markdown (text model)
  *
  * For text inputs, uses single-stage direct conversion.
  *
  * @param input - Text or images to extract recipe from
  * @param options - Model, API key, and schema overrides
- * @returns Generated Recipe Markdown and model used
+ * @returns Generated Kniferoll Markdown and model used
  *
  * @example
  * // With text
@@ -252,7 +252,7 @@ export async function importRecipe(
  * Extract text from recipe images (stage 1 of two-stage import).
  *
  * This extracts the raw text content from images as structured JSON,
- * without converting to Recipe Markdown format.
+ * without converting to Kniferoll Markdown format.
  *
  * @param input - Images to extract text from
  * @param options - Model, API key, and preprocessing options
@@ -324,15 +324,15 @@ export async function extractRecipe(
 }
 
 /**
- * Format extracted JSON into Recipe Markdown (stage 2 of two-stage import).
+ * Format extracted JSON into Kniferoll Markdown (stage 2 of two-stage import).
  *
  * This takes the structured JSON from extractRecipe() and converts it
- * to Recipe Markdown format. Since this is text-only, it can use a
+ * to Kniferoll Markdown format. Since this is text-only, it can use a
  * smaller/cheaper model than extraction.
  *
  * @param extractedJson - JSON string from extraction stage
  * @param options - Model, API key, and schema options
- * @returns Formatted Recipe Markdown and metrics
+ * @returns Formatted Kniferoll Markdown and metrics
  */
 export async function formatRecipe(
   extractedJson: string,
@@ -382,7 +382,7 @@ export async function formatRecipe(
  * Import a recipe using two-stage pipeline (extract → format).
  *
  * Stage 1: Extract text from images using vision model
- * Stage 2: Format extracted JSON into Recipe Markdown using text model
+ * Stage 2: Format extracted JSON into Kniferoll Markdown using text model
  *
  * @param input - Images to process
  * @param options - Options for both stages

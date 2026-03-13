@@ -96,6 +96,35 @@ test("emits W0102 for unknown sections", () => {
   expect(result.recipes[0]?.sections[0]?.kind).toBe("unknown");
 });
 
+test("emits W0104 for content before first recipe heading", () => {
+  const input = ["some junk", "more junk", "# Bread"].join("\n");
+
+  const result = parseDocument(input);
+  const warnings = byCode(result.diagnostics, "W0104");
+
+  expect(warnings).toHaveLength(2);
+  expect(warnings[0]!.line).toBe(1);
+  expect(warnings[1]!.line).toBe(2);
+});
+
+test("no W0104 for valid frontmatter + heading", () => {
+  const input = ["---", "title: My Recipes", "---", "# Bread"].join("\n");
+
+  const result = parseDocument(input);
+  const warnings = byCode(result.diagnostics, "W0104");
+
+  expect(warnings).toHaveLength(0);
+});
+
+test("no W0104 for blank lines before heading", () => {
+  const input = ["", "  ", "# Bread"].join("\n");
+
+  const result = parseDocument(input);
+  const warnings = byCode(result.diagnostics, "W0104");
+
+  expect(warnings).toHaveLength(0);
+});
+
 test("duplicate recipe titles are allowed (no longer used for references)", () => {
   const input = [
     "# Classic Bread",
@@ -239,7 +268,7 @@ test("numbered steps with indented continuation lines pass", () => {
     "## Steps",
     "1. Combine dry ingredients in a bowl,",
     "   then stir gently to mix.",
-    "2. Bake @300F for @40m.",
+    "2. Bake at {300F} for 40 minutes.",
   ].join("\n");
 
   const result = parseDocument(input);
@@ -270,47 +299,34 @@ test("step continuation lines are unwrapped and joined", () => {
   }
 });
 
-test("unknown step token emits W0402", () => {
+test("unknown inline value emits W0402", () => {
   const input = [
     "# Roast",
     "## Ingredients",
     "- chicken",
     "## Steps",
-    "1. Rest @10mm before slicing.",
+    "1. Rest {???} before slicing.",
   ].join("\n");
 
   const result = parseDocument(input);
   expect(byCode(result.diagnostics, "W0402").length).toBe(1);
 });
 
-test("former timer syntax now produces W0402", () => {
+test("step tokens capture temperatures", () => {
   const input = [
     "# Roast",
     "## Ingredients",
     "- chicken",
     "## Steps",
-    "1. Rest @10min before slicing.",
-    "2. Cook @1h15min until tender.",
-  ].join("\n");
-
-  const result = parseDocument(input);
-  expect(byCode(result.diagnostics, "W0402").length).toBe(2);
-});
-
-test("step tokens capture temperatures only", () => {
-  const input = [
-    "# Roast",
-    "## Ingredients",
-    "- chicken",
-    "## Steps",
-    "1. Preheat to @375F.",
+    "1. Preheat to {375F}.",
     "2. Cook for 1 hour 10 minutes until done.",
   ].join("\n");
 
   const result = parseDocument(input);
-  expect(result.stepTokens.length).toBe(1);
+  const temps = result.stepTokens.filter((t) => t.kind === "temperature");
+  expect(temps.length).toBe(1);
 
-  const temp = result.stepTokens[0];
+  const temp = temps[0];
   expect(temp).toEqual(
     expect.objectContaining({
       kind: "temperature",
@@ -321,6 +337,102 @@ test("step tokens capture temperatures only", () => {
       recipeTitle: "Roast",
     }),
   );
+});
+
+test("step tokens capture quantities", () => {
+  const input = [
+    "# Meatballs",
+    "## Ingredients",
+    "- ground beef - 500 g",
+    "## Steps",
+    "1. Form into {20} meatballs.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const quantities = result.stepTokens.filter((t) => t.kind === "quantity");
+  expect(quantities.length).toBe(1);
+  expect(quantities[0]).toEqual(
+    expect.objectContaining({
+      kind: "quantity",
+      line: 5,
+      recipeId: "meatballs",
+    }),
+  );
+});
+
+test("inline values in notes are extracted", () => {
+  const input = [
+    "# Cake",
+    "## Ingredients",
+    "- flour - 200 g",
+    "## Steps",
+    "1. Mix and bake at {350F}.",
+    "## Notes",
+    "- Makes about {12} servings.",
+    "- Store at {-18C} for up to 3 months.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.stepTokens.length).toBe(3);
+  const temps = result.stepTokens.filter((t) => t.kind === "temperature");
+  const quantities = result.stepTokens.filter((t) => t.kind === "quantity");
+  expect(temps.length).toBe(2); // 350F and -18C
+  expect(quantities.length).toBe(1); // 12
+});
+
+test("inline value token indices match unwrapped line text", () => {
+  const input = [
+    "# Cake",
+    "## Ingredients",
+    "- flour - 200 g",
+    "## Steps",
+    "1. Bake at {350F} until done.",
+    "## Notes",
+    "- Makes about {12} servings.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  // Find the notes section to get the unwrapped line text
+  const recipe = result.recipes[0]!;
+  const notesSection = recipe.sections.find((s) => s.kind === "notes")!;
+  const notesLine = notesSection.lines[0]!;
+
+  // The token index should point to '{' in the content (prefix-stripped) text
+  const notesToken = result.stepTokens.find((t) => t.kind === "quantity")!;
+  expect(notesLine.content.slice(notesToken.index, notesToken.index + notesToken.raw.length)).toBe("{12}");
+
+  // Same for the step temperature
+  const stepsSection = recipe.sections.find((s) => s.kind === "steps")!;
+  const stepLine = stepsSection.lines[0]!;
+  const stepToken = result.stepTokens.find((t) => t.kind === "temperature")!;
+  expect(stepLine.content.slice(stepToken.index, stepToken.index + stepToken.raw.length)).toBe("{350F}");
+});
+
+test("inline value token indices correct after multi-line continuation", () => {
+  const input = [
+    "# Cake",
+    "## Ingredients",
+    "- flour - 200 g",
+    "## Steps",
+    "1. Mix and bake.",
+    "## Notes",
+    "- Use {1 1/2 cups} ({170g})",
+    "  shredded mozzarella.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const recipe = result.recipes[0]!;
+  const notesSection = recipe.sections.find((s) => s.kind === "notes")!;
+  const notesLine = notesSection.lines[0]!;
+
+  // After unwrapping, the line should be joined
+  expect(notesLine.content).toContain("shredded mozzarella");
+
+  // Token indices should match the content (prefix-stripped) text
+  for (const token of result.stepTokens) {
+    const extracted = notesLine.content.slice(token.index, token.index + token.raw.length);
+    expect(extracted).toBe(token.raw);
+  }
 });
 
 test("same ingredient name in different recipes does not conflict", () => {

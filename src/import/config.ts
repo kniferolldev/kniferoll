@@ -18,7 +18,7 @@ export const DEFAULT_JUDGE_MODEL = "anthropic/claude-sonnet-4-5-20250514";
 let cachedSchema: string | null = null;
 
 /**
- * Load the Recipe Markdown schema from SCHEMA.md
+ * Load the Kniferoll Markdown schema from SCHEMA.md
  *
  * Results are cached after first load.
  * In browser environments, the schema should be passed explicitly

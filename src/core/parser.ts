@@ -4,6 +4,8 @@ import { slug } from "./slug";
 import { extractStepTokens } from "./steps";
 import type {
   DocumentStepToken,
+  DocumentStepTemperatureToken,
+  DocumentStepQuantityToken,
   DocumentParseResult,
   DocumentTitle,
   Diagnostic,
@@ -73,18 +75,20 @@ const unwrapStepLines = (lines: SectionLine[]): SectionLine[] => {
         unwrapped.push(current);
         current = null;
       }
-      unwrapped.push(line);
+      unwrapped.push({ text: "", content: "", line: line.line });
       continue;
     }
 
     // Check if this is a numbered step
-    if (STEP_NUMBER_RE.test(raw)) {
+    const stepMatch = STEP_NUMBER_RE.exec(raw);
+    if (stepMatch) {
       // Save previous step if any
       if (current) {
         unwrapped.push(current);
       }
+      const content = raw.slice(stepMatch[0].length);
       // Start new step
-      current = line;
+      current = { text: raw, content, line: line.line };
       continue;
     }
 
@@ -92,13 +96,14 @@ const unwrapStepLines = (lines: SectionLine[]): SectionLine[] => {
     if (current) {
       current = {
         text: current.text + " " + trimmed,
+        content: current.content + " " + trimmed,
         line: current.line, // Keep the line number of the step start
       };
       continue;
     }
 
     // No current step - treat as standalone line (shouldn't happen often in well-formed steps)
-    unwrapped.push(line);
+    unwrapped.push({ text: raw, content: raw, line: line.line });
   }
 
   // Don't forget the last step if any
@@ -115,6 +120,24 @@ const unwrapStepLines = (lines: SectionLine[]): SectionLine[] => {
  * start new blocks. Plain text continues the previous block.
  * Empty lines create paragraph breaks.
  */
+const stripLinePrefix = (
+  text: string,
+): { content: string } => {
+  const headerMatch = NOTES_HEADER_RE.exec(text);
+  if (headerMatch) {
+    return { content: text.slice(headerMatch[0].length) };
+  }
+  const bulletMatch = BULLET_RE.exec(text);
+  if (bulletMatch) {
+    return { content: text.slice(bulletMatch[0].length) };
+  }
+  const stepMatch = STEP_NUMBER_RE.exec(text);
+  if (stepMatch) {
+    return { content: text.slice(stepMatch[0].length) };
+  }
+  return { content: text };
+};
+
 const unwrapNotesLines = (lines: SectionLine[]): SectionLine[] => {
   const unwrapped: SectionLine[] = [];
   let current: SectionLine | null = null;
@@ -128,7 +151,7 @@ const unwrapNotesLines = (lines: SectionLine[]): SectionLine[] => {
         unwrapped.push(current);
         current = null;
       }
-      unwrapped.push(line);
+      unwrapped.push({ text: "", content: "", line: line.line });
       continue;
     }
 
@@ -138,7 +161,8 @@ const unwrapNotesLines = (lines: SectionLine[]): SectionLine[] => {
         unwrapped.push(current);
         current = null;
       }
-      unwrapped.push({ text: trimmed, line: line.line });
+      const { content } = stripLinePrefix(trimmed);
+      unwrapped.push({ text: trimmed, content, line: line.line });
       continue;
     }
 
@@ -147,7 +171,8 @@ const unwrapNotesLines = (lines: SectionLine[]): SectionLine[] => {
       if (current) {
         unwrapped.push(current);
       }
-      current = { text: trimmed, line: line.line };
+      const { content } = stripLinePrefix(trimmed);
+      current = { text: trimmed, content, line: line.line };
       continue;
     }
 
@@ -155,13 +180,14 @@ const unwrapNotesLines = (lines: SectionLine[]): SectionLine[] => {
     if (current) {
       current = {
         text: current.text + " " + trimmed,
+        content: current.content + " " + trimmed,
         line: current.line,
       };
       continue;
     }
 
     // Start a new paragraph block
-    current = { text: trimmed, line: line.line };
+    current = { text: trimmed, content: trimmed, line: line.line };
   }
 
   if (current) {
@@ -261,7 +287,7 @@ export const parseDocument = (
     if (trimmed === "") {
       if (currentSection) {
         // Preserve blank lines in sections (notes uses them for paragraph breaks)
-        currentSection.lines.push({ text: "", line: actualLine });
+        currentSection.lines.push({ text: "", content: "", line: actualLine });
       } else if (currentRecipe) {
         // Capture empty lines for intro (to preserve paragraph breaks)
         currentRecipe.introLines.push(line);
@@ -371,9 +397,13 @@ export const parseDocument = (
     }
 
     if (currentSection) {
-      currentSection.lines.push({ text: line, line: actualLine });
+      currentSection.lines.push({ text: line, content: line, line: actualLine });
     } else if (currentRecipe) {
       currentRecipe.introLines.push(line);
+    } else {
+      diagnostics.push(
+        warning("W0104", "Unexpected content before recipe heading.", actualLine),
+      );
     }
 
     if (isHeadingLine(trimmed) && !currentRecipe) {
@@ -497,36 +527,52 @@ export const parseDocument = (
 
   for (const recipe of recipes) {
     for (const section of recipe.sections) {
-      if (section.kind !== "steps") {
+      if (section.kind !== "steps" && section.kind !== "notes") {
         continue;
       }
 
+      const sectionLabel = section.kind === "steps" ? "steps" : "notes";
+
       for (const line of section.lines) {
-        const { tokens: extractedTokens, invalid } = extractStepTokens(line.text);
+        const { tokens: extractedTokens, invalid } = extractStepTokens(line.content);
 
         for (const bad of invalid) {
           diagnostics.push(
             warning(
               "W0402",
-              `Unknown step token "${bad.raw}" in steps for recipe "${recipe.title}".`,
+              `Unknown inline value "${bad.raw}" in ${sectionLabel} for recipe "${recipe.title}".`,
               line.line,
             ),
           );
         }
 
         for (const token of extractedTokens) {
-          stepTokens.push({
-            ...token,
-            line: line.line,
-            column: token.index + 1,
-            recipeId: recipe.id,
-            recipeTitle: recipe.title,
-          });
+          if (token.kind === "temperature") {
+            stepTokens.push({
+              ...token,
+              line: line.line,
+              column: token.index + 1,
+              recipeId: recipe.id,
+              recipeTitle: recipe.title,
+            } satisfies DocumentStepTemperatureToken);
+          } else {
+            stepTokens.push({
+              ...token,
+              line: line.line,
+              column: token.index + 1,
+              recipeId: recipe.id,
+              recipeTitle: recipe.title,
+            } satisfies DocumentStepQuantityToken);
+          }
+        }
+
+        if (section.kind !== "steps") {
+          continue;
         }
 
         referencePattern.lastIndex = 0;
         let match: RegExpExecArray | null;
-        while ((match = referencePattern.exec(line.text)) !== null) {
+        while ((match = referencePattern.exec(line.content)) !== null) {
           const innerRaw = match[1]?.trim() ?? "";
           const column = match.index + 1;
           let display: string | undefined;

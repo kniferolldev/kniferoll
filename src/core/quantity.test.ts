@@ -144,33 +144,54 @@ test("parses simple fraction without whole number", () => {
   expect(quantity.unit).toBe("cup");
 });
 
-test("warns when 'to' is used for range instead of hyphen", () => {
+test("parses range with 'to'", () => {
   const result = run("4 to 5 cups");
-  expect(result.diagnostics).toHaveLength(1);
-  expect(result.diagnostics[0]?.code).toBe("W0207");
-  expect(result.diagnostics[0]?.message).toContain("to");
-  expect(result.diagnostics[0]?.message).toContain("hyphen");
+  expect(result.diagnostics).toHaveLength(0);
+  const range = result.quantity;
+  if (!range || range.kind !== "range") {
+    throw new Error("expected range quantity");
+  }
+  expect(range.min).toBe(4);
+  expect(range.max).toBe(5);
+  expect(range.unit).toBe("cups");
+});
 
-  // Should still parse as a single quantity (with incorrect unit)
-  const quantity = result.quantity;
+test("parses range with 'to' without unit", () => {
+  const result = run("2 to 3");
+  expect(result.diagnostics).toHaveLength(0);
+  const range = result.quantity;
+  if (!range || range.kind !== "range") {
+    throw new Error("expected range quantity");
+  }
+  expect(range.min).toBe(2);
+  expect(range.max).toBe(3);
+  expect(range.unit).toBeNull();
+});
+
+test("parses range with 'TO' (case insensitive)", () => {
+  const result = run("3 TO 4 cups");
+  expect(result.diagnostics).toHaveLength(0);
+  const range = result.quantity;
+  if (!range || range.kind !== "range") {
+    throw new Error("expected range quantity");
+  }
+  expect(range.min).toBe(3);
+  expect(range.max).toBe(4);
+  expect(range.unit).toBe("cups");
+});
+
+test("does not treat 'to' in words as range separator", () => {
+  // "potato" contains "to" but not as a standalone word between numbers
+  const result1 = run("1 potato");
+  expect(result1.diagnostics).toHaveLength(0);
+  const quantity = result1.quantity;
   if (!quantity || quantity.kind !== "single") {
     throw new Error("expected single quantity");
   }
-  expect(quantity.value).toBe(4);
-});
-
-test("does not warn for 'to' in other contexts", () => {
-  // "potato" contains "to" but not the pattern "number to number"
-  const result1 = run("1 potato");
-  expect(result1.diagnostics).toHaveLength(0);
+  expect(quantity.value).toBe(1);
+  expect(quantity.unit).toBe("potato");
 
   // "to taste" contains "to" but not between numbers
   const result2 = run("pinch, to taste");
   expect(result2.diagnostics).toHaveLength(0);
-});
-
-test("warns for 'TO' (case insensitive)", () => {
-  const result = run("3 TO 4 cups");
-  expect(result.diagnostics).toHaveLength(1);
-  expect(result.diagnostics[0]?.code).toBe("W0207");
 });

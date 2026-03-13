@@ -92,7 +92,10 @@ export interface FrontmatterParseResult {
 export type SectionKind = "ingredients" | "steps" | "notes" | "unknown";
 
 export interface SectionLine {
+  /** Full original text of the line (including list/step prefix). */
   text: string;
+  /** Display content with list/step prefix stripped. Tokens are indexed against this. */
+  content: string;
   line: number;
 }
 
@@ -191,7 +194,12 @@ export interface StepTemperatureToken extends StepTokenBase {
   scale: "F" | "C";
 }
 
-export type StepToken = StepTemperatureToken;
+export interface StepQuantityToken extends StepTokenBase {
+  kind: "quantity";
+  quantity: Quantity;
+}
+
+export type StepToken = StepTemperatureToken | StepQuantityToken;
 
 export type InvalidStepToken = StepTokenBase;
 
@@ -202,7 +210,14 @@ export interface DocumentStepTemperatureToken extends StepTemperatureToken {
   recipeTitle: string;
 }
 
-export type DocumentStepToken = DocumentStepTemperatureToken;
+export interface DocumentStepQuantityToken extends StepQuantityToken {
+  line: number;
+  column: number;
+  recipeId: string;
+  recipeTitle: string;
+}
+
+export type DocumentStepToken = DocumentStepTemperatureToken | DocumentStepQuantityToken;
 
 export interface IngredientReference {
   id: string;

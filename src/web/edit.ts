@@ -42,6 +42,7 @@ export function setupEditInteractions(
   parseResult: DocumentParseResult,
   sourceSpans: Map<number, SourceSpan>,
   callbacks: EditCallbacks,
+  options?: { showAttributes?: boolean },
 ): { cleanup: () => void; saveActive: () => void } {
   let activeEdit: ActiveEdit | null = null;
 
@@ -178,6 +179,17 @@ export function setupEditInteractions(
     contentWrapper.append(nameInput, modInput);
     form.append(qtyInput, contentWrapper);
 
+    let attrInput: HTMLInputElement | null = null;
+    if (options?.showAttributes) {
+      attrInput = document.createElement("input");
+      attrInput.type = "text";
+      attrInput.className = "kr-edit-input kr-edit-input--attributes";
+      attrInput.value = attributeTail ?? "";
+      attrInput.placeholder = "Attributes (key=value ...)";
+      attrInput.setAttribute("aria-label", "Attributes");
+      form.appendChild(attrInput);
+    }
+
     li.innerHTML = "";
     li.appendChild(form);
 
@@ -193,7 +205,8 @@ export function setupEditInteractions(
       }
       const qty = qtyInput.value.trim() || null;
       const mods = modInput.value.trim() || null;
-      const newLine = reconstructIngredientLine(name, qty, mods, attributeTail);
+      const tail = attrInput ? (attrInput.value.trim() || null) : attributeTail;
+      const newLine = reconstructIngredientLine(name, qty, mods, tail);
       const edits = buildSpanEdit(span.startLine, span.endLine, newLine);
       callbacks.applyEdit(edits);
     };
@@ -213,6 +226,7 @@ export function setupEditInteractions(
     qtyInput.addEventListener("keydown", handleKey);
     nameInput.addEventListener("keydown", handleKey);
     modInput.addEventListener("keydown", handleKey);
+    attrInput?.addEventListener("keydown", handleKey);
 
     activeEdit = { element: li, save, cancel };
   }

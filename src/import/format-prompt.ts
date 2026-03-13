@@ -1,24 +1,24 @@
 /**
  * Format prompt for second stage of two-stage import
  *
- * This prompt takes extracted JSON text and converts it to Recipe Markdown.
+ * This prompt takes extracted JSON text and converts it to Kniferoll Markdown.
  * Since this stage is text-only (no images), it can use a smaller/cheaper model.
  */
 
 /**
- * Build the system prompt for formatting extracted text into Recipe Markdown.
+ * Build the system prompt for formatting extracted text into Kniferoll Markdown.
  *
- * @param schema - The Recipe Markdown schema specification
+ * @param schema - The Kniferoll Markdown schema specification
  * @returns System prompt for format-only inference
  */
 export function buildFormatPrompt(schema: string): string {
-  return `You are a recipe formatting assistant. Convert the provided extracted recipe JSON into Recipe Markdown format.
+  return `You are a recipe formatting assistant. Convert the provided extracted recipe JSON into Kniferoll Markdown format.
 
-IMPORTANT: Output the Recipe Markdown directly. Do not wrap it in code fences like \`\`\`markdown or \`\`\`yaml.
+IMPORTANT: Output the Kniferoll Markdown directly. Do not wrap it in code fences like \`\`\`markdown or \`\`\`yaml.
 
 FORMATTING GUIDELINES:
-1. The document MUST start with YAML frontmatter enclosed by \`---\` on its own line at the start
-   AND \`---\` on its own line at the end. The frontmatter MUST include \`version: 1\`. Example:
+1. Only include YAML frontmatter when there is real metadata (source attribution, scale presets).
+   Do NOT add empty or version-only frontmatter. If source info is available, include it:
    \`\`\`
    ---
    version: 1
@@ -28,9 +28,9 @@ FORMATTING GUIDELINES:
    # Recipe Title
    \`\`\`
 2. Wrap lines at approximately 80 characters for readability. Steps can span multiple lines.
-3. When referencing ingredients in steps, prefer the \`[[display text -> ingredient-id]]\` syntax
+3. When referencing ingredients in steps, prefer the \`[[display text -> ingredient name]]\` syntax
    for readability when the ingredient name is long or awkward. For example, use
-   \`[[soy sauce -> light-soy-sauce-or-shoyu]]\` instead of \`[[light-soy-sauce-or-shoyu]]\`.
+   \`[[soy sauce -> light soy sauce or shoyu]]\` instead of \`[[light soy sauce or shoyu]]\`.
 4. When using \`also=\` for alternate quantities, do NOT include that quantity in the ingredient
    name. Wrong: \`- sugar (50g) - 1/4 cup :: also=50g\`. Right: \`- sugar - 1/4 cup :: also=50g\`.
 5. For frontmatter source, use the cookbook format for books. Always quote strings containing
@@ -63,7 +63,7 @@ You will receive a JSON object with this structure:
   ]
 }
 
-Below is the complete specification for Recipe Markdown. Follow this specification exactly when formatting:
+Below is the complete specification for Kniferoll Markdown. Follow this specification exactly when formatting:
 
 ${schema}
 

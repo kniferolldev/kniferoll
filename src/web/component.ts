@@ -15,6 +15,7 @@ import type {
   Diagnostic,
   DocumentParseResult,
   DocumentStepTemperatureToken,
+  DocumentStepQuantityToken,
   DocumentStepToken,
   Ingredient,
   IngredientAttribute,
@@ -160,28 +161,18 @@ interface NotesBlock {
 
 const getLineType = (
   text: string,
-): { type: NotesBlockType; level?: number; content: string } => {
-  // Headers: ### or ####
-  const headerMatch = text.match(/^(#{3,4})\s+(.*)$/);
-  if (headerMatch) {
-    return {
-      type: "header",
-      level: headerMatch[1]!.length,
-      content: headerMatch[2]!,
-    };
+): { type: NotesBlockType; level?: number } => {
+  if (/^#{3,4}\s+/.test(text)) {
+    const level = text.match(/^(#{3,4})\s+/)![1]!.length;
+    return { type: "header", level };
   }
-  // Unordered list: - or *
-  const ulMatch = text.match(/^[-*]\s+(.*)$/);
-  if (ulMatch) {
-    return { type: "ul", content: ulMatch[1]! };
+  if (/^[-*]\s+/.test(text)) {
+    return { type: "ul" };
   }
-  // Ordered list: 1. 2. etc
-  const olMatch = text.match(/^\d+\.\s+(.*)$/);
-  if (olMatch) {
-    return { type: "ol", content: olMatch[1]! };
+  if (/^\d+\.\s+/.test(text)) {
+    return { type: "ol" };
   }
-  // Paragraph
-  return { type: "paragraph", content: text };
+  return { type: "paragraph" };
 };
 
 const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
@@ -189,7 +180,7 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
   let currentBlock: NotesBlock | null = null;
 
   for (const line of lines) {
-    const trimmed = line.text.trim();
+    const trimmed = line.content.trim();
 
     // Empty lines end current block
     if (!trimmed) {
@@ -200,7 +191,7 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
       continue;
     }
 
-    const { type, level, content } = getLineType(trimmed);
+    const { type, level } = getLineType(line.text.trim());
 
     // Headers are always their own block
     if (type === "header") {
@@ -210,7 +201,7 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
       blocks.push({
         type: "header",
         level,
-        lines: [{ ...line, text: content }],
+        lines: [line],
       });
       currentBlock = null;
       continue;
@@ -219,12 +210,12 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
     // Lists: group consecutive items of same type
     if (type === "ul" || type === "ol") {
       if (currentBlock && currentBlock.type === type) {
-        currentBlock.lines.push({ ...line, text: content });
+        currentBlock.lines.push(line);
       } else {
         if (currentBlock) {
           blocks.push(currentBlock);
         }
-        currentBlock = { type, lines: [{ ...line, text: content }] };
+        currentBlock = { type, lines: [line] };
       }
       continue;
     }
@@ -247,7 +238,53 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
   return blocks;
 };
 
-const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => {
+const renderNotesInline = (
+  text: string,
+  tokens: DocumentStepToken[],
+  options: RenderOptions,
+): string => {
+  if (tokens.length === 0) {
+    return renderMarkdownInline(text);
+  }
+
+  type InlineToken = { start: number; end: number; html: string };
+  const inlineTokens: InlineToken[] = [];
+
+  for (const token of tokens) {
+    const start = token.index;
+    const end = token.index + token.raw.length;
+    if (token.kind === "temperature") {
+      inlineTokens.push({
+        start,
+        end,
+        html: renderTemperatureToken(token, options.temperatureDisplay),
+      });
+    } else if (token.kind === "quantity") {
+      inlineTokens.push({
+        start,
+        end,
+        html: renderQuantityToken(token, options.scaleFactor),
+      });
+    }
+  }
+
+  inlineTokens.sort((a, b) => a.start - b.start);
+
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const tok of inlineTokens) {
+    if (tok.start < cursor) continue;
+    const prefix = text.slice(cursor, tok.start);
+    if (prefix) parts.push(renderMarkdownInline(prefix));
+    parts.push(tok.html);
+    cursor = tok.end;
+  }
+  const remainder = text.slice(cursor);
+  if (remainder) parts.push(renderMarkdownInline(remainder));
+  return parts.join("");
+};
+
+const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensByLine: Map<number, DocumentStepToken[]>): string => {
   const renderInlineDiagnostics = (lineNum: number) => {
     if (options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
       return null;
@@ -271,7 +308,8 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => 
     case "header": {
       const line = block.lines[0]!;
       const tag = block.level === 4 ? "h5" : "h4";
-      const content = renderMarkdownInline(line.text);
+      const lineTokens = stepTokensByLine.get(line.line) ?? [];
+      const content = renderNotesInline(line.content, lineTokens, options);
       return `<${tag} class="kr-notes__header" data-kr-line="${line.line}">${content}</${tag}>`;
     }
     case "ul":
@@ -285,7 +323,8 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => 
             ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
             : "";
           const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-          const content = renderMarkdownInline(line.text);
+          const lineTokens = stepTokensByLine.get(line.line) ?? [];
+          const content = renderNotesInline(line.content, lineTokens, options);
           return `<li class="kr-notes__list-item${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${content}</li>`;
         })
         .join("");
@@ -294,14 +333,15 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => 
     case "paragraph": {
       // Join lines and render as paragraph
       const firstLine = block.lines[0]!;
-      const text = block.lines.map((l) => l.text.trim()).join(" ");
+      const text = block.lines.map((l) => l.content.trim()).join(" ");
       const inlineDiag = renderInlineDiagnostics(firstLine.line);
       const diagnosticClass = inlineDiag ? " kr-diagnostic-target" : "";
       const diagnosticAttr = inlineDiag
         ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
         : "";
       const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-      const content = renderMarkdownInline(text);
+      const lineTokens = stepTokensByLine.get(firstLine.line) ?? [];
+      const content = renderNotesInline(text, lineTokens, options);
       return `<p class="kr-notes__paragraph${diagnosticClass}" data-kr-line="${firstLine.line}"${diagnosticAttr}>${diagnosticContent}${content}</p>`;
     }
   }
@@ -310,6 +350,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions): string => 
 const renderNotesSection = (
   section: NotesSection,
   options: RenderOptions,
+  stepTokensByLine: Map<number, DocumentStepToken[]>,
 ): string => {
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
   if (!section.lines.length) {
@@ -317,7 +358,7 @@ const renderNotesSection = (
   }
 
   const blocks = parseNotesBlocks(section.lines);
-  const content = blocks.map((block) => renderNotesBlock(block, options)).join("");
+  const content = blocks.map((block) => renderNotesBlock(block, options, stepTokensByLine)).join("");
 
   return `<section class="kr-section" data-kr-kind="notes">${heading}<div class="kr-section__body">${content}</div></section>`;
 };
@@ -344,6 +385,8 @@ interface RenderOptions {
   diagnosticsMap?: Map<number, Diagnostic[]>;
   nextDiagnosticId?: () => string;
   sourceLines?: string[];
+  hideScale?: boolean;
+  showAttributes?: boolean;
 }
 
 const DEFAULT_RENDER_OPTIONS: RenderOptions = {
@@ -406,19 +449,12 @@ const pickAlternateDisplay = (
   }
 
   if (mode === "metric") {
-    const preferred = candidates.find((c) => c.isMetric && c.text);
-    if (preferred) return preferred;
+    return candidates.find((c) => c.isMetric && c.text) ?? null;
   } else if (mode === "imperial") {
-    const preferred = candidates.find((c) => !c.isMetric && c.hasQuantity && c.text);
-    if (preferred) return preferred;
+    return candidates.find((c) => !c.isMetric && c.hasQuantity && c.text) ?? null;
   }
 
-  const withQuantity = candidates.find((candidate) => candidate.hasQuantity && candidate.text);
-  if (withQuantity) {
-    return withQuantity;
-  }
-
-  return candidates.find((candidate) => candidate.text) ?? candidates[0] ?? null;
+  return null;
 };
 
 export interface AnchorTarget {
@@ -453,17 +489,12 @@ export const resolveAnchorTarget = (
       return { altQty, isMetric: isMetricFamily(unitInfo?.family) };
     });
 
-  // 1. Mode-preferred match
+  // Prefer mode-matching alternate; fall back to native if none matches
   const preferred = alternates.find((a) =>
     quantityDisplay === "metric" ? a.isMetric : !a.isMetric && !!a.altQty.unit,
   );
   if (preferred) return anchorFromQty(preferred.altQty);
 
-  // 2. Any alternate with a parsed quantity (matches pickAlternateDisplay fallback)
-  const anyAlt = alternates[0];
-  if (anyAlt) return anchorFromQty(anyAlt.altQty);
-
-  // 3. Native fallback
   return anchorFromQty(nativeQty);
 };
 
@@ -599,18 +630,36 @@ const renderTemperatureToken = (
   )}" title="${escapeAttr(`approx. ${other}${otherScale}`)}">${display}</span>`;
 };
 
+const renderQuantityToken = (
+  token: DocumentStepQuantityToken,
+  scaleFactor: number,
+): string => {
+  const scaled = scaleFactor !== 1 ? scaleQuantity(token.quantity, scaleFactor) : null;
+  const formatted = formatQuantity(token.quantity, {
+    scaled: scaled ?? undefined,
+    usePreferredUnit: true,
+  });
+  const display = formatted ? escapeHtml(formatted) : escapeHtml(token.raw);
+  if (scaleFactor !== 1 && scaled) {
+    const original = formatQuantity(token.quantity) ?? token.quantity.raw;
+    return `<span class="kr-inline-quantity" title="${escapeAttr(original)}">${display}</span>`;
+  }
+  return `<span class="kr-inline-quantity">${display}</span>`;
+};
+
 const renderIngredientAttributes = (
   attributes: IngredientAttribute[],
   options: {
     omitKeys?: Set<string>;
     omitAttributes?: Set<IngredientAttribute>;
+    displayTextByAttribute?: Map<IngredientAttribute, string>;
   } = {},
 ): string => {
   if (attributes.length === 0) {
     return "";
   }
 
-  const { omitKeys, omitAttributes } = options;
+  const { omitKeys, omitAttributes, displayTextByAttribute } = options;
 
   const chips = attributes
     .map((attr) => {
@@ -621,7 +670,7 @@ const renderIngredientAttributes = (
         return "";
       }
       const key = escapeHtml(attr.key);
-      const rawValue = attr.value ?? attr.quantity?.raw ?? "";
+      const rawValue = displayTextByAttribute?.get(attr) ?? attr.value ?? attr.quantity?.raw ?? "";
       const detail =
         rawValue !== ""
           ? `: <span class="kr-ingredient__attribute-value">${escapeHtml(rawValue)}</span>`
@@ -632,6 +681,7 @@ const renderIngredientAttributes = (
     })
     .join("");
 
+  if (!chips) return "";
   return `<span class="kr-ingredient__attributes">${chips}</span>`;
 };
 
@@ -647,13 +697,11 @@ const renderStepLine = (
   options: RenderOptions,
   stepIndex: number | null = null,
 ): string => {
-  const fullText = line.text;
-
-  // Check if line starts with a step number like "1. "
-  const stepMatch = STEP_NUMBER_PATTERN.exec(fullText);
+  // Extract step number from the full text for display
+  const stepMatch = STEP_NUMBER_PATTERN.exec(line.text);
   const stepNumber = stepMatch?.[1] ?? null;
-  const stepPrefixLength = stepMatch?.[0]?.length ?? 0;
-  const text = stepMatch ? fullText.slice(stepPrefixLength) : fullText;
+  // Use content (prefix-stripped) — token indices are relative to this
+  const text = line.content;
 
   type InlineToken = { start: number; end: number; html: string };
   const inlineTokens: InlineToken[] = [];
@@ -664,17 +712,19 @@ const renderStepLine = (
     .sort((a, b) => a.index - b.index);
 
   for (const token of recipeTokens) {
-    // Adjust indices for stripped step number prefix
-    const start = token.index - stepPrefixLength;
-    const end = token.index + token.raw.length - stepPrefixLength;
-    // Skip tokens that fall within the stripped prefix
-    if (end <= 0) continue;
-    const adjustedStart = Math.max(0, start);
+    const start = token.index;
+    const end = token.index + token.raw.length;
     if (token.kind === "temperature") {
       inlineTokens.push({
-        start: adjustedStart,
+        start,
         end,
         html: renderTemperatureToken(token, options.temperatureDisplay),
+      });
+    } else if (token.kind === "quantity") {
+      inlineTokens.push({
+        start,
+        end,
+        html: renderQuantityToken(token, options.scaleFactor),
       });
     }
   }
@@ -901,11 +951,34 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
     ? `<span class="kr-noscale-icon" title="This ingredient can't be scaled">${CAUTION_ICON_SVG}</span>`
     : "";
 
+  // Attribute chips (opt-in)
+  let attributeChips = "";
+  if (options.showAttributes) {
+    const omitKeys = new Set(["id"]);
+    const omitAttributes = new Set<IngredientAttribute>();
+    const displayTextByAttribute = new Map<IngredientAttribute, string>();
+
+    if (alternateDisplay) {
+      omitAttributes.add(alternateDisplay.attribute);
+    }
+    for (const alt of alternateDisplays) {
+      if (alt.text) {
+        displayTextByAttribute.set(alt.attribute, alt.text);
+      }
+    }
+
+    attributeChips = renderIngredientAttributes(ingredient.attributes, {
+      omitKeys,
+      omitAttributes,
+      displayTextByAttribute,
+    });
+  }
+
   const elementId = `kr-ingredient-${ingredient.id}`;
   const wrapper = `<div class="kr-ingredient__wrapper">${quantityCell}${contentCell}</div>`;
   return `<li class="kr-ingredient${diagnosticClass}" id="${escapeAttr(elementId)}" tabindex="-1" ${dataAttrs.join(
     " ",
-  )}>${cautionIcon}${diagnosticContent}${wrapper}</li>`;
+  )}>${cautionIcon}${diagnosticContent}${wrapper}${attributeChips}</li>`;
 };
 
 const renderIngredientsSection = (
@@ -954,7 +1027,7 @@ const renderSection = (
   }
 
   if (section.kind === "notes") {
-    return renderNotesSection(section, options);
+    return renderNotesSection(section, options, stepTokensByLine);
   }
 
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
@@ -1036,7 +1109,7 @@ const renderRecipe = (
     introHtml = renderIntro(recipe.intro);
   }
 
-  const scaleWidget = roleAttr === "main" ? renderScaleWidget(presets ?? []) : "";
+  const scaleWidget = roleAttr === "main" && !options.hideScale ? renderScaleWidget(presets ?? []) : "";
 
   return `<section class="kr-recipe" id="${escapeAttr(recipeElementId)}" tabindex="-1" data-kr-role="${roleAttr}" data-kr-id="${escapeAttr(
     recipe.id,
@@ -1180,7 +1253,7 @@ export const renderDocument = (
 };
 
 const emptyRender = (): string =>
-  `<style>${BASE_STYLE}</style><article class="kr-root"><p class="kr-empty" role="status">Provide Recipe Markdown to render.</p></article>`;
+  `<style>${BASE_STYLE}</style><article class="kr-root"><p class="kr-empty" role="status">Provide Kniferoll Markdown to render.</p></article>`;
 
 export class KrRecipeElement extends HTMLElement {
   static tagName = TAG_NAME;
@@ -1192,6 +1265,7 @@ export class KrRecipeElement extends HTMLElement {
       "temperature-display",
       "layout",
       "diagnostics",
+      "show-attributes",
     ];
   }
 
@@ -1944,6 +2018,8 @@ export class KrRecipeElement extends HTMLElement {
       layout,
       diagnosticsMode: this.#resolveDiagnosticsMode(),
       sourceLines: source.split("\n"),
+      hideScale: this.hasAttribute("no-scale"),
+      showAttributes: this.hasAttribute("show-attributes"),
     });
     shadow.innerHTML = html;
 
@@ -2004,7 +2080,7 @@ export class KrRecipeElement extends HTMLElement {
             }),
           );
         },
-      });
+      }, { showAttributes: this.hasAttribute("show-attributes") });
       this.#editCleanup = edit.cleanup;
       this.#editSaveActive = edit.saveActive;
     }

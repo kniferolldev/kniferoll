@@ -1,5 +1,5 @@
 /**
- * Tests for structured comparison of Recipe Markdown documents
+ * Tests for structured comparison of Kniferoll Markdown documents
  */
 
 import { describe, expect, it } from "bun:test";

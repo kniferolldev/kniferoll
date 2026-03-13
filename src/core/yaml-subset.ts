@@ -1,5 +1,5 @@
 /**
- * Minimal YAML parser for recipe.md frontmatter.
+ * Minimal YAML parser for kniferoll.md frontmatter.
  *
  * Supports only the subset used by the frontmatter spec:
  * - key: value mappings (block style)

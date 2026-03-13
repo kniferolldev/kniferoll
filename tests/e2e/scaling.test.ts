@@ -51,22 +51,20 @@ ${bundleMarkdown(markdown)}
       await ctx.page.waitForFunction(
         () => {
           const host = document.querySelector("kr-recipe");
-          return !!host?.shadowRoot?.querySelector(".kr-scale-control");
+          return !!host?.shadowRoot?.querySelector(".kr-scale-widget");
         },
         undefined,
         { timeout: 1000 },
       );
 
-      // Change to triple preset
+      // Open the scale bar by clicking the toggle, then click the preset chip
       await ctx.page.evaluate(() => {
         const host = document.querySelector("kr-recipe");
-        const select = host?.shadowRoot?.querySelector(
-          ".kr-scale-control",
-        ) as HTMLSelectElement | null;
-        if (select) {
-          select.value = "preset:0";
-          select.dispatchEvent(new Event("change", { bubbles: true }));
-        }
+        const root = host?.shadowRoot;
+        const toggle = root?.querySelector<HTMLElement>(".kr-scale-toggle");
+        toggle?.click();
+        const preset = root?.querySelector<HTMLElement>('[data-kr-preset-index="0"]');
+        preset?.click();
       });
 
       // Wait for quantity to update

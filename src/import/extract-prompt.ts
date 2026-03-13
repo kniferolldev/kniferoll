@@ -2,7 +2,7 @@
  * Extraction prompt for first stage of two-stage import
  *
  * This prompt focuses purely on text extraction from images,
- * preserving structure without converting to Recipe Markdown.
+ * preserving structure without converting to Kniferoll Markdown.
  */
 
 /**

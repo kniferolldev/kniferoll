@@ -755,6 +755,8 @@
     display: inline-flex;
     gap: 0.375rem;
     flex-wrap: wrap;
+    grid-column: 2;
+    margin-top: 0.125rem;
   }
 
   .kr-ingredient__attribute {
@@ -1131,6 +1133,13 @@
   color: var(--kr-color-muted, #6b6b6b);
   flex: 1 1 6rem;
   min-width: 0;
+}
+
+.kr-edit-input--attributes {
+  grid-column: 2;
+  font-family: var(--kr-font-mono, monospace);
+  font-size: 0.85em;
+  color: var(--kr-color-muted, #6b6b6b);
 }
 
 /* Title edit */

@@ -73,7 +73,7 @@ export const readNumber = (input: string): number | null => {
 
 const VALUE_PART = String.raw`\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?`;
 const QUANTITY_PATTERN = new RegExp(
-  `^\\s*(?<first>${VALUE_PART})\\s*(?:[-]\\s*(?<second>${VALUE_PART}))?\\s*(?<unit>.*)$`,
+  `^\\s*(?<first>${VALUE_PART})(?:(?:\\s*[-]\\s*|\\s+[tT][oO]\\s+)(?<second>${VALUE_PART}))?\\s*(?<unit>.*)$`,
 );
 
 export interface QuantityParseOptions {
@@ -173,19 +173,6 @@ export const parseQuantity = (
       unit: unit.length > 0 ? unit : null,
     } satisfies QuantitySingle;
 
-    // Warn if quantity looks like it uses "to" for a range
-    // Pattern: number (whitespace) "to" (whitespace) number
-    // This catches "4 to 5" but not "potato" or "tomato"
-    const toRangePattern = /\d+\s+to\s+\d+/i;
-    if (toRangePattern.test(trimmed)) {
-      diagnostics.push({
-        code: "W0207",
-        message: 'Quantity appears to use "to" for a range; use hyphen (4-5) or en-dash (4–5) instead.',
-        severity: "warning",
-        line: options.line,
-        column: 1,
-      });
-    }
   }
 
   return { quantity, diagnostics };

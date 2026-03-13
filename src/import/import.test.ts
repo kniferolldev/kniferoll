@@ -116,7 +116,7 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt("schema");
 
     expect(prompt).toContain("recipe extraction assistant");
-    expect(prompt).toContain("Recipe Markdown format");
+    expect(prompt).toContain("Kniferoll Markdown format");
   });
 });
 
@@ -256,10 +256,10 @@ describe("buildFormatPrompt", () => {
     expect(prompt).toContain(schema);
   });
 
-  test("mentions Recipe Markdown", () => {
+  test("mentions Kniferoll Markdown", () => {
     const prompt = buildFormatPrompt("schema");
 
-    expect(prompt).toContain("Recipe Markdown");
+    expect(prompt).toContain("Kniferoll Markdown");
   });
 
   test("includes formatting guidelines", () => {

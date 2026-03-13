@@ -86,7 +86,7 @@ export interface InferenceResult {
 
 /** Result of recipe import */
 export interface ImportResult {
-  /** Generated Recipe Markdown */
+  /** Generated Kniferoll Markdown */
   markdown: string;
   /** Model that was used, e.g. "openai/gpt-4o" */
   model: string;
@@ -121,7 +121,7 @@ export interface ExtractionResult {
 
 /** Result of formatting (stage 2 of two-stage import) */
 export interface FormatResult {
-  /** Generated Recipe Markdown */
+  /** Generated Kniferoll Markdown */
   markdown: string;
   /** Model that was used */
   model: string;

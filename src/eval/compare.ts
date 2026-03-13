@@ -1,5 +1,5 @@
 /**
- * Structured comparison of Recipe Markdown documents
+ * Structured comparison of Kniferoll Markdown documents
  *
  * Compares golden (expected) vs actual parse results and produces
  * detailed scoring with actionable feedback.
@@ -719,7 +719,7 @@ function compareStructure(
 // ============================================================================
 
 /**
- * Compare two parsed Recipe Markdown documents
+ * Compare two parsed Kniferoll Markdown documents
  *
  * @param golden - Expected (human-edited) parse result
  * @param actual - Actual (generated) parse result
