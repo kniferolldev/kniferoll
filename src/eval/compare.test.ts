@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { compareDocuments } from "./compare";
-import { parseDocument } from "../core/parser";
+import { parseDocument } from "../core";
 
 // Helper to create a minimal valid recipe document
 function makeDoc(content: string): string {

@@ -382,3 +382,52 @@ export const extractFrontmatter = (
     bodyStartLine,
   };
 };
+
+/**
+ * Serialize a Frontmatter object to a YAML frontmatter string
+ * (including the `---` delimiters and trailing newline).
+ */
+export const serializeFrontmatter = (fm: Frontmatter): string => {
+  const lines: string[] = [`version: ${fm.version}`];
+
+  if (fm.source) {
+    lines.push(`source: ${serializeSource(fm.source)}`);
+  }
+
+  if (fm.scales && fm.scales.length > 0) {
+    lines.push("scales:");
+    for (const preset of fm.scales) {
+      const { id, amount, unit } = preset.anchor;
+      lines.push(
+        `  - name: ${preset.name}`,
+        `    anchor: { id: ${id}, amount: ${amount}, unit: ${unit} }`,
+      );
+    }
+  }
+
+  return `---\n${lines.join("\n")}\n---\n`;
+};
+
+const quoteIfNeeded = (s: string): string =>
+  /[:{},\[\]"'#|>]/.test(s) ? `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` : s;
+
+const serializeSource = (source: Source): string => {
+  switch (source.kind) {
+    case "text":
+      return quoteIfNeeded(source.value);
+    case "url": {
+      const parts = [`url: "${source.url}"`];
+      if (source.title) parts.push(`title: ${quoteIfNeeded(source.title)}`);
+      if (source.accessed) parts.push(`accessed: ${source.accessed}`);
+      return `{ ${parts.join(", ")} }`;
+    }
+    case "cookbook": {
+      const lines = [`  cookbook:`, `    title: ${quoteIfNeeded(source.title)}`];
+      if (source.author) lines.push(`    author: ${quoteIfNeeded(source.author)}`);
+      if (source.pages != null) lines.push(`    pages: ${typeof source.pages === "string" ? `"${source.pages}"` : source.pages}`);
+      if (source.isbn) lines.push(`    isbn: "${source.isbn}"`);
+      if (source.year != null) lines.push(`    year: ${source.year}`);
+      return "\n" + lines.join("\n");
+    }
+  }
+};

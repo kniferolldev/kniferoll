@@ -359,13 +359,15 @@ const parseIngredientLine = (
 export const parseIngredientsSection = (
   section: IngredientsSection,
   diagnostics: Diagnostic[],
+  rawLines?: Array<{ text: string; line: number }>,
 ) => {
+  const lines = rawLines ?? [];
   const items: Ingredient[] = [];
 
   // Merge continuation lines (lines that start with whitespace and don't have a bullet)
   const mergedLines: Array<{ text: string; line: number }> = [];
-  for (let i = 0; i < section.lines.length; i++) {
-    const current = section.lines[i];
+  for (let i = 0; i < lines.length; i++) {
+    const current = lines[i];
     if (!current) continue;
 
     const trimmed = current.text.trim();

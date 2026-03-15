@@ -20,15 +20,15 @@ import type {
   Ingredient,
   IngredientAttribute,
   IngredientsSection,
-  NotesSection,
   Recipe,
-  RecipeSection,
   Quantity,
+  TextBlock,
   UnitDimension,
   ScalePreset,
   ScaleSelection,
   SectionLine,
   Source,
+  StepsSection,
 } from "../core/types";
 import type { SourceSpan } from "../core/source-spans";
 
@@ -162,93 +162,112 @@ const renderIntro = (
   return `<div class="kr-intro">${html}</div>`;
 };
 
-// Notes section markdown rendering
-type NotesBlockType = "paragraph" | "header" | "ul" | "ol";
-
-interface NotesBlock {
-  type: NotesBlockType;
-  lines: SectionLine[];
-  level?: number; // for headers (3 = ###, 4 = ####)
+interface TextBlockClassNames {
+  paragraph: string;
+  header: string;
+  listItem: string;
+  list: string;
+  listUnordered: string;
+  listOrdered: string;
 }
 
-const getLineType = (
-  text: string,
-): { type: NotesBlockType; level?: number } => {
-  if (/^#{3,4}\s+/.test(text)) {
-    const level = text.match(/^(#{3,4})\s+/)![1]!.length;
-    return { type: "header", level };
-  }
-  if (/^[-*]\s+/.test(text)) {
-    return { type: "ul" };
-  }
-  if (/^\d+\.\s+/.test(text)) {
-    return { type: "ol" };
-  }
-  return { type: "paragraph" };
+const NOTES_CLASSES: TextBlockClassNames = {
+  paragraph: "kr-notes__paragraph",
+  header: "kr-notes__header",
+  listItem: "kr-notes__list-item",
+  list: "kr-notes__list",
+  listUnordered: "kr-notes__list--unordered",
+  listOrdered: "kr-notes__list--ordered",
 };
 
-const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
-  const blocks: NotesBlock[] = [];
-  let currentBlock: NotesBlock | null = null;
+/**
+ * Render an array of TextBlocks into HTML.
+ * Used for both intro and notes sections.
+ */
+const renderTextBlocks = (
+  blocks: TextBlock[],
+  cls: TextBlockClassNames,
+  inlineValuesByLine?: Map<number, DocumentInlineValueAny[]>,
+  options?: RenderOptions,
+  targetMeta?: Map<string, TargetInfo>,
+): string => {
+  const renderInlineDiag = (lineNum: number) => {
+    if (!options || options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
+      return null;
+    }
+    const diagnostics = options.diagnosticsMap.get(lineNum);
+    if (!diagnostics?.length) return null;
+    const severity = diagnostics.some((d) => d.code.startsWith("E"))
+      ? "error"
+      : "warning";
+    const controlsId = options.nextDiagnosticId?.() ?? `diag-${lineNum}`;
+    const popover = `<div class="kr-diagnostic-popover" id="${escapeAttr(controlsId)}" popover="auto">${diagnostics
+      .map(
+        (d) =>
+          `<div class="kr-diagnostic-popover__item kr-diagnostic-popover__item--${d.code.startsWith("E") ? "error" : "warning"}">${escapeHtml(d.message)}</div>`,
+      )
+      .join("")}</div>`;
+    return { severity, controlsId, popover };
+  };
 
-  for (const line of lines) {
-    const trimmed = line.content.trim();
+  const renderInline = (block: TextBlock): string => {
+    if (inlineValuesByLine && options) {
+      const lineTokens = inlineValuesByLine.get(block.line) ?? [];
+      return renderNotesInline(block.content, lineTokens, options, targetMeta);
+    }
+    return renderMarkdownInline(block.content);
+  };
 
-    // Empty lines end current block
-    if (!trimmed) {
-      if (currentBlock) {
-        blocks.push(currentBlock);
-        currentBlock = null;
-      }
+  const diagAttrs = (lineNum: number) => {
+    const diag = renderInlineDiag(lineNum);
+    if (!diag) return { cls: "", attr: "", content: "" };
+    return {
+      cls: " kr-diagnostic-target",
+      attr: ` data-kr-diagnostic-severity="${diag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(diag.controlsId)}" tabindex="0"`,
+      content: diag.popover,
+    };
+  };
+
+  const parts: string[] = [];
+  let i = 0;
+
+  while (i < blocks.length) {
+    const block = blocks[i]!;
+
+    if (block.kind === "header") {
+      const tag = block.level === 4 ? "h5" : "h4";
+      const content = renderInline(block);
+      parts.push(`<${tag} class="${cls.header}" data-kr-line="${block.line}">${content}</${tag}>`);
+      i++;
       continue;
     }
 
-    const { type, level } = getLineType(line.text.trim());
-
-    // Headers are always their own block
-    if (type === "header") {
-      if (currentBlock) {
-        blocks.push(currentBlock);
+    if (block.kind === "ul-item" || block.kind === "ol-item") {
+      const listTag = block.kind === "ul-item" ? "ul" : "ol";
+      const listModifier = block.kind === "ul-item" ? cls.listUnordered : cls.listOrdered;
+      const items: string[] = [];
+      while (i < blocks.length && blocks[i]!.kind === block.kind) {
+        const item = blocks[i]!;
+        const d = diagAttrs(item.line);
+        const content = renderInline(item);
+        items.push(`<li class="${cls.listItem}${d.cls}" data-kr-line="${item.line}"${d.attr}>${d.content}${content}</li>`);
+        i++;
       }
-      blocks.push({
-        type: "header",
-        level,
-        lines: [line],
-      });
-      currentBlock = null;
+      parts.push(`<${listTag} class="${cls.list} ${listModifier}">${items.join("")}</${listTag}>`);
       continue;
     }
 
-    // Lists: group consecutive items of same type
-    if (type === "ul" || type === "ol") {
-      if (currentBlock && currentBlock.type === type) {
-        currentBlock.lines.push(line);
-      } else {
-        if (currentBlock) {
-          blocks.push(currentBlock);
-        }
-        currentBlock = { type, lines: [line] };
-      }
-      continue;
-    }
-
-    // Paragraphs: group consecutive non-empty lines
-    if (currentBlock && currentBlock.type === "paragraph") {
-      currentBlock.lines.push(line);
-    } else {
-      if (currentBlock) {
-        blocks.push(currentBlock);
-      }
-      currentBlock = { type: "paragraph", lines: [line] };
-    }
+    // paragraph
+    const d = diagAttrs(block.line);
+    const content = renderInline(block);
+    parts.push(`<p class="${cls.paragraph}${d.cls}" data-kr-line="${block.line}"${d.attr}>${d.content}${content}</p>`);
+    i++;
   }
 
-  if (currentBlock) {
-    blocks.push(currentBlock);
-  }
-
-  return blocks;
+  return parts.join("");
 };
+
+// Notes section rendering now uses pre-parsed TextBlock[] from the parser
 
 const renderNotesInline = (
   text: string,
@@ -357,85 +376,6 @@ const renderNotesInline = (
   return parts.join("");
 };
 
-const renderNotesBlock = (block: NotesBlock, options: RenderOptions, inlineValuesByLine: Map<number, DocumentInlineValueAny[]>, targetMeta?: Map<string, TargetInfo>): string => {
-  const renderInlineDiagnostics = (lineNum: number) => {
-    if (options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
-      return null;
-    }
-    const diagnostics = options.diagnosticsMap.get(lineNum);
-    if (!diagnostics?.length) return null;
-    const severity = diagnostics.some((d) => d.code.startsWith("E"))
-      ? "error"
-      : "warning";
-    const controlsId = options.nextDiagnosticId?.() ?? `diag-${lineNum}`;
-    const popover = `<div class="kr-diagnostic-popover" id="${escapeAttr(controlsId)}" popover="auto">${diagnostics
-      .map(
-        (d) =>
-          `<div class="kr-diagnostic-popover__item kr-diagnostic-popover__item--${d.code.startsWith("E") ? "error" : "warning"}">${escapeHtml(d.message)}</div>`,
-      )
-      .join("")}</div>`;
-    return { severity, controlsId, popover };
-  };
-
-  switch (block.type) {
-    case "header": {
-      const line = block.lines[0]!;
-      const tag = block.level === 4 ? "h5" : "h4";
-      const lineTokens = inlineValuesByLine.get(line.line) ?? [];
-      const content = renderNotesInline(line.content, lineTokens, options, targetMeta);
-      return `<${tag} class="kr-notes__header" data-kr-line="${line.line}">${content}</${tag}>`;
-    }
-    case "ul":
-    case "ol": {
-      const tag = block.type === "ul" ? "ul" : "ol";
-      const items = block.lines
-        .map((line) => {
-          const inlineDiag = renderInlineDiagnostics(line.line);
-          const diagnosticClass = inlineDiag ? " kr-diagnostic-target" : "";
-          const diagnosticAttr = inlineDiag
-            ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
-            : "";
-          const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-          const lineTokens = inlineValuesByLine.get(line.line) ?? [];
-          const content = renderNotesInline(line.content, lineTokens, options, targetMeta);
-          return `<li class="kr-notes__list-item${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${content}</li>`;
-        })
-        .join("");
-      return `<${tag} class="kr-notes__list kr-notes__list--${block.type === "ul" ? "unordered" : "ordered"}">${items}</${tag}>`;
-    }
-    case "paragraph": {
-      // Join lines and render as paragraph
-      const firstLine = block.lines[0]!;
-      const text = block.lines.map((l) => l.content.trim()).join(" ");
-      const inlineDiag = renderInlineDiagnostics(firstLine.line);
-      const diagnosticClass = inlineDiag ? " kr-diagnostic-target" : "";
-      const diagnosticAttr = inlineDiag
-        ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
-        : "";
-      const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-      const tokens = gatherTokensForJoinedLines(block.lines, inlineValuesByLine);
-      const content = renderNotesInline(text, tokens, options, targetMeta);
-      return `<p class="kr-notes__paragraph${diagnosticClass}" data-kr-line="${firstLine.line}"${diagnosticAttr}>${diagnosticContent}${content}</p>`;
-    }
-  }
-};
-
-const renderNotesSection = (
-  section: NotesSection,
-  options: RenderOptions,
-  inlineValuesByLine: Map<number, DocumentInlineValueAny[]>,
-  targetMeta?: Map<string, TargetInfo>,
-): string => {
-  const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
-  if (!section.lines.length) {
-    return `<section class="kr-section" data-kr-kind="notes">${heading}</section>`;
-  }
-
-  const blocks = parseNotesBlocks(section.lines);
-  const content = blocks.map((block) => renderNotesBlock(block, options, inlineValuesByLine, targetMeta)).join("");
-
-  return `<section class="kr-section" data-kr-kind="notes">${heading}<div class="kr-section__body">${content}</div></section>`;
-};
 
 type QuantityDisplayMode = "native" | "metric" | "imperial";
 type TemperatureDisplayMode = "F" | "C" | null;
@@ -1090,62 +1030,31 @@ const renderIngredientsSection = (
   return `<section class="kr-section" data-kr-kind="ingredients">${heading}<ul class="kr-ingredient-list">${items}</ul></section>`;
 };
 
-const renderSection = (
+const renderStepsSection = (
+  section: StepsSection,
   recipe: Recipe,
-  section: RecipeSection,
   options: RenderOptions,
   targetMeta: Map<string, TargetInfo>,
   inlineValuesByLine: Map<number, DocumentInlineValueAny[]>,
 ): string => {
-  if (section.kind === "ingredients") {
-    return renderIngredientsSection(section, options);
-  }
-
-  if (section.kind === "steps") {
-    const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
-    let stepIndex = 0;
-    const lines = section.lines
-      .map((line) => {
-        const fullText = line.text;
-        const stepMatch = STEP_NUMBER_PATTERN.exec(fullText);
-        const currentStepIndex = stepMatch ? stepIndex++ : null;
-        return renderStepLine(
-          line,
-          targetMeta,
-          inlineValuesByLine.get(line.line) ?? [],
-          { recipeId: recipe.id, recipeTitle: recipe.title },
-          options,
-          currentStepIndex,
-        );
-      })
-      .join("");
-    return `<section class="kr-section" data-kr-kind="steps">${heading}<div class="kr-section__body">${lines}</div></section>`;
-  }
-
-  if (section.kind === "notes") {
-    return renderNotesSection(section, options, inlineValuesByLine, targetMeta);
-  }
-
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
-  if (!section.lines.length) {
-    return `<section class="kr-section" data-kr-kind="${escapeAttr(section.kind)}">${heading}</section>`;
-  }
-
+  let stepIndex = 0;
   const lines = section.lines
-    .map((line) => {
-      const inlineDiagnostics = renderInlineDiagnostics(line.line, options);
-      const diagnosticClass = inlineDiagnostics ? " kr-diagnostic-target" : "";
-      const diagnosticAttr = inlineDiagnostics
-        ? ` data-kr-diagnostic-severity="${inlineDiagnostics.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiagnostics.controlsId)}" tabindex="0"`
-        : "";
-      const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
-      return `<p class="kr-section__line${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(
-        line.text.trim(),
-      )}</p>`;
+    .map((line: SectionLine) => {
+      const fullText = line.text;
+      const stepMatch = STEP_NUMBER_PATTERN.exec(fullText);
+      const currentStepIndex = stepMatch ? stepIndex++ : null;
+      return renderStepLine(
+        line,
+        targetMeta,
+        inlineValuesByLine.get(line.line) ?? [],
+        { recipeId: recipe.id, recipeTitle: recipe.title },
+        options,
+        currentStepIndex,
+      );
     })
     .join("");
-
-  return `<section class="kr-section" data-kr-kind="${escapeAttr(section.kind)}">${heading}<div class="kr-section__body">${lines}</div></section>`;
+  return `<section class="kr-section" data-kr-kind="steps">${heading}<div class="kr-section__body">${lines}</div></section>`;
 };
 
 const renderScaleWidget = (presets: ScalePreset[]): string => {
@@ -1173,9 +1082,12 @@ const renderRecipe = (
   source?: Source,
   presets?: ScalePreset[],
 ): string => {
-  const sections = recipe.sections
-    .map((section) => renderSection(recipe, section, options, targetMeta, inlineValuesByLine))
-    .join("");
+  const ingredientsHtml = renderIngredientsSection(recipe.ingredients, options);
+  const stepsHtml = renderStepsSection(recipe.steps, recipe, options, targetMeta, inlineValuesByLine);
+  const notesHtml = recipe.notes.length > 0
+    ? `<section class="kr-section" data-kr-kind="notes"><h3 class="kr-section__title">Notes</h3><div class="kr-section__body">${renderTextBlocks(recipe.notes, NOTES_CLASSES, inlineValuesByLine, options, targetMeta)}</div></section>`
+    : "";
+  const sections = ingredientsHtml + stepsHtml + notesHtml;
   const roleAttr = index === 0 ? "main" : "secondary";
   const recipeElementId = `kr-recipe-${recipe.id}`;
   const inlineDiagnostics = renderInlineDiagnostics(recipe.line, options);
@@ -1267,13 +1179,8 @@ export const renderDocument = (
 
   for (const recipe of doc.recipes) {
     targetMeta.set(recipe.id, { name: recipe.title, type: "recipe" });
-    for (const section of recipe.sections) {
-      if (section.kind !== "ingredients") {
-        continue;
-      }
-      for (const ingredient of section.ingredients) {
-        targetMeta.set(ingredient.id, { name: ingredient.name, type: "ingredient" });
-      }
+    for (const ingredient of recipe.ingredients.ingredients) {
+      targetMeta.set(ingredient.id, { name: ingredient.name, type: "ingredient" });
     }
   }
 
@@ -1782,20 +1689,17 @@ export class KrRecipeElement extends HTMLElement {
           }
 
           for (const recipe of doc.recipes) {
-            for (const section of recipe.sections) {
-              if (section.kind !== "ingredients") continue;
-              for (const ing of section.ingredients) {
-                if (ing.id === id) {
-                  const target = resolveAnchorTarget(ing, quantityDisplay);
-                  if (!target) return;
-                  this.#anchorIngredientId = id;
-                  this.#anchorCustomAmount = target.amount;
-                  this.#anchorDisplayText = target.displayText;
-                  this.#anchorUnit = target.unit;
-                  this.#anchorEditing = true;
-                  this.#render();
-                  return;
-                }
+            for (const ing of recipe.ingredients.ingredients) {
+              if (ing.id === id) {
+                const target = resolveAnchorTarget(ing, quantityDisplay);
+                if (!target) return;
+                this.#anchorIngredientId = id;
+                this.#anchorCustomAmount = target.amount;
+                this.#anchorDisplayText = target.displayText;
+                this.#anchorUnit = target.unit;
+                this.#anchorEditing = true;
+                this.#render();
+                return;
               }
             }
           }

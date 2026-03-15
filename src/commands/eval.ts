@@ -9,8 +9,8 @@ import { join } from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { parseDocument } from "../core/parser";
-import type { DocumentParseResult } from "../core/types";
+import { parseDocument } from "../core";
+import type { DocumentParseResult } from "../core";
 import type { IO } from "../types";
 import { compareDocuments, formatDetailed, type ComparisonResult } from "../eval";
 import {

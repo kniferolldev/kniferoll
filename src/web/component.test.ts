@@ -1109,9 +1109,7 @@ test("resolveAnchorTarget returns native quantity in native mode", () => {
   if (!componentModule) throw new Error("Component module was not initialized");
 
   const doc = parseDocument('# Demo\n\n# R\n## Ingredients\n- flour - 2 cups :: id=flour also="240 g"\n## Steps\n1. Mix.');
-  const ing = doc.recipes[0]!.sections[0]!;
-  if (ing.kind !== "ingredients") throw new Error("Expected ingredients section");
-  const flour = ing.ingredients.find((i) => i.id === "flour")!;
+  const flour = doc.recipes[0]!.ingredients.ingredients.find((i) => i.id === "flour")!;
 
   const target = componentModule.resolveAnchorTarget(flour, "native");
   expect(target).toBeTruthy();
@@ -1123,9 +1121,7 @@ test("resolveAnchorTarget returns metric alternate in metric mode", () => {
   if (!componentModule) throw new Error("Component module was not initialized");
 
   const doc = parseDocument('# Demo\n\n# R\n## Ingredients\n- flour - 1 cup :: id=flour also="120 g"\n## Steps\n1. Mix.');
-  const ing = doc.recipes[0]!.sections[0]!;
-  if (ing.kind !== "ingredients") throw new Error("Expected ingredients section");
-  const flour = ing.ingredients.find((i) => i.id === "flour")!;
+  const flour = doc.recipes[0]!.ingredients.ingredients.find((i) => i.id === "flour")!;
 
   const target = componentModule.resolveAnchorTarget(flour, "metric");
   expect(target).toBeTruthy();
@@ -1138,9 +1134,7 @@ test("resolveAnchorTarget falls back to native when no mode-matching alternate e
 
   // Imperial mode but only metric also= available — should keep native (cups), not swap to grams
   const doc = parseDocument('# Demo\n\n# R\n## Ingredients\n- sauce - 1 1/3 cup :: id=sauce also="300 g"\n## Steps\n1. Mix.');
-  const ing = doc.recipes[0]!.sections[0]!;
-  if (ing.kind !== "ingredients") throw new Error("Expected ingredients section");
-  const sauce = ing.ingredients.find((i) => i.id === "sauce")!;
+  const sauce = doc.recipes[0]!.ingredients.ingredients.find((i) => i.id === "sauce")!;
 
   const target = componentModule.resolveAnchorTarget(sauce, "imperial");
   expect(target).toBeTruthy();
@@ -1152,9 +1146,7 @@ test("resolveAnchorTarget falls back to native when no alternates exist", () => 
   if (!componentModule) throw new Error("Component module was not initialized");
 
   const doc = parseDocument('# Demo\n\n# R\n## Ingredients\n- flour - 2 cups :: id=flour\n## Steps\n1. Mix.');
-  const ing = doc.recipes[0]!.sections[0]!;
-  if (ing.kind !== "ingredients") throw new Error("Expected ingredients section");
-  const flour = ing.ingredients.find((i) => i.id === "flour")!;
+  const flour = doc.recipes[0]!.ingredients.ingredients.find((i) => i.id === "flour")!;
 
   const target = componentModule.resolveAnchorTarget(flour, "metric");
   expect(target).toBeTruthy();

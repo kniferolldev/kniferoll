@@ -1,5 +1,5 @@
 import type { IO, StdinLike } from "../types";
-import { parseDocument } from "../core/parser";
+import { parseDocument } from "../core";
 
 const readStdin = async (stdin: StdinLike): Promise<string> => {
   if (typeof (stdin as { text?: unknown }).text === "function") {

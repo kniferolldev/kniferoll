@@ -89,7 +89,9 @@ const formatNumber = (value: number, unitInfo: UnitMatch | null, allowFractions 
   // Apply rounding only if we didn't use a fraction
   const rounded = unitInfo?.rounding ? roundToProfile(value, unitInfo.rounding) : value;
   const precision = unitInfo?.rounding.precision;
-  const fixed = precision !== undefined ? rounded.toFixed(precision) : rounded.toString();
+  // For unknown units (no rounding profile), cap at 1 decimal place
+  const effectivePrecision = precision ?? (unitInfo?.rounding ? undefined : 1);
+  const fixed = effectivePrecision !== undefined ? rounded.toFixed(effectivePrecision) : rounded.toString();
 
   return fixed.replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1");
 };

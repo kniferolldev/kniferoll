@@ -14,7 +14,7 @@ import type {
   IngredientsSection,
   StepsSection,
   SectionLine,
-} from "../core/types";
+} from "../core";
 import { DEFAULT_WEIGHTS, type ComparisonWeights } from "./weights";
 
 // ============================================================================
@@ -546,16 +546,12 @@ function compareSteps(
 // Recipe Comparison
 // ============================================================================
 
-function getIngredientsSection(recipe: Recipe): IngredientsSection | undefined {
-  return recipe.sections.find((s) => s.kind === "ingredients") as
-    | IngredientsSection
-    | undefined;
+function getIngredientsSection(recipe: Recipe): IngredientsSection {
+  return recipe.ingredients;
 }
 
-function getStepsSection(recipe: Recipe): StepsSection | undefined {
-  return recipe.sections.find((s) => s.kind === "steps") as
-    | StepsSection
-    | undefined;
+function getStepsSection(recipe: Recipe): StepsSection {
+  return recipe.steps;
 }
 
 function compareRecipe(
@@ -564,8 +560,7 @@ function compareRecipe(
   weights: ComparisonWeights
 ): RecipeComparison {
   if (!actual) {
-    const goldenIngredients =
-      getIngredientsSection(golden)?.ingredients ?? [];
+    const goldenIngredients = getIngredientsSection(golden).ingredients;
     return {
       goldenTitle: golden.title,
       actualTitle: null,
@@ -578,16 +573,14 @@ function compareRecipe(
       },
       steps: {
         comparisons: [],
-        missingCount: getStepLines(getStepsSection(golden) ?? { kind: "steps", lines: [], title: "", normalizedTitle: "", line: 0 }).length,
+        missingCount: getStepLines(getStepsSection(golden)).length,
         extraCount: 0,
       },
     };
   }
 
-  const goldenIngredients =
-    getIngredientsSection(golden)?.ingredients ?? [];
-  const actualIngredients =
-    getIngredientsSection(actual)?.ingredients ?? [];
+  const goldenIngredients = getIngredientsSection(golden).ingredients;
+  const actualIngredients = getIngredientsSection(actual).ingredients;
 
   const ingredientResult = compareIngredients(
     goldenIngredients,

@@ -63,12 +63,8 @@ export function setupEditInteractions(
   // Build lookup of ingredients by line number
   const ingredientsByLine = new Map<number, Ingredient>();
   for (const recipe of parseResult.recipes) {
-    for (const section of recipe.sections) {
-      if (section.kind === "ingredients") {
-        for (const ing of section.ingredients) {
-          ingredientsByLine.set(ing.line, ing);
-        }
-      }
+    for (const ing of recipe.ingredients.ingredients) {
+      ingredientsByLine.set(ing.line, ing);
     }
   }
 
@@ -84,7 +80,9 @@ export function setupEditInteractions(
     const ingredient = target.closest<HTMLElement>(".kr-ingredient");
     const step = target.closest<HTMLElement>(".kr-step");
     const title = target.closest<HTMLElement>(".kr-recipe__title");
-    const introP = target.closest<HTMLElement>(".kr-intro__p");
+    const introElement = target.closest<HTMLElement>(
+      ".kr-intro__p, .kr-intro__list-item, .kr-intro__header",
+    );
     const noteElement = target.closest<HTMLElement>(
       ".kr-notes__paragraph, .kr-notes__list-item, .kr-notes__header",
     );
@@ -104,11 +102,11 @@ export function setupEditInteractions(
       e.stopPropagation();
       saveActive();
       editTitle(title);
-    } else if (introP) {
+    } else if (introElement) {
       e.preventDefault();
       e.stopPropagation();
       saveActive();
-      editTextLine(introP);
+      editTextLine(introElement);
     } else if (noteElement) {
       e.preventDefault();
       e.stopPropagation();

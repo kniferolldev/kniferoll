@@ -5,7 +5,6 @@
 import type { InferenceInput, ImportResult, ImportOptions, ExtractionResult, FormatResult, TwoStageMetrics, ResolvedInput, LoadedImage, InferenceMetrics } from "./types";
 import { parseModelSpec, formatModelSpec } from "./types";
 import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, loadSchema, getApiKey, getApiKeyEnvVar } from "./config";
-import { buildSystemPrompt } from "./prompt";
 import { buildExtractionPrompt } from "./extract-prompt";
 import { buildFormatPrompt } from "./format-prompt";
 import { resolveInput } from "./utils";
@@ -222,7 +221,7 @@ export async function importRecipe(
   const schema = options?.schema ?? (await loadSchema());
 
   // Build system prompt
-  const systemPrompt = buildSystemPrompt(schema);
+  const systemPrompt = buildFormatPrompt(schema);
 
   // Resolve input (load lazy images)
   const resolvedInput = await resolveInput(input);

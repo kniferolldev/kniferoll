@@ -67,19 +67,13 @@ const findIngredientById = (
   id: string,
 ): { ingredient: Ingredient; recipeId: string; recipeTitle: string } | null => {
   for (const recipe of doc.recipes) {
-    for (const section of recipe.sections) {
-      if (section.kind !== "ingredients") {
-        continue;
-      }
-
-      for (const ingredient of section.ingredients) {
-        if (ingredient.id === id) {
-          return {
-            ingredient,
-            recipeId: recipe.id,
-            recipeTitle: recipe.title,
-          };
-        }
+    for (const ingredient of recipe.ingredients.ingredients) {
+      if (ingredient.id === id) {
+        return {
+          ingredient,
+          recipeId: recipe.id,
+          recipeTitle: recipe.title,
+        };
       }
     }
   }

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { extractFrontmatter } from "./frontmatter";
+import { extractFrontmatter, serializeFrontmatter } from "./frontmatter";
+import type { Frontmatter } from "./types";
 
 const doc = (yaml: string, body = "# Body") => `---\n${yaml}\n---\n${body}\n`;
 
@@ -661,5 +662,68 @@ test("SCHEMA.md example: cookbook source block mapping", () => {
   const input = "---\nversion: 1\nsource:\n  cookbook:\n    title: The Superiority Burger Cookbook\n    author: Brooks Headley\n    pages: \"112\\u2013115\"\n---\n# Recipe\n";
   const result = extractFrontmatter(input);
   expect(result.frontmatter?.source?.kind).toBe("cookbook");
+});
+
+// --- serializeFrontmatter ---
+
+test("serializeFrontmatter: minimal (version only)", () => {
+  const fm: Frontmatter = { version: 1 };
+  expect(serializeFrontmatter(fm)).toBe("---\nversion: 1\n---\n");
+});
+
+test("serializeFrontmatter: text source", () => {
+  const fm: Frontmatter = { version: 1, source: { kind: "text", value: "Grandma" } };
+  const result = serializeFrontmatter(fm);
+  expect(result).toBe("---\nversion: 1\nsource: Grandma\n---\n");
+});
+
+test("serializeFrontmatter: URL source", () => {
+  const fm: Frontmatter = {
+    version: 1,
+    source: { kind: "url", url: "https://example.com/recipe", title: "My Recipe", accessed: "2024-10-01" },
+  };
+  const result = serializeFrontmatter(fm);
+  expect(result).toContain('url: "https://example.com/recipe"');
+  expect(result).toContain("title: My Recipe");
+  expect(result).toContain("accessed: 2024-10-01");
+});
+
+test("serializeFrontmatter: URL source round-trips through parser", () => {
+  const fm: Frontmatter = {
+    version: 1,
+    source: { kind: "url", url: "https://example.com/recipe", accessed: "2024-10-01" },
+  };
+  const serialized = serializeFrontmatter(fm) + "\n# Body\n";
+  const parsed = extractFrontmatter(serialized);
+  expect(parsed.diagnostics).toEqual([]);
+  expect(parsed.frontmatter?.source).toEqual(fm.source);
+});
+
+test("serializeFrontmatter: cookbook source round-trips through parser", () => {
+  const fm: Frontmatter = {
+    version: 1,
+    source: {
+      kind: "cookbook",
+      title: "The Food Lab",
+      author: "J. Kenji Lopez-Alt",
+      pages: "234-236",
+      year: 2015,
+    },
+  };
+  const serialized = serializeFrontmatter(fm) + "\n# Body\n";
+  const parsed = extractFrontmatter(serialized);
+  expect(parsed.diagnostics).toEqual([]);
+  expect(parsed.frontmatter?.source).toEqual(fm.source);
+});
+
+test("serializeFrontmatter: scales round-trip through parser", () => {
+  const fm: Frontmatter = {
+    version: 1,
+    scales: [{ name: "Double", anchor: { id: "flour", amount: 500, unit: "g" } }],
+  };
+  const serialized = serializeFrontmatter(fm) + "\n# Body\n";
+  const parsed = extractFrontmatter(serialized);
+  expect(parsed.diagnostics).toEqual([]);
+  expect(parsed.frontmatter?.scales).toEqual(fm.scales);
 });
 

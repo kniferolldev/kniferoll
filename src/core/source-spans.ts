@@ -36,46 +36,28 @@ export function computeSourceSpans(
   for (const recipe of parseResult.recipes) {
     elementLines.push(recipe.line);
 
-    // Add intro paragraph start lines
-    if (recipe.intro) {
-      const firstSectionLine =
-        recipe.sections.length > 0 ? recipe.sections[0]!.line : undefined;
-      const introEnd =
-        firstSectionLine != null ? firstSectionLine - 1 : markdownLines.length;
-      let inParagraph = false;
-      for (let i = recipe.line + 1; i <= introEnd; i++) {
-        const lineText = (markdownLines[i - 1] ?? "").trim();
-        if (lineText === "") {
-          inParagraph = false;
-        } else if (!inParagraph) {
-          elementLines.push(i);
-          inParagraph = true;
-        }
+    // Intro blocks
+    for (const block of recipe.intro) {
+      elementLines.push(block.line);
+    }
+
+    // Ingredients section
+    elementLines.push(recipe.ingredients.line);
+    for (const ingredient of recipe.ingredients.ingredients) {
+      elementLines.push(ingredient.line);
+    }
+
+    // Steps section
+    elementLines.push(recipe.steps.line);
+    for (const line of recipe.steps.lines) {
+      if (line.text.trim() !== "") {
+        elementLines.push(line.line);
       }
     }
 
-    for (const section of recipe.sections) {
-      // Section heading
-      elementLines.push(section.line);
-
-      if (section.kind === "ingredients") {
-        for (const ingredient of section.ingredients) {
-          elementLines.push(ingredient.line);
-        }
-      } else if (section.kind === "notes") {
-        // After unwrapping, each non-empty line is a logical block
-        for (const line of section.lines) {
-          if (line.text.trim() !== "") {
-            elementLines.push(line.line);
-          }
-        }
-      } else {
-        for (const line of section.lines) {
-          if (line.text.trim() !== "") {
-            elementLines.push(line.line);
-          }
-        }
-      }
+    // Notes blocks
+    for (const block of recipe.notes) {
+      elementLines.push(block.line);
     }
   }
 

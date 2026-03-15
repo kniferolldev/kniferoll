@@ -14,13 +14,7 @@ const getIngredientsSection = (input: string): {
   if (!recipe) {
     throw new Error("Expected recipe to be parsed");
   }
-  const section = recipe.sections.find(
-    (candidate): candidate is IngredientsSection => candidate.kind === "ingredients",
-  );
-  if (!section) {
-    throw new Error("Expected ingredients section");
-  }
-  return { section, diagnostics: result.diagnostics };
+  return { section: recipe.ingredients, diagnostics: result.diagnostics };
 };
 
 test("parses ingredient with quantity, modifiers, and attributes", () => {

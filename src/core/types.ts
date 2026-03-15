@@ -89,14 +89,18 @@ export interface FrontmatterParseResult {
   bodyStartLine: number;
 }
 
-export type SectionKind = "ingredients" | "steps" | "notes" | "unknown";
-
 export interface SectionLine {
   /** Full original text of the line (including list/step prefix). */
   text: string;
   /** Display content with list/step prefix stripped. Tokens are indexed against this. */
   content: string;
   line: number;
+}
+
+export interface TextBlock extends SectionLine {
+  kind: "paragraph" | "ul-item" | "ol-item" | "header";
+  /** For headers: 3 = ###, 4 = #### */
+  level?: number;
 }
 
 export interface IngredientAttribute {
@@ -166,28 +170,16 @@ export interface RecipeLink {
   toRecipeId: string;
 }
 
-interface RecipeSectionBase {
+export interface IngredientsSection {
   title: string;
-  normalizedTitle: string;
   line: number;
-  lines: SectionLine[];
-}
-
-export interface IngredientsSection extends RecipeSectionBase {
-  kind: "ingredients";
   ingredients: Ingredient[];
 }
 
-export interface StepsSection extends RecipeSectionBase {
-  kind: "steps";
-}
-
-export interface NotesSection extends RecipeSectionBase {
-  kind: "notes";
-}
-
-export interface UnknownSection extends RecipeSectionBase {
-  kind: "unknown";
+export interface StepsSection {
+  title: string;
+  line: number;
+  lines: SectionLine[];
 }
 
 export interface InlineValueBase {
@@ -270,19 +262,15 @@ export type ScaleSelection =
   | { presetIndex: number }
   | { anchor: ScaleAnchor };
 
-export type RecipeSection =
-  | IngredientsSection
-  | StepsSection
-  | NotesSection
-  | UnknownSection;
-
 export interface Recipe {
   title: string;
   id: string;
   line: number;
-  intro?: string;
+  intro: TextBlock[];
   introLines: SectionLine[];
-  sections: RecipeSection[];
+  ingredients: IngredientsSection;
+  steps: StepsSection;
+  notes: TextBlock[];
 }
 
 export interface DocumentTitle {

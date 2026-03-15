@@ -2,7 +2,7 @@ import { expect, test, describe, beforeEach, afterEach } from "bun:test";
 import {
   parseModelSpec,
   formatModelSpec,
-  buildSystemPrompt,
+  buildFormatPrompt,
   DEFAULT_IMPORT_MODEL,
   DEFAULT_FORMAT_MODEL,
   DEFAULT_JUDGE_MODEL,
@@ -15,7 +15,6 @@ import {
 } from "./index";
 import { clearSchemaCache } from "./config";
 import { buildExtractionPrompt } from "./extract-prompt";
-import { buildFormatPrompt } from "./format-prompt";
 import { buildRotationDetectionPrompt } from "./rotation-prompt";
 import {
   importRecipe,
@@ -104,19 +103,26 @@ describe("getApiKeyEnvVar", () => {
   });
 });
 
-describe("buildSystemPrompt", () => {
+describe("buildFormatPrompt", () => {
   test("includes the schema", () => {
     const schema = "# Test Schema\nContent here";
-    const prompt = buildSystemPrompt(schema);
+    const prompt = buildFormatPrompt(schema);
 
     expect(prompt).toContain(schema);
   });
 
-  test("includes recipe extraction context", () => {
-    const prompt = buildSystemPrompt("schema");
+  test("includes recipe formatting context", () => {
+    const prompt = buildFormatPrompt("schema");
 
-    expect(prompt).toContain("recipe extraction assistant");
-    expect(prompt).toContain("Kniferoll Markdown format");
+    expect(prompt).toContain("recipe formatting assistant");
+    expect(prompt).toContain("Kniferoll Markdown");
+  });
+
+  test("includes conversion guidelines", () => {
+    const prompt = buildFormatPrompt("schema");
+
+    expect(prompt).toContain("CONVERSION GUIDELINES");
+    expect(prompt).toContain("frontmatter");
   });
 });
 
@@ -248,34 +254,6 @@ describe("buildExtractionPrompt", () => {
   });
 });
 
-describe("buildFormatPrompt", () => {
-  test("includes the provided schema", () => {
-    const schema = "# My Test Schema\n\nSome content here";
-    const prompt = buildFormatPrompt(schema);
-
-    expect(prompt).toContain(schema);
-  });
-
-  test("mentions Kniferoll Markdown", () => {
-    const prompt = buildFormatPrompt("schema");
-
-    expect(prompt).toContain("Kniferoll Markdown");
-  });
-
-  test("includes conversion guidelines", () => {
-    const prompt = buildFormatPrompt("schema");
-
-    expect(prompt).toContain("CONVERSION GUIDELINES");
-    expect(prompt).toContain("frontmatter");
-  });
-
-  test("describes input format", () => {
-    const prompt = buildFormatPrompt("schema");
-
-    expect(prompt).toContain("INPUT FORMAT");
-    expect(prompt).toContain("sections");
-  });
-});
 
 describe("buildRotationDetectionPrompt", () => {
   test("returns a non-empty string", () => {

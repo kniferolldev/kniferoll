@@ -52,7 +52,7 @@ export { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, DEFAULT_JUDGE_MODEL, loadSc
 export { getProviderDisplayName, getProviderApiKeyUrl } from "./constants";
 
 // Prompt (exported for transparency/debugging)
-export { buildSystemPrompt } from "./prompt";
+export { buildFormatPrompt } from "./format-prompt";
 
 // Utilities (for consumers that need to convert Blobs)
 export { blobToLoadedImage, arrayBufferToBase64, resolveInput } from "./utils";

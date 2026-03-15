@@ -41,11 +41,9 @@ test("parses frontmatter, overall title, and recipe sections", () => {
     throw new Error("Expected recipe to be parsed");
   }
   expect(recipe.title).toBe("Chocolate Cake");
-  expect(recipe.sections.map((section) => section.kind)).toEqual([
-    "ingredients",
-    "steps",
-    "notes",
-  ]);
+  expect(recipe.ingredients).toBeDefined();
+  expect(recipe.steps).toBeDefined();
+  expect(recipe.notes).toBeDefined();
   expect(result.diagnostics).toHaveLength(0);
 });
 
@@ -93,7 +91,7 @@ test("emits W0102 for unknown sections", () => {
   const warnings = byCode(result.diagnostics, "W0102");
 
   expect(warnings).toHaveLength(1);
-  expect(result.recipes[0]?.sections[0]?.kind).toBe("unknown");
+  expect(warnings[0]?.message).toContain("Extras");
 });
 
 test("emits W0104 for content before first recipe heading", () => {
@@ -321,15 +319,13 @@ test("step continuation lines are unwrapped and joined", () => {
 
   const result = parseDocument(input);
   const recipe = result.recipes[0];
-  const stepsSection = recipe?.sections.find((s) => s.kind === "steps");
+  const stepsSection = recipe?.steps;
 
   expect(stepsSection).toBeDefined();
-  if (stepsSection?.kind === "steps") {
-    // Should have 2 lines (2 steps), not 3 (the continuation should be joined)
-    expect(stepsSection.lines.length).toBe(2);
-    // First step should contain the joined text
-    expect(stepsSection.lines[0]?.text).toContain("continuation on the next line");
-  }
+  // Should have 2 lines (2 steps), not 3 (the continuation should be joined)
+  expect(stepsSection!.lines.length).toBe(2);
+  // First step should contain the joined text
+  expect(stepsSection!.lines[0]?.text).toContain("continuation on the next line");
 });
 
 test("unknown inline value emits W0402", () => {
@@ -425,18 +421,16 @@ test("inline value token indices match unwrapped line text", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  // Find the notes section to get the unwrapped line text
+  // Find the notes to get the unwrapped line text
   const recipe = result.recipes[0]!;
-  const notesSection = recipe.sections.find((s) => s.kind === "notes")!;
-  const notesLine = notesSection.lines[0]!;
+  const notesLine = recipe.notes[0]!;
 
   // The token index should point to '{' in the content (prefix-stripped) text
   const notesToken = result.inlineValues.find((t) => t.kind === "quantity")!;
   expect(notesLine.content.slice(notesToken.index, notesToken.index + notesToken.raw.length)).toBe("{12}");
 
   // Same for the step temperature
-  const stepsSection = recipe.sections.find((s) => s.kind === "steps")!;
-  const stepLine = stepsSection.lines[0]!;
+  const stepLine = recipe.steps.lines[0]!;
   const tempValue = result.inlineValues.find((t) => t.kind === "temperature")!;
   expect(stepLine.content.slice(tempValue.index, tempValue.index + tempValue.raw.length)).toBe("{350F}");
 });
@@ -455,8 +449,7 @@ test("inline value token indices correct after multi-line continuation", () => {
 
   const result = parseDocument(input);
   const recipe = result.recipes[0]!;
-  const notesSection = recipe.sections.find((s) => s.kind === "notes")!;
-  const notesLine = notesSection.lines[0]!;
+  const notesLine = recipe.notes[0]!;
 
   // After unwrapping, the line should be joined
   expect(notesLine.content).toContain("shredded mozzarella");
@@ -608,10 +601,13 @@ test("captures intro text between recipe title and first section", () => {
   const recipe = result.recipes[0];
 
   expect(recipe).toBeDefined();
-  expect(recipe?.intro).toBeDefined();
-  expect(recipe?.intro).toBe(
-    "A rich and decadent cake perfect for celebrations.\nThis recipe has been passed down for generations.",
-  );
+  // Consecutive lines (no blank separator) are unwrapped into a single paragraph
+  expect(recipe?.intro).toHaveLength(1);
+  expect(recipe?.intro[0]).toMatchObject({
+    kind: "paragraph",
+    content:
+      "A rich and decadent cake perfect for celebrations. This recipe has been passed down for generations.",
+  });
 });
 
 test("recipe without intro has undefined intro field", () => {
@@ -624,7 +620,7 @@ test("recipe without intro has undefined intro field", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  expect(result.recipes[0]?.intro).toBeUndefined();
+  expect(result.recipes[0]?.intro).toHaveLength(0);
 });
 
 test("intro with only whitespace is not captured", () => {
@@ -640,7 +636,154 @@ test("intro with only whitespace is not captured", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  expect(result.recipes[0]?.intro).toBeUndefined();
+  expect(result.recipes[0]?.intro).toHaveLength(0);
+});
+
+test("intro with multiple paragraphs separated by blank lines", () => {
+  const input = [
+    "# Recipe",
+    "",
+    "First paragraph.",
+    "",
+    "Second paragraph.",
+    "",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Mix.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const intro = result.recipes[0]?.intro;
+  expect(intro).toHaveLength(2);
+  expect(intro?.[0]).toMatchObject({ kind: "paragraph", content: "First paragraph." });
+  expect(intro?.[1]).toMatchObject({ kind: "paragraph", content: "Second paragraph." });
+});
+
+test("intro with bullet list", () => {
+  const input = [
+    "# Recipe",
+    "",
+    "- Item one",
+    "- Item two",
+    "",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Mix.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const intro = result.recipes[0]?.intro;
+  expect(intro).toHaveLength(2);
+  expect(intro?.[0]).toMatchObject({ kind: "ul-item", content: "Item one" });
+  expect(intro?.[1]).toMatchObject({ kind: "ul-item", content: "Item two" });
+});
+
+test("intro with mixed content types", () => {
+  const input = [
+    "# Recipe",
+    "",
+    "Opening paragraph.",
+    "",
+    "- Bullet one",
+    "- Bullet two",
+    "",
+    "Closing paragraph.",
+    "",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Mix.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const intro = result.recipes[0]?.intro;
+  expect(intro).toHaveLength(4);
+  expect(intro?.[0]).toMatchObject({ kind: "paragraph", content: "Opening paragraph." });
+  expect(intro?.[1]).toMatchObject({ kind: "ul-item", content: "Bullet one" });
+  expect(intro?.[2]).toMatchObject({ kind: "ul-item", content: "Bullet two" });
+  expect(intro?.[3]).toMatchObject({ kind: "paragraph", content: "Closing paragraph." });
+});
+
+test("intro continuation lines are unwrapped into single block", () => {
+  const input = [
+    "# Recipe",
+    "",
+    "This is a long paragraph that",
+    "spans multiple lines in the source",
+    "but should be a single block.",
+    "",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Mix.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const intro = result.recipes[0]?.intro;
+  expect(intro).toHaveLength(1);
+  expect(intro?.[0]).toMatchObject({
+    kind: "paragraph",
+    content: "This is a long paragraph that spans multiple lines in the source but should be a single block.",
+  });
+});
+
+test("intro and notes produce identical structure for same content", () => {
+  const input = [
+    "# Recipe",
+    "",
+    "- Point one",
+    "- Point two",
+    "",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Mix.",
+    "## Notes",
+    "- Point one",
+    "- Point two",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const intro = result.recipes[0]?.intro;
+  const notes = result.recipes[0]?.notes;
+
+  expect(intro).toHaveLength(2);
+  expect(notes).toHaveLength(2);
+
+  // Same kind and content
+  expect(intro?.[0]?.kind).toBe(notes?.[0]?.kind);
+  expect(intro?.[0]?.content).toBe(notes?.[0]?.content);
+  expect(intro?.[1]?.kind).toBe(notes?.[1]?.kind);
+  expect(intro?.[1]?.content).toBe(notes?.[1]?.content);
+});
+
+test("notes lines have TextBlock kind field", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Mix.",
+    "## Notes",
+    "A paragraph.",
+    "",
+    "### A Header",
+    "",
+    "- Bullet",
+    "",
+    "1. Ordered",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const notes = result.recipes[0]?.notes;
+
+  expect(notes).toHaveLength(4);
+  expect(notes![0]).toMatchObject({ kind: "paragraph", content: "A paragraph." });
+  expect(notes![1]).toMatchObject({ kind: "header", content: "A Header", level: 3 });
+  expect(notes![2]).toMatchObject({ kind: "ul-item", content: "Bullet" });
+  expect(notes![3]).toMatchObject({ kind: "ol-item", content: "Ordered" });
 });
 
 test("notes continuation lines are unwrapped and joined for bullets", () => {
@@ -659,16 +802,13 @@ test("notes continuation lines are unwrapped and joined for bullets", () => {
 
   const result = parseDocument(input);
   const recipe = result.recipes[0];
-  const notesSection = recipe?.sections.find((s) => s.kind === "notes");
+  const notes = recipe?.notes ?? [];
 
-  expect(notesSection).toBeDefined();
-  if (notesSection?.kind === "notes") {
-    const nonEmpty = notesSection.lines.filter((l) => l.text.trim() !== "");
-    // Should have 2 lines (2 bullets), not 4
-    expect(nonEmpty).toHaveLength(2);
-    expect(nonEmpty[0]?.text).toContain("up to 5 days");
-    expect(nonEmpty[1]?.text).toContain("helps prevent");
-  }
+  const nonEmpty = notes.filter((l) => l.text.trim() !== "");
+  // Should have 2 lines (2 bullets), not 4
+  expect(nonEmpty).toHaveLength(2);
+  expect(nonEmpty[0]?.text).toContain("up to 5 days");
+  expect(nonEmpty[1]?.text).toContain("helps prevent");
 });
 
 test("notes paragraph continuation lines are joined", () => {
@@ -688,17 +828,14 @@ test("notes paragraph continuation lines are joined", () => {
 
   const result = parseDocument(input);
   const recipe = result.recipes[0];
-  const notesSection = recipe?.sections.find((s) => s.kind === "notes");
+  const notes = recipe?.notes ?? [];
 
-  expect(notesSection).toBeDefined();
-  if (notesSection?.kind === "notes") {
-    const nonEmpty = notesSection.lines.filter((l) => l.text.trim() !== "");
-    expect(nonEmpty).toHaveLength(2);
-    expect(nonEmpty[0]?.text).toBe(
-      "This is a long paragraph that wraps across multiple lines in the source.",
-    );
-    expect(nonEmpty[1]?.text).toBe("This is a second paragraph.");
-  }
+  const nonEmpty = notes.filter((l) => l.text.trim() !== "");
+  expect(nonEmpty).toHaveLength(2);
+  expect(nonEmpty[0]?.text).toBe(
+    "This is a long paragraph that wraps across multiple lines in the source.",
+  );
+  expect(nonEmpty[1]?.text).toBe("This is a second paragraph.");
 });
 
 test("notes double line break creates separate paragraphs", () => {
@@ -717,15 +854,12 @@ test("notes double line break creates separate paragraphs", () => {
 
   const result = parseDocument(input);
   const recipe = result.recipes[0];
-  const notesSection = recipe?.sections.find((s) => s.kind === "notes");
+  const notes = recipe?.notes ?? [];
 
-  expect(notesSection).toBeDefined();
-  if (notesSection?.kind === "notes") {
-    const nonEmpty = notesSection.lines.filter((l) => l.text.trim() !== "");
-    expect(nonEmpty).toHaveLength(2);
-    expect(nonEmpty[0]?.text).toBe("First paragraph.");
-    expect(nonEmpty[1]?.text).toBe("Second paragraph.");
-  }
+  const nonEmpty = notes.filter((l) => l.text.trim() !== "");
+  expect(nonEmpty).toHaveLength(2);
+  expect(nonEmpty[0]?.text).toBe("First paragraph.");
+  expect(nonEmpty[1]?.text).toBe("Second paragraph.");
 });
 
 // ── Compound recipe linking ──────────────────────────────────────────
@@ -757,12 +891,11 @@ test("ingredient matching another recipe title gets linkedRecipeId", () => {
 
   const result = parseDocument(input);
   const assembly = result.recipes.find((r) => r.id === "assembly");
-  const ingSection = assembly?.sections.find((s) => s.kind === "ingredients");
-  if (ingSection?.kind !== "ingredients") throw new Error("missing ingredients");
+  if (!assembly) throw new Error("missing assembly recipe");
 
-  const doughIng = ingSection.ingredients.find((i) => i.id === "dough");
-  const sauceIng = ingSection.ingredients.find((i) => i.id === "sauce");
-  const cheeseIng = ingSection.ingredients.find((i) => i.id === "cheese");
+  const doughIng = assembly.ingredients.ingredients.find((i) => i.id === "dough");
+  const sauceIng = assembly.ingredients.ingredients.find((i) => i.id === "sauce");
+  const cheeseIng = assembly.ingredients.ingredients.find((i) => i.id === "cheese");
 
   expect(doughIng?.linkedRecipeId).toBe("dough");
   expect(sauceIng?.linkedRecipeId).toBe("sauce");
@@ -792,10 +925,10 @@ test("ingredient matching its own recipe title does not self-link", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  const ing = result.recipes[0]?.sections.find((s) => s.kind === "ingredients");
-  if (ing?.kind !== "ingredients") throw new Error("missing ingredients");
+  const recipe = result.recipes[0];
+  if (!recipe) throw new Error("missing recipe");
 
-  expect(ing.ingredients[0]?.linkedRecipeId).toBeUndefined();
+  expect(recipe.ingredients.ingredients[0]?.linkedRecipeId).toBeUndefined();
   expect(result.recipeLinks).toHaveLength(0);
 });
 
@@ -816,10 +949,9 @@ test("recipe linking is case-insensitive via slug", () => {
 
   const result = parseDocument(input);
   const pizza = result.recipes.find((r) => r.id === "pizza");
-  const ing = pizza?.sections.find((s) => s.kind === "ingredients");
-  if (ing?.kind !== "ingredients") throw new Error("missing ingredients");
+  if (!pizza) throw new Error("missing pizza recipe");
 
-  expect(ing.ingredients[0]?.linkedRecipeId).toBe("detroit-style-dough");
+  expect(pizza.ingredients.ingredients[0]?.linkedRecipeId).toBe("detroit-style-dough");
 });
 
 test("bidirectional recipe linking", () => {
@@ -868,11 +1000,10 @@ test("custom id= override on ingredient prevents auto-linking", () => {
 
   const result = parseDocument(input);
   const assembly = result.recipes.find((r) => r.id === "assembly");
-  const ing = assembly?.sections.find((s) => s.kind === "ingredients");
-  if (ing?.kind !== "ingredients") throw new Error("missing ingredients");
+  if (!assembly) throw new Error("missing assembly recipe");
 
   // Custom id "red-sauce" doesn't match recipe id "sauce", so no link
-  expect(ing.ingredients[0]?.linkedRecipeId).toBeUndefined();
+  expect(assembly.ingredients.ingredients[0]?.linkedRecipeId).toBeUndefined();
   expect(result.recipeLinks).toHaveLength(0);
 });
 

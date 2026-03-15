@@ -110,3 +110,16 @@ test("formatQuantity expands unit-only quantities when scaling", () => {
   const scaled = scaleQuantity(q, 2);
   expect(formatQuantity(q, { scaled })).toBe("2 pinch");
 });
+
+test("formatQuantity caps precision for unknown units", () => {
+  const q = quantity("2 glugs");
+  const scaled = scaleQuantity(q, 1.017);
+  // Without capping, this would be "2.0338983..." — should be 1 decimal place
+  expect(formatQuantity(q, { scaled })).toBe("2 glugs");
+});
+
+test("formatQuantity shows 1 decimal for unknown units when needed", () => {
+  const q = quantity("3 egg");
+  const scaled = scaleQuantity(q, 1.4);
+  expect(formatQuantity(q, { scaled })).toBe("4.2 egg");
+});
