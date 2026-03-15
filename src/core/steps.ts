@@ -1,17 +1,17 @@
 import type {
-  InvalidStepToken,
-  StepQuantityToken,
-  StepTemperatureToken,
-  StepToken,
+  InvalidInlineValue,
+  InlineQuantityValue,
+  InlineTemperatureValue,
+  InlineValue,
 } from "./types";
 import { parseQuantity } from "./quantity";
 
 const TEMPERATURE_PATTERN = /^(-?\d+(?:\.\d+)?)[FCfc]$/;
 const TOKEN_MATCHER = /\{([^}]+)\}/g;
 
-export type ExtractStepTokensResult = {
-  tokens: StepToken[];
-  invalid: InvalidStepToken[];
+export type ExtractInlineValuesResult = {
+  tokens: InlineValue[];
+  invalid: InvalidInlineValue[];
 };
 
 const parseTokenBody = (
@@ -39,9 +39,9 @@ const parseTokenBody = (
   return null;
 };
 
-export const extractStepTokens = (line: string): ExtractStepTokensResult => {
-  const results: StepToken[] = [];
-  const invalid: InvalidStepToken[] = [];
+export const extractInlineValues = (line: string): ExtractInlineValuesResult => {
+  const results: InlineValue[] = [];
+  const invalid: InvalidInlineValue[] = [];
 
   for (const match of line.matchAll(TOKEN_MATCHER)) {
     const [full, body] = match;
@@ -54,7 +54,7 @@ export const extractStepTokens = (line: string): ExtractStepTokensResult => {
     // Try temperature first
     const parsed = parseTokenBody(body);
     if (parsed) {
-      const token: StepTemperatureToken = {
+      const token: InlineTemperatureValue = {
         kind: "temperature",
         raw: full,
         index,
@@ -72,17 +72,52 @@ export const extractStepTokens = (line: string): ExtractStepTokensResult => {
       continue;
     }
 
-    const quantityResult = parseQuantity(trimmedBody, {
+    // Split on pipe for alternates: {1 cup | 240g}
+    const segments = trimmedBody.split(/\s*\|\s*/);
+    const nativeSegment = segments[0] ?? trimmedBody;
+
+    // If the native segment is a temperature, treat the whole token as temperature (no alternates)
+    if (TEMPERATURE_PATTERN.test(nativeSegment.trim())) {
+      const tempParsed = parseTokenBody(nativeSegment);
+      if (tempParsed) {
+        const token: InlineTemperatureValue = {
+          kind: "temperature",
+          raw: full,
+          index,
+          value: tempParsed.value,
+          scale: tempParsed.scale,
+        };
+        results.push(token);
+        continue;
+      }
+    }
+
+    const quantityResult = parseQuantity(nativeSegment, {
       line: 0,
       invalid: { code: "W0403", message: "Unparseable inline value" },
     });
 
     if (quantityResult.quantity && quantityResult.diagnostics.length === 0) {
-      const token: StepQuantityToken = {
+      // Parse alternates (segments after the first pipe)
+      const alternates: import("./types").Quantity[] = [];
+      for (let si = 1; si < segments.length; si++) {
+        const altSegment = (segments[si] ?? "").trim();
+        if (!altSegment || !/\d/.test(altSegment)) continue;
+        const altResult = parseQuantity(altSegment, {
+          line: 0,
+          invalid: { code: "W0403", message: "Unparseable inline value alternate" },
+        });
+        if (altResult.quantity && altResult.diagnostics.length === 0) {
+          alternates.push(altResult.quantity);
+        }
+      }
+
+      const token: InlineQuantityValue = {
         kind: "quantity",
         raw: full,
         index,
         quantity: quantityResult.quantity,
+        ...(alternates.length > 0 ? { alternates } : {}),
       };
       results.push(token);
     } else {

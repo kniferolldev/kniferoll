@@ -340,3 +340,17 @@ test("parses unit-only quantities with implied amount of 1", () => {
     expect(salt.quantity.unit).toBe("dash");
   }
 });
+
+// ── also= duplicate system validation ────────────────────────────────
+
+test("also= with duplicate metric units emits E0208", () => {
+  const input = withRecipe(["- flour - 2 cups :: also=240g also=480g"]);
+  const { diagnostics } = getIngredientsSection(input);
+  expect(diagnostics.some((d) => d.code === "E0208")).toBe(true);
+});
+
+test("also= with different systems does not emit E0208", () => {
+  const input = withRecipe(['- flour - 2 cups :: also=240g also="1 cup"']);
+  const { diagnostics } = getIngredientsSection(input);
+  expect(diagnostics.some((d) => d.code === "E0208")).toBe(false);
+});

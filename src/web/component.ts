@@ -14,9 +14,9 @@ import BASE_STYLE from "./styles.css" with { type: "text" };
 import type {
   Diagnostic,
   DocumentParseResult,
-  DocumentStepTemperatureToken,
-  DocumentStepQuantityToken,
-  DocumentStepToken,
+  DocumentInlineTemperatureValue,
+  DocumentInlineQuantityValue,
+  DocumentInlineValueAny,
   Ingredient,
   IngredientAttribute,
   IngredientsSection,
@@ -106,12 +106,12 @@ const renderMarkdownInline = (text: string): string => {
  */
 const gatherTokensForJoinedLines = (
   lines: SectionLine[],
-  stepTokensByLine: Map<number, DocumentStepToken[]>,
-): DocumentStepToken[] => {
-  const tokens: DocumentStepToken[] = [];
+  inlineValuesByLine: Map<number, DocumentInlineValueAny[]>,
+): DocumentInlineValueAny[] => {
+  const tokens: DocumentInlineValueAny[] = [];
   let offset = 0;
   for (const line of lines) {
-    const lineTokens = stepTokensByLine.get(line.line) ?? [];
+    const lineTokens = inlineValuesByLine.get(line.line) ?? [];
     for (const token of lineTokens) {
       tokens.push({ ...token, index: token.index + offset });
     }
@@ -123,7 +123,7 @@ const gatherTokensForJoinedLines = (
 const renderIntro = (
   introLines: SectionLine[],
   options: RenderOptions,
-  stepTokensByLine: Map<number, DocumentStepToken[]>,
+  inlineValuesByLine: Map<number, DocumentInlineValueAny[]>,
   targetMeta?: Map<string, TargetInfo>,
 ): string => {
   // Group lines into paragraphs separated by blank lines
@@ -154,7 +154,7 @@ const renderIntro = (
 
   const html = paragraphs
     .map((p) => {
-      const tokens = gatherTokensForJoinedLines(p.lines, stepTokensByLine);
+      const tokens = gatherTokensForJoinedLines(p.lines, inlineValuesByLine);
       const content = renderNotesInline(p.text, tokens, options, targetMeta);
       return `<p class="kr-intro__p" data-kr-line="${p.line}">${content}</p>`;
     })
@@ -252,7 +252,7 @@ const parseNotesBlocks = (lines: SectionLine[]): NotesBlock[] => {
 
 const renderNotesInline = (
   text: string,
-  tokens: DocumentStepToken[],
+  tokens: DocumentInlineValueAny[],
   options: RenderOptions,
   targetMeta?: Map<string, TargetInfo>,
 ): string => {
@@ -272,7 +272,7 @@ const renderNotesInline = (
       inlineTokens.push({
         start,
         end,
-        html: renderQuantityToken(token, options.scaleFactor),
+        html: renderQuantityToken(token, options.scaleFactor, options.quantityDisplay),
       });
     }
   }
@@ -357,7 +357,7 @@ const renderNotesInline = (
   return parts.join("");
 };
 
-const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensByLine: Map<number, DocumentStepToken[]>, targetMeta?: Map<string, TargetInfo>): string => {
+const renderNotesBlock = (block: NotesBlock, options: RenderOptions, inlineValuesByLine: Map<number, DocumentInlineValueAny[]>, targetMeta?: Map<string, TargetInfo>): string => {
   const renderInlineDiagnostics = (lineNum: number) => {
     if (options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
       return null;
@@ -381,7 +381,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
     case "header": {
       const line = block.lines[0]!;
       const tag = block.level === 4 ? "h5" : "h4";
-      const lineTokens = stepTokensByLine.get(line.line) ?? [];
+      const lineTokens = inlineValuesByLine.get(line.line) ?? [];
       const content = renderNotesInline(line.content, lineTokens, options, targetMeta);
       return `<${tag} class="kr-notes__header" data-kr-line="${line.line}">${content}</${tag}>`;
     }
@@ -396,7 +396,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
             ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
             : "";
           const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-          const lineTokens = stepTokensByLine.get(line.line) ?? [];
+          const lineTokens = inlineValuesByLine.get(line.line) ?? [];
           const content = renderNotesInline(line.content, lineTokens, options, targetMeta);
           return `<li class="kr-notes__list-item${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${content}</li>`;
         })
@@ -413,7 +413,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
         ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
         : "";
       const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-      const tokens = gatherTokensForJoinedLines(block.lines, stepTokensByLine);
+      const tokens = gatherTokensForJoinedLines(block.lines, inlineValuesByLine);
       const content = renderNotesInline(text, tokens, options, targetMeta);
       return `<p class="kr-notes__paragraph${diagnosticClass}" data-kr-line="${firstLine.line}"${diagnosticAttr}>${diagnosticContent}${content}</p>`;
     }
@@ -423,7 +423,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
 const renderNotesSection = (
   section: NotesSection,
   options: RenderOptions,
-  stepTokensByLine: Map<number, DocumentStepToken[]>,
+  inlineValuesByLine: Map<number, DocumentInlineValueAny[]>,
   targetMeta?: Map<string, TargetInfo>,
 ): string => {
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
@@ -432,7 +432,7 @@ const renderNotesSection = (
   }
 
   const blocks = parseNotesBlocks(section.lines);
-  const content = blocks.map((block) => renderNotesBlock(block, options, stepTokensByLine, targetMeta)).join("");
+  const content = blocks.map((block) => renderNotesBlock(block, options, inlineValuesByLine, targetMeta)).join("");
 
   return `<section class="kr-section" data-kr-kind="notes">${heading}<div class="kr-section__body">${content}</div></section>`;
 };
@@ -670,7 +670,7 @@ const convertTemperature = (value: number, scale: "F" | "C"): { other: number; o
 };
 
 const renderTemperatureToken = (
-  token: DocumentStepTemperatureToken,
+  token: DocumentInlineTemperatureValue,
   preferredScale: TemperatureDisplayMode = null,
 ): string => {
   const { other, otherScale } = convertTemperature(token.value, token.scale);
@@ -701,9 +701,31 @@ const renderTemperatureToken = (
 };
 
 const renderQuantityToken = (
-  token: DocumentStepQuantityToken,
+  token: DocumentInlineQuantityValue,
   scaleFactor: number,
+  quantityDisplay: QuantityDisplayMode = "native",
 ): string => {
+  // Check if we should show an alternate based on display mode
+  if (quantityDisplay !== "native" && token.alternates && token.alternates.length > 0) {
+    const wantMetric = quantityDisplay === "metric";
+    const alt = token.alternates.find((a) => {
+      const unit = a.kind === "compound" ? a.parts[0].unit : a.unit;
+      if (!unit) return false;
+      const unitInfo = lookupUnit(unit);
+      return unitInfo?.system ? isMetricSystem(unitInfo.system) === wantMetric : false;
+    });
+    if (alt) {
+      const altScaled = scaleFactor !== 1 ? scaleQuantity(alt, scaleFactor) : null;
+      const altFormatted = formatQuantity(alt, {
+        scaled: altScaled ?? undefined,
+        usePreferredUnit: true,
+      });
+      const altDisplay = altFormatted ? escapeHtml(altFormatted) : escapeHtml(alt.raw);
+      const nativeFormatted = formatQuantity(token.quantity) ?? token.quantity.raw;
+      return `<span class="kr-inline-quantity" title="${escapeAttr(nativeFormatted)}">${altDisplay}</span>`;
+    }
+  }
+
   const scaled = scaleFactor !== 1 ? scaleQuantity(token.quantity, scaleFactor) : null;
   const formatted = formatQuantity(token.quantity, {
     scaled: scaled ?? undefined,
@@ -762,7 +784,7 @@ const STEP_NUMBER_PATTERN = /^(\d+)\.\s+/;
 const renderStepLine = (
   line: SectionLine,
   targetMeta: Map<string, TargetInfo>,
-  tokens: DocumentStepToken[],
+  tokens: DocumentInlineValueAny[],
   context: { recipeId: string; recipeTitle: string },
   options: RenderOptions,
   stepIndex: number | null = null,
@@ -794,7 +816,7 @@ const renderStepLine = (
       inlineTokens.push({
         start,
         end,
-        html: renderQuantityToken(token, options.scaleFactor),
+        html: renderQuantityToken(token, options.scaleFactor, options.quantityDisplay),
       });
     }
   }
@@ -1073,7 +1095,7 @@ const renderSection = (
   section: RecipeSection,
   options: RenderOptions,
   targetMeta: Map<string, TargetInfo>,
-  stepTokensByLine: Map<number, DocumentStepToken[]>,
+  inlineValuesByLine: Map<number, DocumentInlineValueAny[]>,
 ): string => {
   if (section.kind === "ingredients") {
     return renderIngredientsSection(section, options);
@@ -1090,7 +1112,7 @@ const renderSection = (
         return renderStepLine(
           line,
           targetMeta,
-          stepTokensByLine.get(line.line) ?? [],
+          inlineValuesByLine.get(line.line) ?? [],
           { recipeId: recipe.id, recipeTitle: recipe.title },
           options,
           currentStepIndex,
@@ -1101,7 +1123,7 @@ const renderSection = (
   }
 
   if (section.kind === "notes") {
-    return renderNotesSection(section, options, stepTokensByLine, targetMeta);
+    return renderNotesSection(section, options, inlineValuesByLine, targetMeta);
   }
 
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
@@ -1147,12 +1169,12 @@ const renderRecipe = (
   index: number,
   options: RenderOptions,
   targetMeta: Map<string, TargetInfo>,
-  stepTokensByLine: Map<number, DocumentStepToken[]>,
+  inlineValuesByLine: Map<number, DocumentInlineValueAny[]>,
   source?: Source,
   presets?: ScalePreset[],
 ): string => {
   const sections = recipe.sections
-    .map((section) => renderSection(recipe, section, options, targetMeta, stepTokensByLine))
+    .map((section) => renderSection(recipe, section, options, targetMeta, inlineValuesByLine))
     .join("");
   const roleAttr = index === 0 ? "main" : "secondary";
   const recipeElementId = `kr-recipe-${recipe.id}`;
@@ -1165,7 +1187,7 @@ const renderRecipe = (
   const sourceHtml = source ? renderSource(source) : "";
   let introHtml = "";
   if (recipe.introLines.length > 0) {
-    introHtml = renderIntro(recipe.introLines, options, stepTokensByLine, targetMeta);
+    introHtml = renderIntro(recipe.introLines, options, inlineValuesByLine, targetMeta);
   }
 
   const scaleWidget = roleAttr === "main" && !options.hideScale ? renderScaleWidget(presets ?? []) : "";
@@ -1216,7 +1238,7 @@ export const renderDocument = (
   };
 
   const targetMeta = new Map<string, TargetInfo>();
-  const stepTokensByLine = new Map<number, DocumentStepToken[]>();
+  const inlineValuesByLine = new Map<number, DocumentInlineValueAny[]>();
   const diagnostics = doc.diagnostics ?? [];
   const diagnosticsCount = diagnostics.length;
   const diagnosticsMap = new Map<number, Diagnostic[]>();
@@ -1255,16 +1277,16 @@ export const renderDocument = (
     }
   }
 
-  for (const token of doc.stepTokens) {
-    const existing = stepTokensByLine.get(token.line);
+  for (const token of doc.inlineValues) {
+    const existing = inlineValuesByLine.get(token.line);
     if (existing) {
       existing.push(token);
     } else {
-      stepTokensByLine.set(token.line, [token]);
+      inlineValuesByLine.set(token.line, [token]);
     }
   }
 
-  for (const list of stepTokensByLine.values()) {
+  for (const list of inlineValuesByLine.values()) {
     list.sort((a, b) => a.index - b.index);
   }
 
@@ -1303,7 +1325,7 @@ export const renderDocument = (
     doc.recipes.forEach((recipe, index) => {
       // Only show source on the main recipe (index 0)
       const source = index === 0 ? doc.frontmatter?.source : undefined;
-      parts.push(renderRecipe(recipe, index, options, targetMeta, stepTokensByLine, source, scalePresets));
+      parts.push(renderRecipe(recipe, index, options, targetMeta, inlineValuesByLine, source, scalePresets));
     });
   }
 

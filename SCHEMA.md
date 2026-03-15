@@ -219,6 +219,12 @@ conversions. Wrong: `Bake at 350°F (175°C).` Right: `Bake at {350F}.`
 that should change when the recipe scales. Syntax follows the same rules as
 ingredient quantities (amount, fraction, range, optional unit).
 
+**Alternates**: `{1 cup | 240g}`, `{1 cup + 3 tbsp | 285g}` — pipe-separated
+alternates for unit-system-aware display. The first value is the native
+quantity; subsequent values are alternates that renderers select based on
+display mode (metric/imperial). At most one metric and one imperial
+alternate. Temperatures do not support alternates.
+
 #### When to use inline values
 
 Tag quantities that should scale with the recipe and temperatures that should

@@ -259,6 +259,36 @@ const parseIngredientLine = (
 
       attributes.push(attribute);
     }
+
+    // Validate: at most one metric and one imperial also= alternate
+    const alsoAttrs = attributes.filter((a) => a.key === "also" && a.quantity);
+    if (alsoAttrs.length > 1) {
+      let metricCount = 0;
+      let imperialCount = 0;
+      for (const attr of alsoAttrs) {
+        const qty = attr.quantity!;
+        const unit = qty.kind === "compound" ? qty.parts[0].unit : qty.unit;
+        if (unit) {
+          const unitInfo = lookupUnit(unit);
+          if (unitInfo?.system) {
+            if (unitInfo.system === "metric") {
+              metricCount++;
+            } else {
+              imperialCount++;
+            }
+          }
+        }
+      }
+      if (metricCount > 1 || imperialCount > 1) {
+        diagnostics.push(
+          error(
+            "E0208",
+            "Multiple also= alternates in the same unit system.",
+            lineNumber,
+          ),
+        );
+      }
+    }
   }
 
   let parsedQuantity: Ingredient["quantity"] = null;

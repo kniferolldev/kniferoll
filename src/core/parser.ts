@@ -1,11 +1,11 @@
 import { extractFrontmatter } from "./frontmatter";
 import { parseIngredientsSection } from "./ingredients";
 import { slug } from "./slug";
-import { extractStepTokens } from "./steps";
+import { extractInlineValues } from "./steps";
 import type {
-  DocumentStepToken,
-  DocumentStepTemperatureToken,
-  DocumentStepQuantityToken,
+  DocumentInlineValueAny,
+  DocumentInlineTemperatureValue,
+  DocumentInlineQuantityValue,
   DocumentParseResult,
   DocumentTitle,
   Diagnostic,
@@ -21,7 +21,7 @@ import type {
   SectionLine,
   ReferenceToken,
 } from "./types";
-import { lookupUnit } from "./units";
+import { lookupUnit, isMetric } from "./units";
 import { createIdRegistry } from "./id-registry";
 
 const SECTION_MAP: Record<string, SectionKind> = {
@@ -270,7 +270,7 @@ export const parseDocument = (
   const diagnostics = [...frontmatterResult.diagnostics];
   const recipes: Recipe[] = [];
   const references: ReferenceToken[] = [];
-  const stepTokens: DocumentStepToken[] = [];
+  const inlineValues: DocumentInlineValueAny[] = [];
   let documentTitle: DocumentTitle | null = null;
 
   const lines = frontmatterResult.body.split("\n");
@@ -532,7 +532,7 @@ export const parseDocument = (
     recipeTitle: string,
   ) => {
     for (const line of lines) {
-      const { tokens: extractedTokens, invalid } = extractStepTokens(line.content);
+      const { tokens: extractedTokens, invalid } = extractInlineValues(line.content);
 
       for (const bad of invalid) {
         diagnostics.push(
@@ -546,21 +546,49 @@ export const parseDocument = (
 
       for (const token of extractedTokens) {
         if (token.kind === "temperature") {
-          stepTokens.push({
+          inlineValues.push({
             ...token,
             line: line.line,
             column: token.index + 1,
             recipeId,
             recipeTitle,
-          } satisfies DocumentStepTemperatureToken);
+          } satisfies DocumentInlineTemperatureValue);
         } else {
-          stepTokens.push({
+          inlineValues.push({
             ...token,
             line: line.line,
             column: token.index + 1,
             recipeId,
             recipeTitle,
-          } satisfies DocumentStepQuantityToken);
+          } satisfies DocumentInlineQuantityValue);
+
+          // Validate: at most one metric and one imperial alternate
+          if (token.alternates && token.alternates.length > 0) {
+            let metricCount = 0;
+            let imperialCount = 0;
+            for (const alt of token.alternates) {
+              const unit = alt.kind === "compound" ? alt.parts[0].unit : alt.unit;
+              if (unit) {
+                const unitInfo = lookupUnit(unit);
+                if (unitInfo?.system) {
+                  if (isMetric(unitInfo.system)) {
+                    metricCount++;
+                  } else {
+                    imperialCount++;
+                  }
+                }
+              }
+            }
+            if (metricCount > 1 || imperialCount > 1) {
+              diagnostics.push(
+                error(
+                  "E0208",
+                  "Multiple alternates in the same unit system.",
+                  line.line,
+                ),
+              );
+            }
+          }
         }
       }
 
@@ -704,7 +732,7 @@ export const parseDocument = (
     bodyStartLine: frontmatterResult.bodyStartLine,
     documentTitle,
     recipes,
-    stepTokens,
+    inlineValues,
     references,
     recipeLinks,
   };

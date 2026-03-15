@@ -356,7 +356,7 @@ test("step tokens capture temperatures", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  const temps = result.stepTokens.filter((t) => t.kind === "temperature");
+  const temps = result.inlineValues.filter((t) => t.kind === "temperature");
   expect(temps.length).toBe(1);
 
   const temp = temps[0];
@@ -382,7 +382,7 @@ test("step tokens capture quantities", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  const quantities = result.stepTokens.filter((t) => t.kind === "quantity");
+  const quantities = result.inlineValues.filter((t) => t.kind === "quantity");
   expect(quantities.length).toBe(1);
   expect(quantities[0]).toEqual(
     expect.objectContaining({
@@ -406,9 +406,9 @@ test("inline values in notes are extracted", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  expect(result.stepTokens.length).toBe(3);
-  const temps = result.stepTokens.filter((t) => t.kind === "temperature");
-  const quantities = result.stepTokens.filter((t) => t.kind === "quantity");
+  expect(result.inlineValues.length).toBe(3);
+  const temps = result.inlineValues.filter((t) => t.kind === "temperature");
+  const quantities = result.inlineValues.filter((t) => t.kind === "quantity");
   expect(temps.length).toBe(2); // 350F and -18C
   expect(quantities.length).toBe(1); // 12
 });
@@ -431,14 +431,14 @@ test("inline value token indices match unwrapped line text", () => {
   const notesLine = notesSection.lines[0]!;
 
   // The token index should point to '{' in the content (prefix-stripped) text
-  const notesToken = result.stepTokens.find((t) => t.kind === "quantity")!;
+  const notesToken = result.inlineValues.find((t) => t.kind === "quantity")!;
   expect(notesLine.content.slice(notesToken.index, notesToken.index + notesToken.raw.length)).toBe("{12}");
 
   // Same for the step temperature
   const stepsSection = recipe.sections.find((s) => s.kind === "steps")!;
   const stepLine = stepsSection.lines[0]!;
-  const stepToken = result.stepTokens.find((t) => t.kind === "temperature")!;
-  expect(stepLine.content.slice(stepToken.index, stepToken.index + stepToken.raw.length)).toBe("{350F}");
+  const tempValue = result.inlineValues.find((t) => t.kind === "temperature")!;
+  expect(stepLine.content.slice(tempValue.index, tempValue.index + tempValue.raw.length)).toBe("{350F}");
 });
 
 test("inline value token indices correct after multi-line continuation", () => {
@@ -462,7 +462,7 @@ test("inline value token indices correct after multi-line continuation", () => {
   expect(notesLine.content).toContain("shredded mozzarella");
 
   // Token indices should match the content (prefix-stripped) text
-  for (const token of result.stepTokens) {
+  for (const token of result.inlineValues) {
     const extracted = notesLine.content.slice(token.index, token.index + token.raw.length);
     expect(extracted).toBe(token.raw);
   }
@@ -965,4 +965,32 @@ test("W0502 negative: referenced recipe does not trigger orphan warning", () => 
 
   const result = parseDocument(input);
   expect(byCode(result.diagnostics, "W0502")).toHaveLength(0);
+});
+
+// ── Inline alternate validation ──────────────────────────────────────
+
+test("inline alternate with duplicate metric units emits E0208", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- flour - 2 cups",
+    "## Steps",
+    "1. Add {1 cup | 240g | 480g} of water.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "E0208").length).toBe(1);
+});
+
+test("inline alternate with different systems does not emit E0208", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- flour - 2 cups",
+    "## Steps",
+    "1. Add {1 cup | 240g} of water.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "E0208").length).toBe(0);
 });

@@ -190,7 +190,7 @@ export interface UnknownSection extends RecipeSectionBase {
   kind: "unknown";
 }
 
-export interface StepTokenBase {
+export interface InlineValueBase {
   raw: string;
   /**
    * Zero-based index within the source line.
@@ -198,36 +198,32 @@ export interface StepTokenBase {
   index: number;
 }
 
-export interface StepTemperatureToken extends StepTokenBase {
+export interface InlineTemperatureValue extends InlineValueBase {
   kind: "temperature";
   value: number;
   scale: "F" | "C";
 }
 
-export interface StepQuantityToken extends StepTokenBase {
+export interface InlineQuantityValue extends InlineValueBase {
   kind: "quantity";
   quantity: Quantity;
+  alternates?: Quantity[];
 }
 
-export type StepToken = StepTemperatureToken | StepQuantityToken;
+export type InlineValue = InlineTemperatureValue | InlineQuantityValue;
 
-export type InvalidStepToken = StepTokenBase;
+export type InvalidInlineValue = InlineValueBase;
 
-export interface DocumentStepTemperatureToken extends StepTemperatureToken {
+export type DocumentInlineValue<T extends InlineValue> = T & {
   line: number;
   column: number;
   recipeId: string;
   recipeTitle: string;
-}
+};
 
-export interface DocumentStepQuantityToken extends StepQuantityToken {
-  line: number;
-  column: number;
-  recipeId: string;
-  recipeTitle: string;
-}
-
-export type DocumentStepToken = DocumentStepTemperatureToken | DocumentStepQuantityToken;
+export type DocumentInlineTemperatureValue = DocumentInlineValue<InlineTemperatureValue>;
+export type DocumentInlineQuantityValue = DocumentInlineValue<InlineQuantityValue>;
+export type DocumentInlineValueAny = DocumentInlineValue<InlineValue>;
 
 export interface IngredientReference {
   id: string;
@@ -311,6 +307,6 @@ export interface DocumentParseResult extends FrontmatterParseResult {
   documentTitle: DocumentTitle | null;
   recipes: Recipe[];
   references: ReferenceToken[];
-  stepTokens: DocumentStepToken[];
+  inlineValues: DocumentInlineValueAny[];
   recipeLinks: RecipeLink[];
 }
