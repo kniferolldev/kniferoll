@@ -13,7 +13,6 @@ import type {
   ParseOptions,
   Recipe,
   RecipeLink,
-  StepsSection,
   SectionLine,
   TextBlock,
   ReferenceToken,

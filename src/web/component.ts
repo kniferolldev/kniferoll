@@ -21,7 +21,6 @@ import type {
   IngredientAttribute,
   IngredientsSection,
   Recipe,
-  Quantity,
   TextBlock,
   UnitDimension,
   ScalePreset,
@@ -30,7 +29,7 @@ import type {
   Source,
   StepsSection,
 } from "../core/types";
-import type { SourceSpan } from "../core/source-spans";
+import type { DiffAnnotation, AttributeDiff, InlineDiffToken } from "../core/diff";
 
 const TAG_NAME = "kr-recipe";
 
@@ -153,9 +152,12 @@ const renderIntro = (
   }
 
   const html = paragraphs
-    .map((p) => {
-      const tokens = gatherTokensForJoinedLines(p.lines, inlineValuesByLine);
-      const content = renderNotesInline(p.text, tokens, options, targetMeta);
+    .map((p, index) => {
+      // Use diff tokens for redline if available
+      const ann = getDiffAnnotation(options.diffMap, "intro", String(index));
+      const content = ann?.status === "changed" && ann.tokens
+        ? renderDiffTokens(ann.tokens)
+        : renderNotesInline(p.text, gatherTokensForJoinedLines(p.lines, inlineValuesByLine), options, targetMeta);
       return `<p class="kr-intro__p" data-kr-line="${p.line}">${content}</p>`;
     })
     .join("");
@@ -190,6 +192,7 @@ const renderTextBlocks = (
   inlineValuesByLine?: Map<number, DocumentInlineValueAny[]>,
   options?: RenderOptions,
   targetMeta?: Map<string, TargetInfo>,
+  diffSection?: "intro" | "notes",
 ): string => {
   const renderInlineDiag = (lineNum: number) => {
     if (!options || options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
@@ -228,6 +231,19 @@ const renderTextBlocks = (
     };
   };
 
+  const dm = diffSection ? options?.diffMap : undefined;
+
+  /** Render block content — uses diff tokens for redline if available. */
+  const renderBlockContent = (block: TextBlock, index: number): string => {
+    if (diffSection) {
+      const ann = getDiffAnnotation(dm, diffSection, String(index));
+      if (ann?.status === "changed" && ann.tokens) {
+        return renderDiffTokens(ann.tokens);
+      }
+    }
+    return renderInline(block);
+  };
+
   const parts: string[] = [];
   let i = 0;
 
@@ -236,7 +252,7 @@ const renderTextBlocks = (
 
     if (block.kind === "header") {
       const tag = block.level === 4 ? "h5" : "h4";
-      const content = renderInline(block);
+      const content = renderBlockContent(block, i);
       parts.push(`<${tag} class="${cls.header}" data-kr-line="${block.line}">${content}</${tag}>`);
       i++;
       continue;
@@ -249,7 +265,7 @@ const renderTextBlocks = (
       while (i < blocks.length && blocks[i]!.kind === block.kind) {
         const item = blocks[i]!;
         const d = diagAttrs(item.line);
-        const content = renderInline(item);
+        const content = renderBlockContent(item, i);
         items.push(`<li class="${cls.listItem}${d.cls}" data-kr-line="${item.line}"${d.attr}>${d.content}${content}</li>`);
         i++;
       }
@@ -259,7 +275,7 @@ const renderTextBlocks = (
 
     // paragraph
     const d = diagAttrs(block.line);
-    const content = renderInline(block);
+    const content = renderBlockContent(block, i);
     parts.push(`<p class="${cls.paragraph}${d.cls}" data-kr-line="${block.line}"${d.attr}>${d.content}${content}</p>`);
     i++;
   }
@@ -401,6 +417,10 @@ interface RenderOptions {
   sourceLines?: string[];
   hideScale?: boolean;
   showAttributes?: boolean;
+  /** Diff annotations to highlight added/changed/removed elements. */
+  annotations?: DiffAnnotation[];
+  /** Resolved diff lookup map (built from annotations). */
+  diffMap?: Map<string, DiffAnnotation>;
 }
 
 const DEFAULT_RENDER_OPTIONS: RenderOptions = {
@@ -409,6 +429,46 @@ const DEFAULT_RENDER_OPTIONS: RenderOptions = {
   temperatureDisplay: null,
   layout: "stacked",
   diagnosticsMode: "summary",
+};
+
+/** Build a lookup key for diff annotations. */
+const diffKey = (section: DiffAnnotation["section"], key: string): string =>
+  `${section}:${key}`;
+
+/** Build a lookup map from annotations for O(1) access. */
+const buildDiffMap = (annotations: DiffAnnotation[]): Map<string, DiffAnnotation> => {
+  const map = new Map<string, DiffAnnotation>();
+  for (const a of annotations) {
+    map.set(diffKey(a.section, a.key), a);
+  }
+  return map;
+};
+
+/** Look up a diff annotation for a given section/key. */
+const getDiffAnnotation = (
+  diffMap: Map<string, DiffAnnotation> | undefined,
+  section: DiffAnnotation["section"],
+  key: string,
+): DiffAnnotation | undefined => {
+  if (!diffMap) return undefined;
+  return diffMap.get(diffKey(section, key));
+};
+
+/** Render inline diff tokens as HTML with del/ins markup. */
+const renderDiffTokens = (tokens: InlineDiffToken[]): string => {
+  return tokens
+    .map((t) => {
+      const text = escapeHtml(t.text);
+      switch (t.kind) {
+        case "equal":
+          return text;
+        case "delete":
+          return `<del class="kr-diff-del">${text}</del>`;
+        case "insert":
+          return `<ins class="kr-diff-ins">${text}</ins>`;
+      }
+    })
+    .join("");
 };
 
 const sanitizeAttrKey = (key: string): string =>
@@ -562,14 +622,6 @@ const renderDiagnosticsSection = (diagnostics: Diagnostic[], mode: DiagnosticsMo
     </details>`;
 };
 
-const summarizeDiagnostics = (diagnostics: Diagnostic[]): string =>
-  diagnostics
-    .map(
-      (diag) =>
-        `${diag.severity === "error" ? "Error" : "Warning"} ${diag.code}: ${diag.message}`,
-    )
-    .join(" • ");
-
 const renderInlineDiagnostics = (
   lineNumber: number,
   options: RenderOptions,
@@ -685,36 +737,47 @@ const renderIngredientAttributes = (
     omitKeys?: Set<string>;
     omitAttributes?: Set<IngredientAttribute>;
     displayTextByAttribute?: Map<IngredientAttribute, string>;
+    attributeDiffs?: AttributeDiff[];
   } = {},
 ): string => {
-  if (attributes.length === 0) {
-    return "";
+  const { omitKeys, omitAttributes, displayTextByAttribute, attributeDiffs } = options;
+
+  // Build diff lookup by key
+  const diffByKey = new Map<string, "added" | "removed">();
+  if (attributeDiffs) {
+    for (const d of attributeDiffs) {
+      diffByKey.set(d.key, d.status);
+    }
   }
 
-  const { omitKeys, omitAttributes, displayTextByAttribute } = options;
+  const renderChip = (key: string, rawValue: string, diffStatus?: "added" | "removed") => {
+    const detail =
+      rawValue !== ""
+        ? `: <span class="kr-ingredient__attribute-value">${escapeHtml(rawValue)}</span>`
+        : "";
+    const diffAttrStr = diffStatus ? ` data-kr-attr-diff="${diffStatus}"` : "";
+    return `<span class="kr-ingredient__attribute"${diffAttrStr} data-kr-attribute="${escapeAttr(key)}">${escapeHtml(key)}${detail}</span>`;
+  };
 
-  const chips = attributes
-    .map((attr) => {
-      if (omitKeys?.has(attr.key)) {
-        return "";
-      }
-      if (omitAttributes?.has(attr)) {
-        return "";
-      }
-      const key = escapeHtml(attr.key);
-      const rawValue = displayTextByAttribute?.get(attr) ?? attr.value ?? attr.quantity?.raw ?? "";
-      const detail =
-        rawValue !== ""
-          ? `: <span class="kr-ingredient__attribute-value">${escapeHtml(rawValue)}</span>`
-          : "";
-      return `<span class="kr-ingredient__attribute" data-kr-attribute="${escapeAttr(
-        attr.key,
-      )}">${key}${detail}</span>`;
-    })
-    .join("");
+  const chips: string[] = [];
 
-  if (!chips) return "";
-  return `<span class="kr-ingredient__attributes">${chips}</span>`;
+  for (const attr of attributes) {
+    if (omitKeys?.has(attr.key)) continue;
+    if (omitAttributes?.has(attr)) continue;
+    const rawValue = displayTextByAttribute?.get(attr) ?? attr.value ?? attr.quantity?.raw ?? "";
+    const diffStatus = diffByKey.get(attr.key);
+    chips.push(renderChip(attr.key, rawValue, diffStatus));
+  }
+
+  // Append removed attribute chips (these don't exist on the after ingredient)
+  for (const d of attributeDiffs ?? []) {
+    if (d.status === "removed") {
+      chips.push(renderChip(d.key, "", "removed"));
+    }
+  }
+
+  if (chips.length === 0) return "";
+  return `<span class="kr-ingredient__attributes">${chips.join("")}</span>`;
 };
 
 const REFERENCE_PATTERN = /\[\[([^[\]]+)\]\]/g;
@@ -728,6 +791,7 @@ const renderStepLine = (
   context: { recipeId: string; recipeTitle: string },
   options: RenderOptions,
   stepIndex: number | null = null,
+  diffIndex?: number,
 ): string => {
   // Extract step number from the full text for display
   const stepMatch = STEP_NUMBER_PATTERN.exec(line.text);
@@ -859,7 +923,14 @@ const renderStepLine = (
     : "";
   const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
 
-  const content = parts.join("");
+  // Use diff tokens for redline display if available
+  let content = parts.join("");
+  if (diffIndex != null) {
+    const ann = getDiffAnnotation(options.diffMap, "steps", String(diffIndex));
+    if (ann?.status === "changed" && ann.tokens) {
+      content = renderDiffTokens(ann.tokens);
+    }
+  }
 
   if (stepNumber !== null && stepIndex !== null) {
     const stepAttrs = ` data-kr-recipe-id="${escapeAttr(context.recipeId)}" data-kr-step-index="${stepIndex}" role="button" tabindex="0" aria-pressed="false"`;
@@ -987,9 +1058,10 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
     ? `<span class="kr-noscale-icon" title="This ingredient can't be scaled">${CAUTION_ICON_SVG}</span>`
     : "";
 
-  // Attribute chips (opt-in)
+  // Attribute chips — shown in edit mode (showAttributes) or diff mode (annotation present)
+  const ingAnn = getDiffAnnotation(options.diffMap, "ingredients", ingredient.id);
   let attributeChips = "";
-  if (options.showAttributes) {
+  if (options.showAttributes || ingAnn) {
     const omitKeys = new Set(["id"]);
     const omitAttributes = new Set<IngredientAttribute>();
     const displayTextByAttribute = new Map<IngredientAttribute, string>();
@@ -1007,11 +1079,19 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
       omitKeys,
       omitAttributes,
       displayTextByAttribute,
+      attributeDiffs: ingAnn?.attributeDiffs,
     });
   }
 
   const elementId = `kr-ingredient-${ingredient.id}`;
-  const wrapper = `<div class="kr-ingredient__wrapper">${quantityCell}${contentCell}</div>`;
+
+  // Use diff tokens for content redlining if available
+  let wrapper: string;
+  if (ingAnn?.status === "changed" && ingAnn.tokens) {
+    wrapper = `<div class="kr-ingredient__wrapper"><span class="kr-ingredient__content">${renderDiffTokens(ingAnn.tokens)}</span></div>`;
+  } else {
+    wrapper = `<div class="kr-ingredient__wrapper">${quantityCell}${contentCell}</div>`;
+  }
   return `<li class="kr-ingredient${diagnosticClass}" id="${escapeAttr(elementId)}" tabindex="-1" ${dataAttrs.join(
     " ",
   )}>${cautionIcon}${diagnosticContent}${wrapper}${attributeChips}</li>`;
@@ -1039,11 +1119,14 @@ const renderStepsSection = (
 ): string => {
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
   let stepIndex = 0;
+  let nonEmptyIndex = 0;
   const lines = section.lines
     .map((line: SectionLine) => {
       const fullText = line.text;
+      const isEmpty = line.content.trim() === "";
       const stepMatch = STEP_NUMBER_PATTERN.exec(fullText);
       const currentStepIndex = stepMatch ? stepIndex++ : null;
+      const currentDiffIndex = isEmpty ? undefined : nonEmptyIndex++;
       return renderStepLine(
         line,
         targetMeta,
@@ -1051,6 +1134,7 @@ const renderStepsSection = (
         { recipeId: recipe.id, recipeTitle: recipe.title },
         options,
         currentStepIndex,
+        currentDiffIndex,
       );
     })
     .join("");
@@ -1085,7 +1169,7 @@ const renderRecipe = (
   const ingredientsHtml = renderIngredientsSection(recipe.ingredients, options);
   const stepsHtml = renderStepsSection(recipe.steps, recipe, options, targetMeta, inlineValuesByLine);
   const notesHtml = recipe.notes.length > 0
-    ? `<section class="kr-section" data-kr-kind="notes"><h3 class="kr-section__title">Notes</h3><div class="kr-section__body">${renderTextBlocks(recipe.notes, NOTES_CLASSES, inlineValuesByLine, options, targetMeta)}</div></section>`
+    ? `<section class="kr-section" data-kr-kind="notes"><h3 class="kr-section__title">Notes</h3><div class="kr-section__body">${renderTextBlocks(recipe.notes, NOTES_CLASSES, inlineValuesByLine, options, targetMeta, "notes")}</div></section>`
     : "";
   const sections = ingredientsHtml + stepsHtml + notesHtml;
   const roleAttr = index === 0 ? "main" : "secondary";
@@ -1171,10 +1255,14 @@ export const renderDocument = (
       : undefined;
   let diagnosticIdCounter = 0;
 
+  const hasDiff = !!baseOptions.annotations;
   const options: RenderOptions = {
     ...baseOptions,
+    // Diff mode forces native units (like edit mode) so the user sees quantities as-written
+    ...(hasDiff && { quantityDisplay: "native" as const }),
     diagnosticsMap: inlineDiagnosticsMap,
     nextDiagnosticId: inlineDiagnosticsMap ? () => `kr-diag-${diagnosticIdCounter++}` : undefined,
+    diffMap: hasDiff ? buildDiffMap(baseOptions.annotations!) : undefined,
   };
 
   for (const recipe of doc.recipes) {
@@ -1277,6 +1365,7 @@ export class KrRecipeElement extends HTMLElement {
   #scaleClickOutsideCleanup: (() => void) | null = null;
   #lastScaleFactor: number = 1;
   #suppressAttrCallback = false;
+  #annotations: DiffAnnotation[] | null = null;
 
   connectedCallback(): void {
     this.#isConnected = true;
@@ -1349,6 +1438,18 @@ export class KrRecipeElement extends HTMLElement {
   /** Commit any in-progress inline edit (saves its value into the markdown). */
   commitActiveEdit(): void {
     this.#editSaveActive?.();
+  }
+
+  /** Set diff annotations to highlight added/changed/removed elements. */
+  set annotations(value: DiffAnnotation[] | null) {
+    this.#annotations = value;
+    if (this.#isConnected) {
+      this.#render();
+    }
+  }
+
+  get annotations(): DiffAnnotation[] | null {
+    return this.#annotations;
   }
 
   refresh(): void {
@@ -1449,10 +1550,6 @@ export class KrRecipeElement extends HTMLElement {
     const normalized = mode.trim().toLowerCase();
     if (normalized === "metric" || normalized === "imperial") {
       return normalized;
-    }
-    // Backward compat: map legacy values
-    if (normalized === "alt-mass" || normalized === "alt-volume") {
-      return "metric";
     }
 
     return "native";
@@ -1898,11 +1995,6 @@ export class KrRecipeElement extends HTMLElement {
         }
       }
 
-      const detail = {
-        targetId,
-        display: ref.getAttribute("data-kr-display") ?? ref.textContent ?? "",
-      };
-      this.dispatchEvent(new CustomEvent("kr:ref-focus", { detail }));
     };
 
     refs.forEach((ref) => {
@@ -2005,6 +2097,7 @@ export class KrRecipeElement extends HTMLElement {
       sourceLines: source.split("\n"),
       hideScale: this.hasAttribute("no-scale"),
       showAttributes: this.hasAttribute("show-attributes"),
+      annotations: this.#annotations ?? undefined,
     });
     shadow.innerHTML = html;
 
@@ -2036,7 +2129,6 @@ export class KrRecipeElement extends HTMLElement {
       this.#setupSubrecipeLinks();
     }
     this.#setupDiagnosticMarkers();
-    this.#setupDiagnosticsInteractions();
     this.#setupStepProgressionInteractions();
 
     // Edit mode setup
@@ -2134,37 +2226,6 @@ export class KrRecipeElement extends HTMLElement {
     });
   }
 
-  #setupDiagnosticsInteractions(): void {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    if (typeof (root as ShadowRoot).querySelectorAll !== "function") {
-      return;
-    }
-
-    const diagnosticItems = Array.from(
-      root.querySelectorAll<HTMLElement>(".kr-diagnostics__item[data-kr-line]"),
-    );
-    if (diagnosticItems.length === 0) {
-      return;
-    }
-
-    diagnosticItems.forEach((item) => {
-      item.addEventListener("click", () => {
-        const line = Number(item.getAttribute("data-kr-line"));
-        if (!Number.isNaN(line) && line > 0) {
-          const detail = {
-            line,
-            code: item.getAttribute("data-kr-code") ?? "",
-            severity: item.getAttribute("data-kr-severity") ?? "error",
-          };
-          this.dispatchEvent(new CustomEvent("kr:diagnostic-click", { detail }));
-        }
-      });
-    });
-  }
 
   #setupStepProgressionInteractions(): void {
     const root = this.shadowRoot;
@@ -2426,6 +2487,40 @@ export class KrRecipeElement extends HTMLElement {
       }
     });
   }
+}
+
+// ── Typed event support ──────────────────────────────────────────────
+
+export interface KrRecipeContentChangeDetail {
+  markdown: string;
+}
+
+export interface KrRecipeEventMap extends HTMLElementEventMap {
+  "kr:content-change": CustomEvent<KrRecipeContentChangeDetail>;
+}
+
+/** Merge typed addEventListener/removeEventListener onto the class. */
+export interface KrRecipeElement {
+  addEventListener<K extends keyof KrRecipeEventMap>(
+    type: K,
+    listener: (this: KrRecipeElement, ev: KrRecipeEventMap[K]) => void,
+    options?: boolean | AddEventListenerOptions,
+  ): void;
+  addEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions,
+  ): void;
+  removeEventListener<K extends keyof KrRecipeEventMap>(
+    type: K,
+    listener: (this: KrRecipeElement, ev: KrRecipeEventMap[K]) => void,
+    options?: boolean | EventListenerOptions,
+  ): void;
+  removeEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | EventListenerOptions,
+  ): void;
 }
 
 export const registerKrRecipeElement = (): void => {

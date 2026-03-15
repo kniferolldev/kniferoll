@@ -14,6 +14,7 @@
 export { parseDocument } from "./parser";
 export { extractFrontmatter } from "./frontmatter";
 export { slug } from "./slug";
+export { diffRecipes } from "./diff";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -66,3 +67,6 @@ export type {
 
 // References & links (on DocumentParseResult)
 export type { ReferenceToken, RecipeLink } from "./types";
+
+// Diff annotations
+export type { DiffAnnotation, DiffStatus, AttributeDiff } from "./diff";

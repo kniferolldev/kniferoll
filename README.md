@@ -54,16 +54,9 @@ Try the [interactive playground](http://127.0.0.1:5173/) (`bun run demo`) to:
 | (content) | Markdown | Recipe content as child text or via `content` property |
 | `scale` | number | Multiplicative scale factor (default: `1`) |
 | `preset` | string \| number | Select frontmatter scale preset by name or index |
-| `quantity-display` | `native` \| `alt-mass` \| `alt-volume` | Which quantity representation to show |
+| `quantity-display` | `native` \| `metric` \| `imperial` | Which quantity representation to show |
 | `layout` | `stacked` \| `two-column` \| `steps-left` \| `ingredients-left` \| `print-compact` | Layout mode |
 | `diagnostics` | `off` \| `inline` \| `summary` \| `panel` | Diagnostics visibility (default: `summary`) |
-
-### Events
-
-| Event | Detail | When |
-|-------|--------|------|
-| `kr:ref-focus` | `{ targetId, display }` | User activates an ingredient reference |
-| `kr:diagnostic-click` | `{ line, code, severity, message }` | User clicks a diagnostic marker |
 
 ### CSS Custom Properties
 
@@ -135,17 +128,6 @@ recipe.content = `
 ## Steps
 1. Heat and serve.
 `;
-```
-
-### Listening to Events
-
-```javascript
-const recipe = document.querySelector('kr-recipe');
-
-recipe.addEventListener('kr:ref-focus', (event) => {
-  const { targetId } = event.detail;
-  console.log(`Ingredient focused: ${targetId}`);
-});
 ```
 
 ## Installation

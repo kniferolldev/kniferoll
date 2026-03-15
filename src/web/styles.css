@@ -767,8 +767,8 @@
     font-weight: 600;
     padding: 0.2rem 0.5rem;
     border-radius: 999px;
-    background: var(--kr-color-badge, rgba(34, 139, 34, 0.1));
-    color: var(--kr-color-badge-text, #166534);
+    background: var(--kr-color-badge, color-mix(in srgb, #3b82f6 12%, transparent));
+    color: var(--kr-color-badge-text, #1d4ed8);
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
@@ -1176,4 +1176,37 @@
 .kr-edit-title-form {
   display: flex;
   width: 100%;
+}
+
+/* ── Diff highlighting ──────────────────────────────────────────────── */
+
+/* Inline redline tokens for changed elements */
+.kr-diff-del {
+  color: #b91c1c;
+  background: color-mix(in srgb, #ef4444 15%, transparent);
+  text-decoration: line-through;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.kr-diff-ins {
+  color: #15803d;
+  background: color-mix(in srgb, #22c55e 15%, transparent);
+  text-decoration: none;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* Diff-aware attribute chips */
+.kr-ingredient__attribute[data-kr-attr-diff="added"] {
+  background: color-mix(in srgb, #22c55e 15%, transparent);
+  color: #15803d;
+  outline: 1.5px solid color-mix(in srgb, #22c55e 30%, transparent);
+}
+
+.kr-ingredient__attribute[data-kr-attr-diff="removed"] {
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+  color: #b91c1c;
+  text-decoration: line-through;
+  opacity: 0.6;
 }

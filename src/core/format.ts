@@ -1,6 +1,5 @@
 import type {
   Quantity,
-  QuantityCompound,
   QuantityRange,
   QuantitySingle,
   ScaledQuantity,
@@ -68,7 +67,7 @@ const nearestFraction = (value: number): { whole: number; fraction: string | nul
   return { whole, fraction: null };
 };
 
-const formatNumber = (value: number, unitInfo: UnitMatch | null, allowFractions = false): string => {
+const formatNumber = (value: number, unitInfo: UnitMatch | null, _allowFractions = false): string => {
   const isMetricUnit = unitInfo && isMetric(unitInfo.system);
   const fractionEnabled = !isMetricUnit;
   const absValue = Math.abs(value);

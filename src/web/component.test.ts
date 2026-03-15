@@ -345,12 +345,6 @@ test("KrRecipeElement responds to scale and quantity-display attributes", () => 
   expect(metricHtml).toContain('title="3 cup"');
   expect(metricHtml).not.toContain("kr-ingredient__quantity-secondary");
 
-  // Backward compat: "alt-mass" treated as "metric"
-  element.setAttribute("quantity-display", "alt-mass");
-  const altMassHtml = element.shadowRoot?.innerHTML ?? "";
-  expect(altMassHtml).toContain('data-kr-quantity-mode="metric"');
-  expect(altMassHtml).toContain('data-kr-quantity="270 g"');
-
   element.setAttribute("layout", "two-column");
   const layoutHtml = element.shadowRoot?.innerHTML ?? "";
   expect(layoutHtml).toContain('data-kr-layout="two-column"');
@@ -1479,5 +1473,257 @@ describe("attribute chips", () => {
 
     element.removeAttribute("show-attributes");
     expect(element.shadowRoot?.innerHTML).not.toContain('class="kr-ingredient__attributes"');
+  });
+});
+
+describe("diff annotations", () => {
+  const md = `# Test Recipe
+
+A nice intro.
+
+## Ingredients
+
+- flour - 2 cups
+- sugar - 1 tbsp
+
+## Steps
+
+1. Mix dry ingredients.
+2. Add wet ingredients.
+
+## Notes
+
+Serve warm.`;
+
+  test("no redline markup without annotations", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const html = componentModule.renderDocument(parseDocument(md));
+    const content = html.replace(/<style>[\s\S]*?<\/style>/, "");
+    expect(content).not.toContain("kr-diff-del");
+    expect(content).not.toContain("kr-diff-ins");
+    expect(content).not.toContain("data-kr-attr-diff");
+  });
+
+  test("annotations force native quantity display", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const md2 = `# Test
+
+## Ingredients
+
+- flour - 2 cups :: also=240g
+
+## Steps
+
+1. Mix.`;
+    // Without annotations, metric mode uses also= as primary
+    const htmlMetric = componentModule.renderDocument(parseDocument(md2), {
+      quantityDisplay: "metric",
+    });
+    expect(htmlMetric).toContain("240");
+
+    // With annotations, forced to native — shows original quantity
+    const htmlDiff = componentModule.renderDocument(parseDocument(md2), {
+      quantityDisplay: "metric",
+      annotations: [
+        { section: "ingredients", key: "flour", status: "changed", attributeDiffs: [{ key: "also", status: "added" }] },
+      ],
+    });
+    expect(htmlDiff).toContain("2 cups");
+  });
+
+  test("KrRecipeElement annotations property triggers re-render", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const { KrRecipeElement } = componentModule;
+    const element = new KrRecipeElement();
+    element.content = md;
+    element.connectedCallback();
+    const stripStyle = (s: string) => s.replace(/<style>[\s\S]*?<\/style>/, "");
+    expect(stripStyle(element.shadowRoot?.innerHTML ?? "")).not.toContain("kr-diff-del");
+
+    element.annotations = [
+      {
+        section: "steps",
+        key: "0",
+        status: "changed",
+        tokens: [
+          { kind: "delete", text: "dry" },
+          { kind: "insert", text: "wet" },
+        ],
+      },
+    ];
+    expect(stripStyle(element.shadowRoot?.innerHTML ?? "")).toContain("kr-diff-del");
+
+    element.annotations = null;
+    expect(stripStyle(element.shadowRoot?.innerHTML ?? "")).not.toContain("kr-diff-del");
+  });
+
+  test("changed step with tokens renders del/ins redline markup", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const html = componentModule.renderDocument(parseDocument(md), {
+      annotations: [
+        {
+          section: "steps",
+          key: "0",
+          status: "changed",
+          tokens: [
+            { kind: "equal", text: "Mix " },
+            { kind: "delete", text: "dry" },
+            { kind: "insert", text: "wet" },
+            { kind: "equal", text: " ingredients." },
+          ],
+        },
+      ],
+    });
+    expect(html).toContain('<del class="kr-diff-del">dry</del>');
+    expect(html).toContain('<ins class="kr-diff-ins">wet</ins>');
+    expect(html).toContain("Mix ");
+  });
+
+  test("changed ingredient with content tokens renders del/ins redline", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const html = componentModule.renderDocument(parseDocument(md), {
+      annotations: [
+        {
+          section: "ingredients",
+          key: "flour",
+          status: "changed",
+          tokens: [
+            { kind: "delete", text: "2" },
+            { kind: "insert", text: "3" },
+            { kind: "equal", text: " cups flour" },
+          ],
+        },
+      ],
+    });
+    expect(html).toContain('<del class="kr-diff-del">2</del>');
+    expect(html).toContain('<ins class="kr-diff-ins">3</ins>');
+  });
+
+  test("changed ingredient without tokens keeps structured rendering", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const html = componentModule.renderDocument(parseDocument(md), {
+      annotations: [
+        {
+          section: "ingredients",
+          key: "flour",
+          status: "changed",
+          // No tokens → attribute-only change
+          attributeDiffs: [{ key: "also", status: "added" }],
+        },
+      ],
+    });
+    // No content tokens → structured layout preserved
+    expect(html).toContain("kr-ingredient__quantity");
+    expect(html).toContain("kr-ingredient__name");
+  });
+
+  test("ingredient annotation with attributeDiffs shows diff-styled chips", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const md2 = `# Test Recipe
+
+A simple recipe.
+
+## Ingredients
+
+- flour - 2 cups :: also=240g
+
+## Steps
+
+1. Mix dry ingredients.
+
+## Notes
+
+Serve warm.`;
+    const html = componentModule.renderDocument(parseDocument(md2), {
+      annotations: [
+        {
+          section: "ingredients",
+          key: "flour",
+          status: "changed",
+          attributeDiffs: [{ key: "also", status: "added" }],
+        },
+      ],
+    });
+    expect(html).toContain('data-kr-attr-diff="added"');
+    expect(html).toContain("kr-ingredient__attribute");
+  });
+
+  test("ingredient annotation shows removed attribute chips", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const html = componentModule.renderDocument(parseDocument(md), {
+      annotations: [
+        {
+          section: "ingredients",
+          key: "flour",
+          status: "changed",
+          attributeDiffs: [{ key: "noscale", status: "removed" }],
+        },
+      ],
+    });
+    expect(html).toContain('data-kr-attr-diff="removed"');
+    expect(html).toContain('data-kr-attribute="noscale"');
+  });
+
+  test("ingredient annotation forces chip display even without showAttributes", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const stripStyle = (s: string) => s.replace(/<style>[\s\S]*?<\/style>/, "");
+    const md2 = `# Test Recipe
+
+## Ingredients
+
+- flour - 2 cups :: also=240g
+
+## Steps
+
+1. Mix.`;
+    // Without annotations, no chips by default
+    const htmlNoAnnot = stripStyle(componentModule.renderDocument(parseDocument(md2), {}));
+    expect(htmlNoAnnot).not.toContain("kr-ingredient__attributes");
+
+    // With annotation, chips appear even without showAttributes
+    const htmlAnnot = stripStyle(componentModule.renderDocument(parseDocument(md2), {
+      annotations: [
+        {
+          section: "ingredients",
+          key: "flour",
+          status: "changed",
+          attributeDiffs: [{ key: "also", status: "added" }],
+        },
+      ],
+    }));
+    expect(htmlAnnot).toContain("kr-ingredient__attributes");
+  });
+
+  test("changed intro with tokens renders del/ins redline markup", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const html = componentModule.renderDocument(parseDocument(md), {
+      annotations: [
+        {
+          section: "intro",
+          key: "0",
+          status: "changed",
+          tokens: [
+            { kind: "equal", text: "A " },
+            { kind: "delete", text: "simple" },
+            { kind: "insert", text: "delicious" },
+            { kind: "equal", text: " recipe." },
+          ],
+        },
+      ],
+    });
+    expect(html).toContain('<del class="kr-diff-del">simple</del>');
+    expect(html).toContain('<ins class="kr-diff-ins">delicious</ins>');
+  });
+
+  test("changed annotation without tokens falls back to normal rendering", () => {
+    if (!componentModule) throw new Error("Module not loaded");
+    const html = componentModule.renderDocument(parseDocument(md), {
+      annotations: [
+        { section: "steps", key: "0", status: "changed" },
+      ],
+    });
+    // No tokens → no del/ins markup
+    expect(html).not.toContain("<del");
+    expect(html).not.toContain("<ins");
   });
 });
