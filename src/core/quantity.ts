@@ -1,6 +1,7 @@
 import type {
   Diagnostic,
   Quantity,
+  QuantityCompound,
   QuantityKind,
   QuantityRange,
   QuantitySingle,
@@ -86,6 +87,90 @@ export interface QuantityParseResult {
   diagnostics: Diagnostic[];
 }
 
+const COMPOUND_SEPARATOR = /\s+\+\s+/;
+
+const parseSingleOrRange = (
+  normalizedValue: string,
+  rawText: string,
+): Quantity | null => {
+  const match = QUANTITY_PATTERN.exec(normalizedValue);
+
+  if (!match || !match.groups) {
+    // Unit-only quantity (text with no numeric amount, e.g., "pinch", "dash")
+    const quantity: QuantitySingle = {
+      kind: "single",
+      raw: rawText,
+      value: 1,
+      unit: rawText,
+    };
+    return quantity;
+  }
+
+  const firstText = match.groups.first ?? "";
+  const firstNumber = readNumber(firstText);
+  if (firstNumber === null) {
+    return null;
+  }
+
+  let kind: QuantityKind = "single";
+  let min = firstNumber;
+  let max = firstNumber;
+
+  const secondText = match.groups.second;
+  if (secondText) {
+    const secondNumber = readNumber(secondText);
+    if (secondNumber === null) {
+      return null;
+    }
+    kind = "range";
+    min = Math.min(firstNumber, secondNumber);
+    max = Math.max(firstNumber, secondNumber);
+  }
+
+  const unit = (match.groups.unit ?? "").trim();
+
+  if (kind === "range") {
+    return {
+      kind: "range",
+      raw: rawText,
+      min,
+      max,
+      unit: unit.length > 0 ? unit : null,
+    } satisfies QuantityRange;
+  }
+
+  return {
+    kind: "single",
+    raw: rawText,
+    value: min,
+    unit: unit.length > 0 ? unit : null,
+  } satisfies QuantitySingle;
+};
+
+const tryParseCompound = (
+  normalizedValue: string,
+  rawInput: string,
+): QuantityCompound | null => {
+  const parts = normalizedValue.split(COMPOUND_SEPARATOR);
+  if (parts.length !== 2) return null;
+
+  // Split the raw input the same way to get raw text for each part
+  const rawParts = rawInput.split(COMPOUND_SEPARATOR);
+  if (rawParts.length !== 2) return null;
+
+  const first = parseSingleOrRange(parts[0]!.trim(), rawParts[0]!.trim());
+  if (!first || first.kind !== "single" || !first.unit) return null;
+
+  const second = parseSingleOrRange(parts[1]!.trim(), rawParts[1]!.trim());
+  if (!second || second.kind !== "single" || !second.unit) return null;
+
+  return {
+    kind: "compound",
+    raw: rawInput,
+    parts: [first, second],
+  };
+};
+
 export const parseQuantity = (
   rawInput: string,
   options: QuantityParseOptions,
@@ -104,24 +189,15 @@ export const parseQuantity = (
   }
 
   const normalizedValue = replaceVulgarFractions(trimmed).replace(/\u2013/g, "-");
-  const match = QUANTITY_PATTERN.exec(normalizedValue);
 
-  if (!match || !match.groups) {
-    // If the pattern doesn't match, check if it's a unit-only quantity
-    // (text with no numeric amount, e.g., "pinch", "dash")
-    // Treat these as having an implied amount of 1
-    const quantity: QuantitySingle = {
-      kind: "single",
-      raw: trimmed,
-      value: 1,
-      unit: trimmed,
-    };
-    return { quantity, diagnostics };
+  // Try compound first (e.g., "1 cup + 3 tbsp")
+  const compound = tryParseCompound(normalizedValue, trimmed);
+  if (compound) {
+    return { quantity: compound, diagnostics };
   }
 
-  const firstText = match.groups.first ?? "";
-  const firstNumber = readNumber(firstText);
-  if (firstNumber === null) {
+  const quantity = parseSingleOrRange(normalizedValue, trimmed);
+  if (!quantity) {
     diagnostics.push({
       code: options.invalid.code,
       message: options.invalid.message,
@@ -130,49 +206,6 @@ export const parseQuantity = (
       column: 1,
     });
     return { quantity: null, diagnostics };
-  }
-
-  let kind: QuantityKind = "single";
-  let min = firstNumber;
-  let max = firstNumber;
-
-  const secondText = match.groups.second;
-  if (secondText) {
-    const secondNumber = readNumber(secondText);
-    if (secondNumber === null) {
-      diagnostics.push({
-        code: options.invalid.code,
-        message: options.invalid.message,
-        severity: "error",
-        line: options.line,
-        column: 1,
-      });
-      return { quantity: null, diagnostics };
-    }
-    kind = "range";
-    min = Math.min(firstNumber, secondNumber);
-    max = Math.max(firstNumber, secondNumber);
-  }
-
-  const unit = (match.groups.unit ?? "").trim();
-  let quantity: Quantity;
-
-  if (kind === "range") {
-    quantity = {
-      kind: "range",
-      raw: trimmed,
-      min,
-      max,
-      unit: unit.length > 0 ? unit : null,
-    } satisfies QuantityRange;
-  } else {
-    quantity = {
-      kind: "single",
-      raw: trimmed,
-      value: min,
-      unit: unit.length > 0 ? unit : null,
-    } satisfies QuantitySingle;
-
   }
 
   return { quantity, diagnostics };

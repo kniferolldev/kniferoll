@@ -685,6 +685,115 @@ test("renderDocument renders notes with inline formatting", () => {
   expect(html).toContain(">this link</a>");
 });
 
+test("renderDocument renders references in notes", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Sticky Toffee Pudding",
+    "## Ingredients",
+    "- brown sugar - 1 cup",
+    "- butter - 4 tbsp",
+    "- cream - 1/2 cup",
+    "## Steps",
+    "1. Make the pudding.",
+    "## Notes",
+    "- Combine [[brown sugar]], [[butter]], and [[cream]] in a saucepan.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  // References in notes should render as interactive spans, not bare text
+  expect(html).toContain('class="kr-ref"');
+  expect(html).toContain('data-kr-target="brown-sugar"');
+  expect(html).toContain('data-kr-target="butter"');
+  expect(html).toContain('data-kr-target="cream"');
+  // Should NOT contain raw bracket syntax
+  expect(html).not.toContain("[[brown sugar]]");
+  expect(html).not.toContain("[[butter]]");
+  expect(html).not.toContain("[[cream]]");
+});
+
+test("renderDocument renders inline values in notes list items", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Test Recipe",
+    "## Ingredients",
+    "- butter - 4 tbsp",
+    "## Steps",
+    "1. Make the toffee.",
+    "## Notes",
+    "- Reheat at {325F} for 30 minutes.",
+    "- You should have about {3 cups} of sauce.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  // Temperatures in notes should render as kr-temperature spans
+  expect(html).toContain('class="kr-temperature"');
+  // Scalable quantities in notes should render as kr-inline-quantity spans
+  expect(html).toContain('class="kr-inline-quantity"');
+  // Should NOT contain raw curly brace syntax
+  expect(html).not.toContain("{325F}");
+  expect(html).not.toContain("{3 cups}");
+});
+
+test("renderDocument renders inline values in notes paragraphs", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Test Recipe",
+    "## Ingredients",
+    "- butter - 4 tbsp",
+    "## Steps",
+    "1. Make the toffee.",
+    "## Notes",
+    "",
+    "Short ribs vary in size; look for thick, meaty pieces about",
+    "{6 oz} each. You can braise a day ahead — reheat at {325F}",
+    "for 30 minutes.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  // Inline values in note paragraphs should be rendered
+  expect(html).toContain('class="kr-temperature"');
+  expect(html).toContain('class="kr-inline-quantity"');
+  expect(html).not.toContain("{6 oz}");
+  expect(html).not.toContain("{325F}");
+});
+
+test("renderDocument renders inline values in intro text", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Test Recipe",
+    "",
+    "This makes about {12} servings. Preheat your oven to {350F}.",
+    "",
+    "## Ingredients",
+    "- butter - 4 tbsp",
+    "## Steps",
+    "1. Make it.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  // Inline values in intro should be rendered
+  expect(html).toContain('class="kr-temperature"');
+  expect(html).toContain('class="kr-inline-quantity"');
+  expect(html).not.toContain("{12}");
+  expect(html).not.toContain("{350F}");
+});
+
 test("renderDocument renders notes with mixed content", () => {
   if (!componentModule) {
     throw new Error("Component module was not initialized");

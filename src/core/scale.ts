@@ -2,15 +2,33 @@ import type {
   ComputeScaleFactorResult,
   DocumentParseResult,
   Ingredient,
+  QuantityCompound,
   QuantitySingle,
   ScaleAnchor,
   ScalePreset,
   ScaleSelection,
 } from "./types";
+import { lookupUnit, toBaseValue } from "./units";
 
 const isQuantitySingle = (
   quantity: Ingredient["quantity"],
 ): quantity is QuantitySingle => quantity?.kind === "single";
+
+const isQuantityCompound = (
+  quantity: Ingredient["quantity"],
+): quantity is QuantityCompound => quantity?.kind === "compound";
+
+const compoundToBaseTotal = (
+  quantity: QuantityCompound,
+): { total: number; baseUnit: string } | null => {
+  const [p1, p2] = quantity.parts;
+  const u1 = p1.unit ? lookupUnit(p1.unit) : null;
+  const u2 = p2.unit ? lookupUnit(p2.unit) : null;
+  if (!u1 || !u2 || !u1.base || !u2.base || u1.base !== u2.base) return null;
+  const base1 = toBaseValue(p1.value, u1);
+  const base2 = toBaseValue(p2.value, u2);
+  return { total: base1 + base2, baseUnit: u1.base };
+};
 
 const normalizeName = (name: string) => name.trim().toLowerCase();
 
@@ -153,11 +171,62 @@ export const computeScaleFactor = (
     };
   }
 
-  if (!isQuantitySingle(ingredient.quantity)) {
+  if (!isQuantitySingle(ingredient.quantity) && !isQuantityCompound(ingredient.quantity)) {
     return {
       ok: false,
       reason: "ingredient-range-quantity",
       message: `Ingredient "${ingredient.name}" quantity is a range and cannot be used for scaling.`,
+    };
+  }
+
+  // Handle compound quantities: convert both parts to base units and sum
+  if (isQuantityCompound(ingredient.quantity)) {
+    const baseTotal = compoundToBaseTotal(ingredient.quantity);
+    if (!baseTotal) {
+      return {
+        ok: false,
+        reason: "unit-mismatch",
+        message: `Compound quantity parts cannot be converted to a common base unit.`,
+      };
+    }
+
+    // Convert anchor amount to the same base unit
+    const anchorUnitInfo = anchor.unit ? lookupUnit(anchor.unit) : null;
+    let anchorBase = anchor.amount;
+    if (anchorUnitInfo && anchorUnitInfo.base === baseTotal.baseUnit) {
+      anchorBase = toBaseValue(anchor.amount, anchorUnitInfo);
+    } else if (anchor.unit && normalizeUnit(anchor.unit) !== normalizeUnit(baseTotal.baseUnit)) {
+      return {
+        ok: false,
+        reason: "unit-mismatch",
+        message: `Anchor unit "${anchor.unit}" does not match compound quantity base unit "${baseTotal.baseUnit}".`,
+      };
+    }
+
+    if (baseTotal.total === 0) {
+      return {
+        ok: false,
+        reason: "zero-quantity",
+        message: "Ingredient quantity is zero and cannot be scaled.",
+      };
+    }
+
+    const factor = anchorBase / baseTotal.total;
+    return {
+      ok: true,
+      factor,
+      source,
+      anchor,
+      ingredient: {
+        id: ingredient.id,
+        name: ingredient.name,
+        line: ingredient.line,
+        recipeId,
+        recipeTitle,
+        // Use first part as the representative single quantity for the type
+        quantity: ingredient.quantity.parts[0],
+      },
+      preset: presetMeta,
     };
   }
 

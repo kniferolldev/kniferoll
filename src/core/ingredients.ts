@@ -6,6 +6,7 @@ import type {
   IngredientAttribute,
   IngredientsSection,
 } from "./types";
+import { lookupUnit } from "./units";
 
 const error = (code: string, message: string, line: number): Diagnostic => ({
   code,
@@ -271,6 +272,22 @@ const parseIngredientLine = (
     });
     diagnostics.push(...result.diagnostics);
     parsedQuantity = result.quantity;
+  }
+
+  // Validate compound quantity: both parts must share a base unit (convertible)
+  if (parsedQuantity?.kind === "compound") {
+    const [p1, p2] = parsedQuantity.parts;
+    const u1 = p1.unit ? lookupUnit(p1.unit) : null;
+    const u2 = p2.unit ? lookupUnit(p2.unit) : null;
+    if (u1?.base && u2?.base && u1.base !== u2.base) {
+      diagnostics.push(
+        error(
+          "E0207",
+          `Compound quantity parts must be convertible ("${p1.unit}" and "${p2.unit}" have different base units).`,
+          lineNumber,
+        ),
+      );
+    }
   }
 
   if (hasNoscale && (!quantityPart || quantityPart.length === 0)) {

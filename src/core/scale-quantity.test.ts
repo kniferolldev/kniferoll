@@ -87,6 +87,20 @@ test("scaleQuantity rounds ml to 1 increment", () => {
   }
 });
 
+test("scaleQuantity scales compound quantities independently", () => {
+  const quantity = q("1 cup + 3 tbsp");
+  const scaled = scaleQuantity(quantity, 2);
+  expect(scaled).toBeTruthy();
+  if (scaled?.kind === "compound") {
+    expect(scaled.scaledParts[0].scaledValue).toBeCloseTo(2);
+    expect(scaled.scaledParts[0].unitInfo?.canonical).toBe("cup");
+    expect(scaled.scaledParts[1].scaledValue).toBeCloseTo(6);
+    expect(scaled.scaledParts[1].unitInfo?.canonical).toBe("tbsp");
+  } else {
+    throw new Error("expected compound scaled quantity");
+  }
+});
+
 test("scaleQuantity handles range rounding", () => {
   const quantity = q("0.25-0.75 tsp");
   const scaled = scaleQuantity(quantity, 1.5);

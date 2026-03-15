@@ -4,7 +4,7 @@ import { parseDocument } from "../core/parser";
 import { computeScaleFactor } from "../core/scale";
 import { scaleQuantity } from "../core/scale-quantity";
 import { formatQuantity, numberToFractionText } from "../core/format";
-import { isMetricFamily, lookupUnit } from "../core/units";
+import { isMetric as isMetricSystem, lookupUnit } from "../core/units";
 import { readNumber } from "../core/quantity";
 import { slug } from "../core/slug";
 import { computeSourceSpans } from "../core/source-spans";
@@ -25,7 +25,6 @@ import type {
   RecipeSection,
   Quantity,
   UnitDimension,
-  UnitFamily,
   ScalePreset,
   ScaleSelection,
   SectionLine,
@@ -100,51 +99,64 @@ const renderMarkdownInline = (text: string): string => {
   return parts.join("");
 };
 
+/**
+ * Collect tokens from multiple source lines that have been joined into a single
+ * string (with space separators), adjusting token indices to match positions in
+ * the joined text. Used for multi-line paragraphs in both intro and notes.
+ */
+const gatherTokensForJoinedLines = (
+  lines: SectionLine[],
+  stepTokensByLine: Map<number, DocumentStepToken[]>,
+): DocumentStepToken[] => {
+  const tokens: DocumentStepToken[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    const lineTokens = stepTokensByLine.get(line.line) ?? [];
+    for (const token of lineTokens) {
+      tokens.push({ ...token, index: token.index + offset });
+    }
+    offset += line.content.trim().length + 1; // +1 for the space joiner
+  }
+  return tokens;
+};
+
 const renderIntro = (
-  markdown: string,
-  sourceLines?: string[],
-  startLine?: number,
-  endLine?: number,
+  introLines: SectionLine[],
+  options: RenderOptions,
+  stepTokensByLine: Map<number, DocumentStepToken[]>,
+  targetMeta?: Map<string, TargetInfo>,
 ): string => {
-  // When source lines are available, split into paragraphs by blank lines
-  // and assign data-kr-line to each paragraph for inline editing
-  if (sourceLines && startLine != null && endLine != null) {
-    const paragraphs: { text: string; line: number }[] = [];
-    let currentLines: string[] = [];
-    let currentStart = -1;
+  // Group lines into paragraphs separated by blank lines
+  const paragraphs: { text: string; line: number; lines: SectionLine[] }[] = [];
+  let currentLines: SectionLine[] = [];
 
-    for (let i = startLine; i <= endLine; i++) {
-      const lineText = (sourceLines[i - 1] ?? "").trim();
-      if (lineText === "") {
-        if (currentLines.length > 0) {
-          paragraphs.push({ text: currentLines.join(" "), line: currentStart });
-          currentLines = [];
-          currentStart = -1;
-        }
-      } else {
-        if (currentStart === -1) currentStart = i;
-        currentLines.push(lineText);
+  for (const sl of introLines) {
+    if (sl.content.trim() === "") {
+      if (currentLines.length > 0) {
+        paragraphs.push({
+          text: currentLines.map((l) => l.content.trim()).join(" "),
+          line: currentLines[0]!.line,
+          lines: currentLines,
+        });
+        currentLines = [];
       }
+    } else {
+      currentLines.push(sl);
     }
-    if (currentLines.length > 0) {
-      paragraphs.push({ text: currentLines.join(" "), line: currentStart });
-    }
-
-    const html = paragraphs
-      .map((p) => {
-        const content = renderMarkdownInline(p.text);
-        return `<p class="kr-intro__p" data-kr-line="${p.line}">${content}</p>`;
-      })
-      .join("");
-    return `<div class="kr-intro">${html}</div>`;
+  }
+  if (currentLines.length > 0) {
+    paragraphs.push({
+      text: currentLines.map((l) => l.content.trim()).join(" "),
+      line: currentLines[0]!.line,
+      lines: currentLines,
+    });
   }
 
-  // Fallback when source lines aren't available (no line tracking)
-  const paragraphs = markdown.split(/\n\n+/).filter((p) => p.trim());
   const html = paragraphs
     .map((p) => {
-      const content = renderMarkdownInline(p.replace(/\n/g, " ").trim());
-      return `<p class="kr-intro__p">${content}</p>`;
+      const tokens = gatherTokensForJoinedLines(p.lines, stepTokensByLine);
+      const content = renderNotesInline(p.text, tokens, options, targetMeta);
+      return `<p class="kr-intro__p" data-kr-line="${p.line}">${content}</p>`;
     })
     .join("");
   return `<div class="kr-intro">${html}</div>`;
@@ -242,11 +254,8 @@ const renderNotesInline = (
   text: string,
   tokens: DocumentStepToken[],
   options: RenderOptions,
+  targetMeta?: Map<string, TargetInfo>,
 ): string => {
-  if (tokens.length === 0) {
-    return renderMarkdownInline(text);
-  }
-
   type InlineToken = { start: number; end: number; html: string };
   const inlineTokens: InlineToken[] = [];
 
@@ -268,6 +277,70 @@ const renderNotesInline = (
     }
   }
 
+  if (targetMeta) {
+    REFERENCE_PATTERN.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = REFERENCE_PATTERN.exec(text)) !== null) {
+      const full = match[0];
+      if (!full) continue;
+      const start = typeof match.index === "number" ? match.index : text.indexOf(full);
+      const end = start + full.length;
+
+      const innerRaw = match[1]?.trim() ?? "";
+      let display = innerRaw;
+      let target = innerRaw;
+
+      const arrowIndex = innerRaw.indexOf("->");
+      if (arrowIndex !== -1) {
+        const displayPart = innerRaw.slice(0, arrowIndex).trim();
+        const targetPart = innerRaw.slice(arrowIndex + 2).trim();
+        if (displayPart) display = displayPart;
+        if (targetPart) target = slug(targetPart);
+        if (!display) {
+          const fallback = targetMeta.get(target)?.name;
+          if (fallback) display = fallback;
+        }
+      } else {
+        target = slug(innerRaw);
+        const fallback = targetMeta.get(target)?.name;
+        if (fallback) display = fallback;
+      }
+
+      if (!target) {
+        inlineTokens.push({ start, end, html: escapeHtml(full) });
+        continue;
+      }
+
+      const meta = targetMeta.get(target);
+      const controlsId = meta
+        ? meta.type === "ingredient"
+          ? `kr-ingredient-${target}`
+          : `kr-recipe-${target}`
+        : null;
+
+      const buttonHtml = `<span role="button" tabindex="0" class="kr-ref" data-kr-target="${escapeAttr(
+        target,
+      )}" data-kr-display="${escapeAttr(display)}"${controlsId ? ` aria-controls="${escapeAttr(
+        controlsId,
+      )}"` : ""}>${escapeHtml(display)}</span>`;
+
+      const trailingPunct = text.slice(end).match(/^[.,;:!?)]+/);
+      if (trailingPunct) {
+        inlineTokens.push({
+          start,
+          end: end + trailingPunct[0].length,
+          html: `<span class="kr-ref-wrap">${buttonHtml}${escapeHtml(trailingPunct[0])}</span>`,
+        });
+      } else {
+        inlineTokens.push({ start, end, html: buttonHtml });
+      }
+    }
+  }
+
+  if (inlineTokens.length === 0) {
+    return renderMarkdownInline(text);
+  }
+
   inlineTokens.sort((a, b) => a.start - b.start);
 
   const parts: string[] = [];
@@ -284,7 +357,7 @@ const renderNotesInline = (
   return parts.join("");
 };
 
-const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensByLine: Map<number, DocumentStepToken[]>): string => {
+const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensByLine: Map<number, DocumentStepToken[]>, targetMeta?: Map<string, TargetInfo>): string => {
   const renderInlineDiagnostics = (lineNum: number) => {
     if (options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
       return null;
@@ -309,7 +382,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
       const line = block.lines[0]!;
       const tag = block.level === 4 ? "h5" : "h4";
       const lineTokens = stepTokensByLine.get(line.line) ?? [];
-      const content = renderNotesInline(line.content, lineTokens, options);
+      const content = renderNotesInline(line.content, lineTokens, options, targetMeta);
       return `<${tag} class="kr-notes__header" data-kr-line="${line.line}">${content}</${tag}>`;
     }
     case "ul":
@@ -324,7 +397,7 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
             : "";
           const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
           const lineTokens = stepTokensByLine.get(line.line) ?? [];
-          const content = renderNotesInline(line.content, lineTokens, options);
+          const content = renderNotesInline(line.content, lineTokens, options, targetMeta);
           return `<li class="kr-notes__list-item${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${content}</li>`;
         })
         .join("");
@@ -340,8 +413,8 @@ const renderNotesBlock = (block: NotesBlock, options: RenderOptions, stepTokensB
         ? ` data-kr-diagnostic-severity="${inlineDiag.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiag.controlsId)}" tabindex="0"`
         : "";
       const diagnosticContent = inlineDiag ? inlineDiag.popover : "";
-      const lineTokens = stepTokensByLine.get(firstLine.line) ?? [];
-      const content = renderNotesInline(text, lineTokens, options);
+      const tokens = gatherTokensForJoinedLines(block.lines, stepTokensByLine);
+      const content = renderNotesInline(text, tokens, options, targetMeta);
       return `<p class="kr-notes__paragraph${diagnosticClass}" data-kr-line="${firstLine.line}"${diagnosticAttr}>${diagnosticContent}${content}</p>`;
     }
   }
@@ -351,6 +424,7 @@ const renderNotesSection = (
   section: NotesSection,
   options: RenderOptions,
   stepTokensByLine: Map<number, DocumentStepToken[]>,
+  targetMeta?: Map<string, TargetInfo>,
 ): string => {
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
   if (!section.lines.length) {
@@ -358,7 +432,7 @@ const renderNotesSection = (
   }
 
   const blocks = parseNotesBlocks(section.lines);
-  const content = blocks.map((block) => renderNotesBlock(block, options, stepTokensByLine)).join("");
+  const content = blocks.map((block) => renderNotesBlock(block, options, stepTokensByLine, targetMeta)).join("");
 
   return `<section class="kr-section" data-kr-kind="notes">${heading}<div class="kr-section__body">${content}</div></section>`;
 };
@@ -412,20 +486,16 @@ const cssEscape = (value: string): string => {
 
 type DimensionKind = "mass" | "volume" | "other" | null;
 
-const dimensionFromUnit = (unitFamily: UnitFamily | undefined, dimension: UnitDimension | undefined): DimensionKind => {
-  if (!unitFamily && !dimension) {
+const dimensionFromUnit = (dimension: UnitDimension | undefined): DimensionKind => {
+  if (!dimension) {
     return null;
   }
 
-  if (dimension === "mass" || unitFamily === "mass") {
+  if (dimension === "mass") {
     return "mass";
   }
 
-  if (
-    dimension === "volume" ||
-    unitFamily === "volume_metric" ||
-    unitFamily === "volume_us"
-  ) {
+  if (dimension === "volume") {
     return "volume";
   }
 
@@ -486,7 +556,7 @@ export const resolveAnchorTarget = (
     .map((attr) => {
       const altQty = attr.quantity as import("../core/types").QuantitySingle;
       const unitInfo = altQty.unit ? lookupUnit(altQty.unit) : null;
-      return { altQty, isMetric: isMetricFamily(unitInfo?.family) };
+      return { altQty, isMetric: isMetricSystem(unitInfo?.system) };
     });
 
   // Prefer mode-matching alternate; fall back to native if none matches
@@ -894,9 +964,13 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
     let isMetric = false;
     if (attr.quantity) {
       hasQuantity = true;
-      const unitInfo = attr.quantity.unit ? lookupUnit(attr.quantity.unit) : null;
-      dimension = dimensionFromUnit(unitInfo?.family, unitInfo?.dimension);
-      isMetric = isMetricFamily(unitInfo?.family);
+      // Derive unit info from first part for compound quantities
+      const qtyUnit = attr.quantity.kind === "compound"
+        ? attr.quantity.parts[0].unit
+        : attr.quantity.unit;
+      const unitInfo = qtyUnit ? lookupUnit(qtyUnit) : null;
+      dimension = dimensionFromUnit(unitInfo?.dimension);
+      isMetric = isMetricSystem(unitInfo?.system);
       const scaledAlt =
         shouldScale && attr.quantity ? scaleQuantity(attr.quantity, options.scaleFactor) : null;
       const formatted = formatQuantity(attr.quantity, {
@@ -1027,7 +1101,7 @@ const renderSection = (
   }
 
   if (section.kind === "notes") {
-    return renderNotesSection(section, options, stepTokensByLine);
+    return renderNotesSection(section, options, stepTokensByLine, targetMeta);
   }
 
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
@@ -1090,23 +1164,8 @@ const renderRecipe = (
   const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
   const sourceHtml = source ? renderSource(source) : "";
   let introHtml = "";
-  if (recipe.intro && options.sourceLines) {
-    // Intro spans from the line after the recipe heading to the line before the first section heading
-    // Trim leading/trailing blank lines to get the actual content range
-    const firstSectionLine = recipe.sections.length > 0 ? recipe.sections[0]!.line : undefined;
-    let introStart = recipe.line + 1;
-    let introEnd = firstSectionLine != null ? firstSectionLine - 1 : introStart;
-    // Scan forward past blank lines
-    while (introStart <= introEnd && (options.sourceLines[introStart - 1] ?? "").trim() === "") {
-      introStart++;
-    }
-    // Scan backward past blank lines
-    while (introEnd >= introStart && (options.sourceLines[introEnd - 1] ?? "").trim() === "") {
-      introEnd--;
-    }
-    introHtml = renderIntro(recipe.intro, options.sourceLines, introStart, introEnd);
-  } else if (recipe.intro) {
-    introHtml = renderIntro(recipe.intro);
+  if (recipe.introLines.length > 0) {
+    introHtml = renderIntro(recipe.introLines, options, stepTokensByLine, targetMeta);
   }
 
   const scaleWidget = roleAttr === "main" && !options.hideScale ? renderScaleWidget(presets ?? []) : "";

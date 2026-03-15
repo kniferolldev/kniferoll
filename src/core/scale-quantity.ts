@@ -1,8 +1,10 @@
 import type {
   Quantity,
+  QuantityCompound,
   QuantityRange,
   QuantitySingle,
   ScaledQuantity,
+  ScaledQuantityCompound,
   ScaledQuantityRange,
   ScaledQuantitySingle,
   UnitMatch,
@@ -51,6 +53,19 @@ const scaleRange = (
   };
 };
 
+const scaleCompound = (
+  quantity: QuantityCompound,
+  factor: number,
+): ScaledQuantityCompound => {
+  const [p1, p2] = quantity.parts;
+  const u1 = p1.unit ? lookupUnit(p1.unit) : null;
+  const u2 = p2.unit ? lookupUnit(p2.unit) : null;
+  return {
+    ...quantity,
+    scaledParts: [scaleSingle(p1, factor, u1), scaleSingle(p2, factor, u2)],
+  };
+};
+
 export const scaleQuantity = (
   quantity: Quantity | null | undefined,
   factor: number,
@@ -61,6 +76,10 @@ export const scaleQuantity = (
 
   if (!Number.isFinite(factor) || factor <= 0) {
     return null;
+  }
+
+  if (quantity.kind === "compound") {
+    return scaleCompound(quantity, factor);
   }
 
   const unitMatch = quantity.unit ? lookupUnit(quantity.unit) : null;

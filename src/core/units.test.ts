@@ -3,7 +3,7 @@ import {
   UNITS,
   choosePreferredUnit,
   fromBaseValue,
-  isMetricFamily,
+  isMetric,
   lookupUnit,
   roundToProfile,
   toBaseValue,
@@ -36,13 +36,13 @@ test("roundToProfile applies increment and precision", () => {
 
 test("choosePreferredUnit selects preferred unit based on thresholds", () => {
   const tsp = lookupUnit("tsp")!;
-  const preferred = choosePreferredUnit(toBaseValue(60, tsp), tsp.family);
+  const preferred = choosePreferredUnit(toBaseValue(60, tsp), tsp.base, tsp.system);
   expect(preferred?.canonical).toBe("cup");
 });
 
 test("choosePreferredUnit returns null when no preferred unit", () => {
   const count = lookupUnit("each")!;
-  expect(choosePreferredUnit(10, count.family)).toBeNull();
+  expect(choosePreferredUnit(10, count.base, count.system)).toBeNull();
 });
 
 test("roundToProfile rounds grams to 0.1 increments", () => {
@@ -59,10 +59,8 @@ test("roundToProfile rounds ml to 1 increment", () => {
   expect(roundToProfile(130, ml.rounding)).toBe(130);
 });
 
-test("isMetricFamily identifies metric unit families", () => {
-  expect(isMetricFamily("mass")).toBe(true);
-  expect(isMetricFamily("volume_metric")).toBe(true);
-  expect(isMetricFamily("volume_us")).toBe(false);
-  expect(isMetricFamily("count")).toBe(false);
-  expect(isMetricFamily(undefined)).toBe(false);
+test("isMetric identifies metric unit system", () => {
+  expect(isMetric("metric")).toBe(true);
+  expect(isMetric("imperial")).toBe(false);
+  expect(isMetric(undefined)).toBe(false);
 });

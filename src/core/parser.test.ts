@@ -221,6 +221,39 @@ test("normalizes reference targets in display->id syntax", () => {
   expect(byCode(result.diagnostics, "W0302").length).toBe(0);
 });
 
+test("extracts and resolves references in notes", () => {
+  const input = [
+    "# Sticky Toffee Pudding",
+    "## Ingredients",
+    "- brown sugar - 1 cup",
+    "- butter - 4 tbsp",
+    "- half-and-half or cream - 1/2 cup",
+    "- vanilla - 1 tsp",
+    "- salt - 1/4 tsp",
+    "## Steps",
+    "1. Make the pudding.",
+    "## Notes",
+    "- The sauce is ridiculously easy: Just combine [[brown sugar]],",
+    "  [[butter]], [[half-and-half or cream]], [[vanilla]], and [[salt]]",
+    "  in a small saucepan.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+
+  // References from notes should be extracted and resolved
+  const noteRefs = result.references.filter(
+    (r) => r.original.includes("brown sugar") ||
+           r.original.includes("butter") ||
+           r.original.includes("half-and-half") ||
+           r.original.includes("vanilla") ||
+           r.original.includes("salt"),
+  );
+  expect(noteRefs.length).toBe(5);
+
+  // All should resolve without warnings
+  expect(byCode(result.diagnostics, "W0302").length).toBe(0);
+});
+
 test("missing reference target emits W0302", () => {
   const input = [
     "# Pasta",

@@ -220,7 +220,6 @@ const nextHeadingType = (lines: string[], fromIndex: number): "#" | "##" | null 
 type RecipeParseState = Recipe & {
   hasIngredients: boolean;
   hasSteps: boolean;
-  introLines: string[];
 };
 
 const finalizeRecipe = (
@@ -252,12 +251,13 @@ const finalizeRecipe = (
     );
   }
 
-  const introText = current.introLines.join("\n").trim();
+  const introText = current.introLines.map((l) => l.text).join("\n").trim();
   out.push({
     title: current.title,
     id: current.id,
     line: current.line,
     intro: introText || undefined,
+    introLines: current.introLines,
     sections: current.sections,
   });
 };
@@ -290,7 +290,7 @@ export const parseDocument = (
         currentSection.lines.push({ text: "", content: "", line: actualLine });
       } else if (currentRecipe) {
         // Capture empty lines for intro (to preserve paragraph breaks)
-        currentRecipe.introLines.push(line);
+        currentRecipe.introLines.push({ text: line, content: line, line: actualLine });
       }
       continue;
     }
@@ -399,7 +399,7 @@ export const parseDocument = (
     if (currentSection) {
       currentSection.lines.push({ text: line, content: line, line: actualLine });
     } else if (currentRecipe) {
-      currentRecipe.introLines.push(line);
+      currentRecipe.introLines.push({ text: line, content: line, line: actualLine });
     } else {
       diagnostics.push(
         warning("W0104", "Unexpected content before recipe heading.", actualLine),
@@ -525,89 +525,96 @@ export const parseDocument = (
 
   const referencePattern = /\[\[([^[\]]+)\]\]/g;
 
+  const extractProseTokens = (
+    lines: SectionLine[],
+    label: string,
+    recipeId: string,
+    recipeTitle: string,
+  ) => {
+    for (const line of lines) {
+      const { tokens: extractedTokens, invalid } = extractStepTokens(line.content);
+
+      for (const bad of invalid) {
+        diagnostics.push(
+          warning(
+            "W0402",
+            `Unknown inline value "${bad.raw}" in ${label} for recipe "${recipeTitle}".`,
+            line.line,
+          ),
+        );
+      }
+
+      for (const token of extractedTokens) {
+        if (token.kind === "temperature") {
+          stepTokens.push({
+            ...token,
+            line: line.line,
+            column: token.index + 1,
+            recipeId,
+            recipeTitle,
+          } satisfies DocumentStepTemperatureToken);
+        } else {
+          stepTokens.push({
+            ...token,
+            line: line.line,
+            column: token.index + 1,
+            recipeId,
+            recipeTitle,
+          } satisfies DocumentStepQuantityToken);
+        }
+      }
+
+      referencePattern.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = referencePattern.exec(line.content)) !== null) {
+        const innerRaw = match[1]?.trim() ?? "";
+        const column = match.index + 1;
+        let display: string | undefined;
+        let target: string | undefined;
+
+        const arrowIndex = innerRaw.indexOf("->");
+        if (arrowIndex !== -1) {
+          display = innerRaw.slice(0, arrowIndex).trim();
+          target = slug(innerRaw.slice(arrowIndex + 2).trim());
+          if (!display || !target) {
+            diagnostics.push(
+              warning("W0303", `Malformed reference token ${match[0]}.`, line.line),
+            );
+            continue;
+          }
+        } else {
+          target = slug(innerRaw);
+          if (!target) {
+            diagnostics.push(
+              warning("W0303", `Malformed reference token ${match[0]}.`, line.line),
+            );
+            continue;
+          }
+        }
+
+        references.push({
+          original: match[0],
+          display,
+          target,
+          recipeId,
+          line: line.line,
+          column,
+        });
+      }
+    }
+  };
+
   for (const recipe of recipes) {
+    // Extract tokens from intro text
+    extractProseTokens(recipe.introLines, "intro", recipe.id, recipe.title);
+
     for (const section of recipe.sections) {
       if (section.kind !== "steps" && section.kind !== "notes") {
         continue;
       }
 
       const sectionLabel = section.kind === "steps" ? "steps" : "notes";
-
-      for (const line of section.lines) {
-        const { tokens: extractedTokens, invalid } = extractStepTokens(line.content);
-
-        for (const bad of invalid) {
-          diagnostics.push(
-            warning(
-              "W0402",
-              `Unknown inline value "${bad.raw}" in ${sectionLabel} for recipe "${recipe.title}".`,
-              line.line,
-            ),
-          );
-        }
-
-        for (const token of extractedTokens) {
-          if (token.kind === "temperature") {
-            stepTokens.push({
-              ...token,
-              line: line.line,
-              column: token.index + 1,
-              recipeId: recipe.id,
-              recipeTitle: recipe.title,
-            } satisfies DocumentStepTemperatureToken);
-          } else {
-            stepTokens.push({
-              ...token,
-              line: line.line,
-              column: token.index + 1,
-              recipeId: recipe.id,
-              recipeTitle: recipe.title,
-            } satisfies DocumentStepQuantityToken);
-          }
-        }
-
-        if (section.kind !== "steps") {
-          continue;
-        }
-
-        referencePattern.lastIndex = 0;
-        let match: RegExpExecArray | null;
-        while ((match = referencePattern.exec(line.content)) !== null) {
-          const innerRaw = match[1]?.trim() ?? "";
-          const column = match.index + 1;
-          let display: string | undefined;
-          let target: string | undefined;
-
-          const arrowIndex = innerRaw.indexOf("->");
-          if (arrowIndex !== -1) {
-            display = innerRaw.slice(0, arrowIndex).trim();
-            target = slug(innerRaw.slice(arrowIndex + 2).trim());
-            if (!display || !target) {
-              diagnostics.push(
-                warning("W0303", `Malformed reference token ${match[0]}.`, line.line),
-              );
-              continue;
-            }
-          } else {
-            target = slug(innerRaw);
-            if (!target) {
-              diagnostics.push(
-                warning("W0303", `Malformed reference token ${match[0]}.`, line.line),
-              );
-              continue;
-            }
-          }
-
-          references.push({
-            original: match[0],
-            display,
-            target,
-            recipeId: recipe.id,
-            line: line.line,
-            column,
-          });
-        }
-      }
+      extractProseTokens(section.lines, sectionLabel, recipe.id, recipe.title);
     }
   }
 
@@ -652,7 +659,9 @@ export const parseDocument = (
           linkedRecipeIds.add(targetRecipe.id);
         } else {
           // W0501: unit is recipe/batch but no matching recipe found
-          const unit = ingredient.quantity?.unit;
+          const unit = ingredient.quantity?.kind === "compound"
+            ? null
+            : ingredient.quantity?.unit;
           if (unit) {
             const unitInfo = lookupUnit(unit);
             if (

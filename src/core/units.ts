@@ -1,14 +1,14 @@
 import type {
   RoundingProfile,
   UnitDefinition,
-  UnitFamily,
   UnitMatch,
+  UnitSystem,
 } from "./types";
 
 const define = (definition: UnitDefinition): UnitDefinition => definition;
 
 const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
-  // Mass
+  // Mass - metric
   define({
     canonical: "g",
     display: "g",
@@ -17,7 +17,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     rounding: { increment: 0.1, precision: 1 },
     base: "g",
     toBase: 1,
-    family: "mass",
+    system: "metric",
     preferred: {
       thresholds: [
         { unit: "kg", min: 1000 },
@@ -33,7 +33,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     rounding: { increment: 0.05, precision: 2 },
     base: "g",
     toBase: 1000,
-    family: "mass",
+    system: "metric",
   }),
   // Volume - metric
   define({
@@ -44,7 +44,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     rounding: { increment: 1 },
     base: "ml",
     toBase: 1,
-    family: "volume_metric",
+    system: "metric",
     preferred: {
       thresholds: [
         { unit: "l", min: 1000 },
@@ -60,7 +60,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     rounding: { increment: 0.05, precision: 2 },
     base: "ml",
     toBase: 1000,
-    family: "volume_metric",
+    system: "metric",
   }),
 
   // Volume - imperial / US customary
@@ -72,7 +72,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     rounding: { increment: 0.25, precision: 2 },
     base: "tsp",
     toBase: 48,
-    family: "volume_us",
+    system: "imperial",
   }),
   define({
     canonical: "tbsp",
@@ -82,7 +82,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     rounding: { increment: 0.5, precision: 2 },
     base: "tsp",
     toBase: 3,
-    family: "volume_us",
+    system: "imperial",
   }),
   define({
     canonical: "tsp",
@@ -92,7 +92,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     rounding: { increment: 0.25, precision: 2 },
     base: "tsp",
     toBase: 1,
-    family: "volume_us",
+    system: "imperial",
     preferred: {
       thresholds: [
         { unit: "cup", min: 12 },  // >= 1/4 cup (12 tsp) -> use cups
@@ -109,7 +109,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     rounding: { increment: 0.5, precision: 2 },
     base: "tsp",
     toBase: 6,
-    family: "volume_us",
+    system: "imperial",
   }),
 
   // Count
@@ -119,7 +119,6 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     aliases: ["", "ea", "each"],
     dimension: "count",
     rounding: { increment: 1 },
-    family: "count",
   }),
 
   // Recipe/batch (compound recipe references)
@@ -206,8 +205,8 @@ export const roundToProfile = (value: number, profile: RoundingProfile): number 
   return rounded;
 };
 
-export const isMetricFamily = (family: UnitFamily | undefined): boolean =>
-  family === "mass" || family === "volume_metric";
+export const isMetric = (system: UnitSystem | undefined): boolean =>
+  system === "metric";
 
 export const UNITS = UNIT_DEFINITIONS;
 
@@ -235,13 +234,14 @@ export const convertUnit = (
 
 export const choosePreferredUnit = (
   baseValue: number,
-  family: UnitFamily | undefined,
+  base: string | undefined,
+  system: UnitSystem | undefined,
 ): UnitDefinition | null => {
-  if (!family) {
+  if (!base || !system) {
     return null;
   }
 
-  const candidates = UNIT_DEFINITIONS.filter((def) => def.family === family);
+  const candidates = UNIT_DEFINITIONS.filter((def) => def.base === base && def.system === system);
   if (candidates.length === 0) {
     return null;
   }

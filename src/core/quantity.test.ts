@@ -180,6 +180,57 @@ test("parses range with 'TO' (case insensitive)", () => {
   expect(range.unit).toBe("cups");
 });
 
+// ── Compound quantities ─────────────────────────────────────────────
+
+test("parses compound quantity '1 cup + 3 tbsp'", () => {
+  const result = run("1 cup + 3 tbsp");
+  expect(result.diagnostics).toHaveLength(0);
+  const quantity = result.quantity;
+  if (!quantity || quantity.kind !== "compound") {
+    throw new Error("expected compound quantity");
+  }
+  expect(quantity.parts[0].value).toBe(1);
+  expect(quantity.parts[0].unit).toBe("cup");
+  expect(quantity.parts[1].value).toBe(3);
+  expect(quantity.parts[1].unit).toBe("tbsp");
+  expect(quantity.raw).toBe("1 cup + 3 tbsp");
+});
+
+test("compound requires spaces around +", () => {
+  // "1 cup+3 tbsp" should not parse as compound
+  const result = run("1 cup+3 tbsp");
+  expect(result.quantity?.kind).not.toBe("compound");
+});
+
+test("compound with unitless part falls through to single", () => {
+  // Both parts must have explicit units
+  const result = run("1 + 3 tbsp");
+  expect(result.quantity?.kind).not.toBe("compound");
+});
+
+test("compound with >2 parts falls through", () => {
+  const result = run("1 cup + 2 tbsp + 1 tsp");
+  expect(result.quantity?.kind).not.toBe("compound");
+});
+
+test("compound with range part falls through", () => {
+  const result = run("1-2 cup + 3 tbsp");
+  expect(result.quantity?.kind).not.toBe("compound");
+});
+
+test("parses compound with fractions", () => {
+  const result = run("1/2 cup + 1 tbsp");
+  expect(result.diagnostics).toHaveLength(0);
+  const quantity = result.quantity;
+  if (!quantity || quantity.kind !== "compound") {
+    throw new Error("expected compound quantity");
+  }
+  expect(quantity.parts[0].value).toBeCloseTo(0.5);
+  expect(quantity.parts[0].unit).toBe("cup");
+  expect(quantity.parts[1].value).toBe(1);
+  expect(quantity.parts[1].unit).toBe("tbsp");
+});
+
 test("does not treat 'to' in words as range separator", () => {
   // "potato" contains "to" but not as a standalone word between numbers
   const result1 = run("1 potato");

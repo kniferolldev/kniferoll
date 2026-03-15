@@ -92,6 +92,19 @@ test("formatQuantity preserves unit-only quantities without scaling", () => {
   expect(formatQuantity(q, {})).toBe("pinch");
 });
 
+// ── Compound quantities ─────────────────────────────────────────────
+
+test("formatQuantity returns raw text for unscaled compound", () => {
+  const q = quantity("1 cup + 3 tbsp");
+  expect(formatQuantity(q)).toBe("1 cup + 3 tbsp");
+});
+
+test("formatQuantity formats scaled compound parts independently", () => {
+  const q = quantity("1 cup + 3 tbsp");
+  const scaled = scaleQuantity(q, 2);
+  expect(formatQuantity(q, { scaled })).toBe("2 cup + 6 tbsp");
+});
+
 test("formatQuantity expands unit-only quantities when scaling", () => {
   const q = quantity("pinch");
   const scaled = scaleQuantity(q, 2);

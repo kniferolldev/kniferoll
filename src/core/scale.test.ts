@@ -411,6 +411,26 @@ test("anchor prefers native unit match over alternate", () => {
   }
 });
 
+test("computes scale factor for compound quantity via base-unit sum", () => {
+  const doc = docFrom(
+    [
+      "# Test Recipe",
+      "## Ingredients",
+      "- water - 1 cup + 3 tbsp :: id=water",
+    ].join("\n"),
+  );
+
+  // 1 cup = 48 tsp, 3 tbsp = 9 tsp → total = 57 tsp
+  // Anchor: 114 tsp → factor = 2
+  const result = computeScaleFactor(doc, {
+    anchor: { id: "water", amount: 114, unit: "tsp" },
+  });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.factor).toBeCloseTo(2);
+  }
+});
+
 test("resolves preset by name case-insensitively", () => {
   const doc = docFrom(
     [

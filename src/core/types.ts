@@ -10,7 +10,7 @@ export interface Diagnostic {
 
 export type UnitDimension = "mass" | "volume" | "count" | "temperature" | "other";
 
-export type UnitFamily = "mass" | "volume_metric" | "volume_us" | "count";
+export type UnitSystem = "metric" | "imperial";
 
 export interface RoundingProfile {
   /** Minimum increment to round to. Example: 0.25 for quarter cups. */
@@ -27,7 +27,7 @@ export interface UnitDefinition {
   rounding: RoundingProfile;
   base?: string;
   toBase?: number;
-  family?: UnitFamily;
+  system?: UnitSystem;
   preferred?: {
     /** Preferred unit when value is >= threshold (in base units). */
     thresholds: { unit: string; min: number }[];
@@ -105,7 +105,7 @@ export interface IngredientAttribute {
   quantity?: Quantity;
 }
 
-export type QuantityKind = "single" | "range";
+export type QuantityKind = "single" | "range" | "compound";
 
 export interface QuantitySingle {
   kind: "single";
@@ -122,7 +122,13 @@ export interface QuantityRange {
   unit: string | null;
 }
 
-export type Quantity = QuantitySingle | QuantityRange;
+export interface QuantityCompound {
+  kind: "compound";
+  raw: string;
+  parts: [QuantitySingle, QuantitySingle];
+}
+
+export type Quantity = QuantitySingle | QuantityRange | QuantityCompound;
 
 
 export interface ScaledQuantitySingle extends QuantitySingle {
@@ -136,7 +142,11 @@ export interface ScaledQuantityRange extends QuantityRange {
   unitInfo?: UnitMatch | null;
 }
 
-export type ScaledQuantity = ScaledQuantitySingle | ScaledQuantityRange;
+export interface ScaledQuantityCompound extends QuantityCompound {
+  scaledParts: [ScaledQuantitySingle, ScaledQuantitySingle];
+}
+
+export type ScaledQuantity = ScaledQuantitySingle | ScaledQuantityRange | ScaledQuantityCompound;
 
 export interface Ingredient {
   line: number;
@@ -275,6 +285,7 @@ export interface Recipe {
   id: string;
   line: number;
   intro?: string;
+  introLines: SectionLine[];
   sections: RecipeSection[];
 }
 

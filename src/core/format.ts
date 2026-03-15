@@ -1,8 +1,10 @@
 import type {
   Quantity,
+  QuantityCompound,
   QuantityRange,
   QuantitySingle,
   ScaledQuantity,
+  ScaledQuantityCompound,
   ScaledQuantityRange,
   ScaledQuantitySingle,
   UnitDefinition,
@@ -11,7 +13,7 @@ import type {
 import {
   choosePreferredUnit,
   fromBaseValue,
-  isMetricFamily,
+  isMetric,
   lookupUnit,
   roundToProfile,
   toBaseValue,
@@ -67,8 +69,8 @@ const nearestFraction = (value: number): { whole: number; fraction: string | nul
 };
 
 const formatNumber = (value: number, unitInfo: UnitMatch | null, allowFractions = false): string => {
-  const isMetric = unitInfo && isMetricFamily(unitInfo.family);
-  const fractionEnabled = !isMetric;
+  const isMetricUnit = unitInfo && isMetric(unitInfo.system);
+  const fractionEnabled = !isMetricUnit;
   const absValue = Math.abs(value);
 
   // Try to match fractions first, before rounding
@@ -126,7 +128,7 @@ const toUnitMatch = (
 };
 
 const formatQuantitySingle = (
-  quantity: QuantitySingle | ScaledQuantity,
+  quantity: QuantitySingle | ScaledQuantitySingle,
   sourceUnit: UnitMatch | null,
   displayUnit: UnitMatch | null,
   allowFractions: boolean,
@@ -141,7 +143,7 @@ const formatQuantitySingle = (
 };
 
 const formatQuantityRange = (
-  quantity: QuantityRange | ScaledQuantity,
+  quantity: QuantityRange | ScaledQuantityRange,
   sourceUnit: UnitMatch | null,
   displayUnit: UnitMatch | null,
   allowFractions: boolean,
@@ -182,28 +184,50 @@ export const formatQuantity = (
     return original.raw;
   }
 
-  const quantity = options.scaled ?? original;
+  // Compound: format each part independently and join with " + "
+  if (original.kind === "compound") {
+    const scaled = options.scaled as ScaledQuantityCompound | null | undefined;
+    const formatPart = (part: QuantitySingle, scaledPart?: ScaledQuantitySingle) => {
+      return formatQuantity(part, {
+        scaled: scaledPart,
+        targetUnit: options.targetUnit,
+        usePreferredUnit: options.usePreferredUnit,
+      });
+    };
+    const p1 = formatPart(original.parts[0], scaled?.scaledParts?.[0]);
+    const p2 = formatPart(original.parts[1], scaled?.scaledParts?.[1]);
+    if (p1 && p2) return `${p1} + ${p2}`;
+    return p1 ?? p2;
+  }
+
+  // After compound early-return, original is single or range
+  const singleOrRange = original as QuantitySingle | QuantityRange;
+  const quantity = (options.scaled ?? singleOrRange) as
+    | QuantitySingle
+    | QuantityRange
+    | ScaledQuantitySingle
+    | ScaledQuantityRange;
   const fallbackUnit =
     "unitInfo" in quantity && quantity.unitInfo
       ? (quantity.unitInfo as UnitMatch)
       : quantity.unit
         ? lookupUnit(quantity.unit)
-        : original.unit
-          ? lookupUnit(original.unit)
+        : singleOrRange.unit
+          ? lookupUnit(singleOrRange.unit)
           : null;
 
   const unitInfo: UnitMatch | null = "unitInfo" in quantity && quantity.unitInfo
     ? (quantity.unitInfo as UnitMatch)
     : fallbackUnit;
 
-  const originalUnit = original.unit ?? null;
+  const originalUnit = singleOrRange.unit ?? null;
   const sourceUnit = unitInfo ?? (originalUnit ? lookupUnit(originalUnit) : null);
 
   let displayUnit: UnitMatch | null = null;
 
   if (options.targetUnit) {
     displayUnit = lookupUnit(options.targetUnit);
-  } else if (options.usePreferredUnit && sourceUnit?.family) {
+  } else if (options.usePreferredUnit && sourceUnit?.base && sourceUnit?.system) {
     let baseMagnitude: number | null = null;
 
     if (quantity.kind === "range") {
@@ -217,7 +241,7 @@ export const formatQuantity = (
     }
 
     if (baseMagnitude != null) {
-      const preferred = choosePreferredUnit(baseMagnitude, sourceUnit.family);
+      const preferred = choosePreferredUnit(baseMagnitude, sourceUnit.base, sourceUnit.system);
       displayUnit = toUnitMatch(preferred, preferred?.display ?? null);
     }
   }

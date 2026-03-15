@@ -187,6 +187,26 @@ test("extractStepTokens disambiguates temperature vs quantity", () => {
   );
 });
 
+test("extractStepTokens parses compound quantity in inline value", () => {
+  const line = "You'll need {1 cup + 3 tbsp} of water.";
+  const { tokens, invalid } = extractStepTokens(line);
+
+  expect(invalid.length).toBe(0);
+  expect(tokens.length).toBe(1);
+  expect(tokens[0]).toEqual(
+    expect.objectContaining({
+      kind: "quantity",
+      quantity: expect.objectContaining({
+        kind: "compound",
+        parts: [
+          expect.objectContaining({ value: 1, unit: "cup" }),
+          expect.objectContaining({ value: 3, unit: "tbsp" }),
+        ],
+      }),
+    }),
+  );
+});
+
 test("extractStepTokens handles multiple tokens", () => {
   const line = "Heat oven to {350F}. Makes about {12} muffins.";
   const { tokens, invalid } = extractStepTokens(line);

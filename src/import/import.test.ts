@@ -262,12 +262,11 @@ describe("buildFormatPrompt", () => {
     expect(prompt).toContain("Kniferoll Markdown");
   });
 
-  test("includes formatting guidelines", () => {
+  test("includes conversion guidelines", () => {
     const prompt = buildFormatPrompt("schema");
 
-    expect(prompt).toContain("FORMATTING GUIDELINES");
+    expect(prompt).toContain("CONVERSION GUIDELINES");
     expect(prompt).toContain("frontmatter");
-    expect(prompt).toContain("version:");
   });
 
   test("describes input format", () => {

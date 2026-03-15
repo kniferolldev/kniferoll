@@ -146,6 +146,40 @@ test("also quantity with unit-only value parses correctly", () => {
   }
 });
 
+// ── Compound quantities ─────────────────────────────────────────────
+
+test("parses compound quantity on ingredient line", () => {
+  const { section, diagnostics } = getIngredientsSection(
+    withRecipe(["- water - 1 cup + 3 tbsp"]),
+  );
+
+  expect(diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+  const ingredient = section.ingredients[0];
+  expect(ingredient?.quantity?.kind).toBe("compound");
+  if (ingredient?.quantity?.kind === "compound") {
+    expect(ingredient.quantity.parts[0].value).toBe(1);
+    expect(ingredient.quantity.parts[0].unit).toBe("cup");
+    expect(ingredient.quantity.parts[1].value).toBe(3);
+    expect(ingredient.quantity.parts[1].unit).toBe("tbsp");
+  }
+});
+
+test("compound with incompatible base units emits E0207", () => {
+  const { diagnostics } = getIngredientsSection(
+    withRecipe(["- mystery - 1 cup + 3 g"]),
+  );
+
+  expect(diagnostics.some((d) => d.code === "E0207")).toBe(true);
+});
+
+test("compound with same base unit does not emit E0207", () => {
+  const { diagnostics } = getIngredientsSection(
+    withRecipe(["- water - 1 cup + 3 tbsp"]),
+  );
+
+  expect(diagnostics.some((d) => d.code === "E0207")).toBe(false);
+});
+
 test("ignores blank ingredient lines", () => {
   const input = withRecipe(["", "- salt"]);
   const { section, diagnostics } = getIngredientsSection(input);

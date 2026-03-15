@@ -97,6 +97,10 @@ H1.
   (`1 1/2`). Fraction characters (`½`) are also allowed.
 - `unit`: free text. If it matches the unit lexicon (below), a renderer may
   use unit-aware behavior. Unknown units still scale numerically.
+- **Compound**: `amount unit + amount unit`. Two single quantities joined by
+  ` + ` (spaces required). Both parts must have units, and both must be in the
+  same unit family (e.g., both volume or both mass). Each part scales
+  independently. Example: `- water - 1 cup + 3 tbsp :: also=285g`.
 - **Unit-only**: if a quantity consists only of a unit with no numeric amount
   (e.g., `pinch`, `dash`), it is treated as having an implied amount of `1`.
 
@@ -150,6 +154,7 @@ Unknown units still scale numerically — don't restrict yourself to known units
 - whole tomatoes (28-oz can) - 1 :: also="794 g"
 - baking soda - 1/2 tsp, optional
 - frosting - 1 batch
+- water - 1 cup + 3 tbsp :: also=285g
 ```
 
 ---
