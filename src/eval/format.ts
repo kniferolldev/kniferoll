@@ -28,11 +28,13 @@ export function formatDetailed(result: ComparisonResult): string[] {
   lines.push(`Score: ${result.score}%`);
   lines.push("");
 
-  // Category scores
+  // Category scores — always show the big three, only show others if imperfect
   lines.push(`Ingredients: ${pct(result.ingredientScore)}`);
   lines.push(`Steps: ${pct(result.stepScore)}`);
-  lines.push(`Metadata: ${pct(result.metadataScore)}`);
-  lines.push(`Structure: ${pct(result.structureScore)}`);
+  lines.push(`References: ${pct(result.referenceScore)}`);
+  if (Math.round(result.proseScore * 100) < 100) lines.push(`Prose: ${pct(result.proseScore)}`);
+  if (Math.round(result.metadataScore * 100) < 100) lines.push(`Metadata: ${pct(result.metadataScore)}`);
+  if (Math.round(result.structureScore * 100) < 100) lines.push(`Structure: ${pct(result.structureScore)}`);
   lines.push("");
 
   // Per-recipe details
@@ -51,12 +53,14 @@ export function formatDetailed(result: ComparisonResult): string[] {
       lines.push(`    + extra: ${id}`);
     }
     for (const c of recipe.ingredients.comparisons) {
-      if (c.actualId && c.totalScore < 0.95) {
+      if (c.actualId) {
         const parts: string[] = [];
         if (c.nameScore < 0.95) parts.push(`name=${pct(c.nameScore)}`);
         if (c.quantityScore < 0.95) parts.push(`qty=${pct(c.quantityScore)}`);
         if (c.notesScore < 0.95) parts.push(`notes=${pct(c.notesScore)}`);
-        lines.push(`    ~ ${c.goldenId}: ${parts.join(", ")}`);
+        if (parts.length > 0) {
+          lines.push(`    ~ ${c.goldenId}: ${parts.join(", ")}`);
+        }
       }
     }
 
@@ -70,15 +74,34 @@ export function formatDetailed(result: ComparisonResult): string[] {
     lines.push(`  Steps: ${pct(recipe.stepScore)} (${stepSummary})`);
 
     for (const s of recipe.steps.comparisons) {
-      if (s.totalScore < 0.9 || s.missingRefs.length > 0) {
-        const parts: string[] = [];
-        if (s.textScore < 0.9) parts.push(`text=${pct(s.textScore)}`);
-        if (s.missingRefs.length > 0) parts.push(`missing refs: ${s.missingRefs.join(", ")}`);
-        if (s.extraRefs.length > 0) parts.push(`extra refs: ${s.extraRefs.join(", ")}`);
+      const parts: string[] = [];
+      if (s.textScore < 0.9) parts.push(`text=${pct(s.textScore)}`);
+      if (s.missingRefs.length > 0) parts.push(`missing refs: ${s.missingRefs.join(", ")}`);
+      if (s.extraRefs.length > 0) parts.push(`extra refs: ${s.extraRefs.join(", ")}`);
+      if (parts.length > 0) {
         lines.push(`    ~ step ${s.index}: ${parts.join("; ")}`);
       }
     }
 
+    lines.push("");
+  }
+
+  // Reference details
+  if (result.references.brokenRefs > 0) {
+    lines.push(
+      `Broken references: ${result.references.brokenRefs}/${result.references.totalRefs}`
+    );
+    for (const issue of result.references.issues) {
+      lines.push(`  ${issue}`);
+    }
+    lines.push("");
+  }
+
+  // Prose details
+  if (result.prose.issues.length > 0) {
+    for (const issue of result.prose.issues) {
+      lines.push(`  ${issue}`);
+    }
     lines.push("");
   }
 

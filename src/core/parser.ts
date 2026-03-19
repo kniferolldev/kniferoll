@@ -429,7 +429,7 @@ export const parseDocument = (
       sectionLines.push({ text: line, content: line, line: actualLine });
     } else if (currentRecipe) {
       currentRecipe.introLines.push({ text: line, content: line, line: actualLine });
-    } else {
+    } else if (!documentTitle) {
       diagnostics.push(
         warning("W0104", "Unexpected content before recipe heading.", actualLine),
       );

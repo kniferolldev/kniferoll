@@ -2206,6 +2206,8 @@ export class KrRecipeElement extends HTMLElement {
       });
 
       trigger.addEventListener("keydown", (event) => {
+        const origin = event.target as HTMLElement | undefined;
+        if (origin?.tagName === "INPUT" || origin?.tagName === "TEXTAREA") return;
         if (event.key === "Escape") {
           closeAll();
           trigger.focus();

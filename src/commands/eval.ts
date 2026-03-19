@@ -766,49 +766,46 @@ export async function runEval(args: string[], io: IO): Promise<number> {
   // ========================================================================
   // Normal eval mode
   // ========================================================================
-  write(`Running ${testCases.length} test case(s)...`);
+
+  // Header line with mode info
+  const headerParts: string[] = [];
   if (regenerate && importModel) {
-    write(` [regenerating with ${formatModelSpec(importModel)}]`);
-  }
-  if (baselineDate) {
-    write(` (comparing to baseline from ${baselineDate})`);
+    headerParts.push(`regenerating with ${formatModelSpec(importModel)}`);
   }
   if (judge && resolvedJudgeModel) {
-    write(` [judging with ${formatModelSpec(resolvedJudgeModel)}]`);
+    headerParts.push(`judging with ${formatModelSpec(resolvedJudgeModel)}`);
   }
-  write("\n\n");
+  if (headerParts.length > 0) {
+    write(`[${headerParts.join(", ")}]\n`);
+  }
 
-  // Run evaluations
+  // Find column width for test case names
+  const maxIdLen = Math.max(...testCases.map(tc => tc.id.length));
+
+  // Run evaluations and display results in one pass
   const results: Record<string, TestCaseResult> = {};
 
   for (const tc of testCases) {
-    write(`  ${tc.id}... `);
-
     try {
       let actual: string;
       let importMetrics: InferenceMetrics | undefined;
 
       if (regenerate) {
-        // Re-run the importer and save to actual.md
         const importResult = await runImporter(importModel!, tc.input);
         actual = importResult.markdown;
         importMetrics = importResult.metrics;
         const testCaseDir = join(evalsDir, tc.id);
         await Bun.write(join(testCaseDir, "actual.md"), actual);
-        // Save extracted.json if two-stage pipeline was used
         if (importResult.extractedJson) {
           await Bun.write(join(testCaseDir, "extracted.json"), importResult.extractedJson);
         }
-        write(`regenerated... `);
       } else {
-        // Use cached actual.md
         actual = tc.actualCached!;
       }
 
       const result = evaluateOutput(tc.id, actual, tc.expected);
       result.importMetrics = importMetrics;
 
-      // Run judge if requested
       if (judge && result.parsed && resolvedJudgeModel) {
         try {
           const judgeResult = await runJudge(resolvedJudgeModel, tc.expected, actual);
@@ -820,10 +817,8 @@ export async function runEval(args: string[], io: IO): Promise<number> {
       }
 
       results[tc.id] = result;
-      write(`done\n`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      write(`error: ${msg}\n`);
       results[tc.id] = {
         id: tc.id,
         parsed: false,
@@ -834,29 +829,22 @@ export async function runEval(args: string[], io: IO): Promise<number> {
         judgeIssues: `import error: ${msg}`,
       };
     }
-  }
 
-  // Display results
-  write("\nResults:\n");
-  for (const tc of testCases) {
+    // Display result line immediately
     const r = results[tc.id]!;
     const prev = baseline?.results[tc.id];
 
-    const parseIcon = r.parsed ? "✓" : "✗";
-    const scoreStr = r.parsed ? `${r.score}%` : "-";
-    const delta = formatDelta(r.score, prev?.score, "%");
+    const scoreStr = r.parsed ? `${r.score}%`.padStart(4) : "FAIL";
 
-    let line = `  ${tc.id.padEnd(20)} ${parseIcon} parse  ${scoreStr.padEnd(10)}`;
+    let line = `  ${tc.id.padEnd(maxIdLen)}  ${scoreStr}`;
 
     if (judge) {
-      if (r.judgeScore !== undefined) {
-        line += `  ${r.judgeScore}/10`;
-      } else {
-        line += `  -/10`;
-      }
+      line += r.judgeScore !== undefined ? `  ${r.judgeScore}/10` : `  -/10`;
     }
 
-    line += `  ${delta}`;
+    if (prev !== undefined) {
+      line += `  ${formatDelta(r.score, prev.score, "%")}`;
+    }
 
     if (judge && r.judgeIssues && r.judgeIssues !== "none" && r.judgeIssues.length < 40) {
       line += `  (${r.judgeIssues})`;
@@ -864,19 +852,18 @@ export async function runEval(args: string[], io: IO): Promise<number> {
 
     write(line + "\n");
 
-    // Display metrics if available
     if (r.importMetrics) {
       const m = r.importMetrics;
       const durationSec = (m.durationMs / 1000).toFixed(1);
-      write(`    Duration: ${durationSec}s | Tokens: ${m.inputTokens.toLocaleString()} in / ${m.outputTokens.toLocaleString()} out\n`);
+      write(`${"".padEnd(maxIdLen + 4)}${durationSec}s | ${m.inputTokens.toLocaleString()} in / ${m.outputTokens.toLocaleString()} out\n`);
     }
 
     if (judge && r.judgeIssues && r.judgeIssues !== "none" && r.judgeIssues.length >= 40) {
-      write(`    Issues: ${r.judgeIssues}\n`);
+      write(`${"".padEnd(maxIdLen + 4)}${r.judgeIssues}\n`);
     }
 
     if (diff && r.parsed && r.comparison) {
-      write(`\n`);
+      write("\n");
       for (const line of formatDetailed(r.comparison)) {
         write(`    ${line}\n`);
       }
@@ -887,7 +874,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
   // Calculate summary
   const resultList = Object.values(results);
   const parsedCount = resultList.filter(r => r.parsed).length;
-  const parseRate = Math.round((parsedCount / resultList.length) * 100);
   const avgScore = Math.round(
     resultList.filter(r => r.parsed).reduce((sum, r) => sum + r.score, 0) /
     Math.max(parsedCount, 1)
@@ -910,28 +896,28 @@ export async function runEval(args: string[], io: IO): Promise<number> {
   const totalInputTokens = resultsWithMetrics.reduce((sum, r) => sum + (r.importMetrics?.inputTokens ?? 0), 0);
   const totalOutputTokens = resultsWithMetrics.reduce((sum, r) => sum + (r.importMetrics?.outputTokens ?? 0), 0);
 
-  // Display summary
-  write("\nSummary:\n");
-  const parseRateDelta = formatDelta(parseRate, baseline?.summary.parseRate, "%");
-  const scoreDelta = formatDelta(avgScore, baseline?.summary.avgScore, "%");
-  write(`  Parse rate:   ${parsedCount}/${resultList.length} (${parseRate}%)   ${parseRateDelta}\n`);
-  write(`  Avg score:    ${avgScore}%          ${scoreDelta}\n`);
-
-  if (judge && avgJudgeScore !== undefined) {
-    const judgeDelta = baseline?.summary.avgJudgeScore !== undefined
-      ? formatDelta(avgJudgeScore, baseline.summary.avgJudgeScore, "")
-      : "(new)";
-    write(`  Avg quality:  ${avgJudgeScore}/10       ${judgeDelta}\n`);
+  // Summary line
+  write("\n");
+  const failCount = resultList.length - parsedCount;
+  let summaryLine = `  avg ${avgScore}%`;
+  if (baseline) {
+    summaryLine += `  ${formatDelta(avgScore, baseline.summary.avgScore, "%")}`;
   }
+  if (failCount > 0) {
+    summaryLine += `  (${failCount} parse failed)`;
+  }
+  if (judge && avgJudgeScore !== undefined) {
+    summaryLine += `  quality ${avgJudgeScore}/10`;
+  }
+  write(summaryLine + "\n");
 
-  // Display aggregate metrics if any were collected
   if (resultsWithMetrics.length > 0) {
     const totalDurationSec = (totalDurationMs / 1000).toFixed(1);
-    write(`\n  Total time:   ${totalDurationSec}s\n`);
-    write(`  Total tokens: ${totalInputTokens.toLocaleString()} in / ${totalOutputTokens.toLocaleString()} out\n`);
+    write(`  ${totalDurationSec}s | ${totalInputTokens.toLocaleString()} in / ${totalOutputTokens.toLocaleString()} out\n`);
   }
 
   // Save baseline if requested
+  const parseRate = Math.round((parsedCount / resultList.length) * 100);
   if (save) {
     const metadata: EvalMetadata = {};
     if (importModel) {
@@ -955,13 +941,8 @@ export async function runEval(args: string[], io: IO): Promise<number> {
       },
     };
     await saveBaseline(evalsDir, newBaseline);
-    write(`\nSaved baseline to ${evalsDir}/baseline.json\n`);
-    write("(remember to commit this file)\n");
-  } else if (!baseline) {
-    write(`\nNo baseline found. Run \`kr eval --save\` to create one.\n`);
-  } else {
-    write(`\nRun \`kr eval --save\` to update baseline.\n`);
+    write(`\n  Saved to ${evalsDir}/baseline.json\n`);
   }
 
-  return parseRate > 0 ? 0 : 1;
+  return parsedCount > 0 ? 0 : 1;
 }

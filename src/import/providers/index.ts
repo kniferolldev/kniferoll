@@ -3,15 +3,11 @@
  */
 
 import type { Provider, ProviderAdapter } from "../types";
-import { anthropicAdapter } from "./anthropic";
 import { googleAdapter } from "./google";
-import { openaiAdapter } from "./openai";
 
 /** Map of provider names to adapters */
-const providers: Record<Provider, ProviderAdapter> = {
-  anthropic: anthropicAdapter,
+const providers: Partial<Record<Provider, ProviderAdapter>> = {
   google: googleAdapter,
-  openai: openaiAdapter,
 };
 
 /**
@@ -19,14 +15,14 @@ const providers: Record<Provider, ProviderAdapter> = {
  *
  * @param name - Provider name
  * @returns Provider adapter
- * @throws If provider is not found
+ * @throws If provider is not registered
  */
 export function getProvider(name: Provider): ProviderAdapter {
   const provider = providers[name];
   if (!provider) {
-    throw new Error(`Unknown provider: ${name}`);
+    throw new Error(`Unknown provider: ${name}. Only "google" is currently supported for importing.`);
   }
   return provider;
 }
 
-export { anthropicAdapter, googleAdapter, openaiAdapter };
+export { googleAdapter };

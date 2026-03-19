@@ -688,6 +688,343 @@ describe("compareDocuments", () => {
       expect(result.recipes[0]?.steps.comparisons[0]?.extraRefs).toHaveLength(0);
     });
   });
+
+  describe("nameSimilarityScore clamping", () => {
+    it("does not return scores above 1.0 for short containment matches", () => {
+      // "oil" contained in "olive oil" — containmentScore * 1.5 could exceed 1.0
+      const golden = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- oil - 1 tbsp
+
+## Steps
+
+1. Mix.
+`));
+      const actual = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- olive oil - 1 tbsp
+
+## Steps
+
+1. Mix.
+`));
+      const result = compareDocuments(golden, actual);
+
+      // Ingredient should match and score should not exceed 100
+      expect(result.ingredientScore).toBeLessThanOrEqual(1);
+      expect(result.score).toBeLessThanOrEqual(100);
+    });
+  });
+
+  describe("reference validity scoring", () => {
+    it("scores 1.0 when all references resolve", () => {
+      const doc = makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+- salt - 2 tsp
+
+## Steps
+
+1. Mix [[flour]] and [[salt]].
+`);
+      const golden = parseDocument(doc);
+      const actual = parseDocument(doc);
+      const result = compareDocuments(golden, actual);
+
+      expect(result.referenceScore).toBe(1);
+      expect(result.references.brokenRefs).toBe(0);
+    });
+
+    it("penalizes broken references (target doesn't match any ingredient)", () => {
+      const golden = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- kosher salt - 1 tsp
+
+## Steps
+
+1. Add [[kosher salt]].
+`));
+      // Actual references a non-existent ingredient
+      const actual = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- kosher salt - 1 tsp
+
+## Steps
+
+1. Add [[fine salt]].
+`));
+      const result = compareDocuments(golden, actual);
+
+      expect(result.referenceScore).toBeLessThan(1);
+      expect(result.references.brokenRefs).toBeGreaterThan(0);
+    });
+
+    it("scores 1.0 when there are no references", () => {
+      const doc = makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix well.
+`);
+      const golden = parseDocument(doc);
+      const actual = parseDocument(doc);
+      const result = compareDocuments(golden, actual);
+
+      expect(result.referenceScore).toBe(1);
+    });
+
+    it("penalizes all-broken references heavily", () => {
+      const golden = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Add [[flour]].
+`));
+      // References to nonexistent ids
+      const actual = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Add [[nonexistent]].
+`));
+      const result = compareDocuments(golden, actual);
+
+      expect(result.referenceScore).toBe(0);
+      expect(result.references.brokenRefs).toBe(1);
+    });
+  });
+
+  describe("step alignment", () => {
+    it("handles step split (3 golden → 4 actual) without cascade", () => {
+      const golden = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix the dough thoroughly.
+2. Let it rest for 30 minutes.
+3. Bake at 350F for 25 minutes.
+`));
+      const actual = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix the dough.
+2. Knead thoroughly until smooth.
+3. Let it rest for 30 minutes.
+4. Bake at 350F for 25 minutes.
+`));
+      const result = compareDocuments(golden, actual);
+
+      // Steps 2 and 3 should still align well despite the split at step 1
+      // "Let it rest for 30 minutes" and "Bake at 350F" should match
+      expect(result.stepScore).toBeGreaterThan(0.6);
+    });
+
+    it("handles step merge (4 golden → 3 actual) without cascade", () => {
+      const golden = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix the dough.
+2. Knead thoroughly.
+3. Let it rest for 30 minutes.
+4. Bake at 350F for 25 minutes.
+`));
+      const actual = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix the dough and knead thoroughly.
+2. Let it rest for 30 minutes.
+3. Bake at 350F for 25 minutes.
+`));
+      const result = compareDocuments(golden, actual);
+
+      // 3 of 4 golden steps match (1 merged into another), 1 missing.
+      // The key test: steps 3 and 4 still align correctly despite the merge.
+      // Score should be moderate (merge = real editing work) but not terrible.
+      expect(result.stepScore).toBeGreaterThan(0.3);
+      // Verify later steps actually aligned (both should have high text scores)
+      const stepComps = result.recipes[0]!.steps.comparisons;
+      const lastTwo = stepComps.filter((s) => s.textScore > 0.9);
+      expect(lastTwo.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe("prose comparison", () => {
+    it("scores 1.0 when intro and notes match", () => {
+      const doc = makeDoc(`
+# Test Recipe
+
+A lovely recipe for testing.
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix.
+
+## Notes
+
+Best served warm.
+`);
+      const golden = parseDocument(doc);
+      const actual = parseDocument(doc);
+      const result = compareDocuments(golden, actual);
+
+      expect(result.proseScore).toBe(1);
+    });
+
+    it("penalizes missing intro", () => {
+      const golden = parseDocument(makeDoc(`
+# Test Recipe
+
+A lovely recipe for testing with a detailed headnote.
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix.
+`));
+      const actual = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix.
+`));
+      const result = compareDocuments(golden, actual);
+
+      expect(result.proseScore).toBeLessThan(1);
+      expect(result.prose.introScore).toBe(0);
+    });
+
+    it("gives partial penalty for extra intro", () => {
+      const golden = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix.
+`));
+      const actual = parseDocument(makeDoc(`
+# Test Recipe
+
+This is an added intro paragraph.
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix.
+`));
+      const result = compareDocuments(golden, actual);
+
+      // Extra intro (actual has it, golden doesn't) should get 0.7 penalty
+      expect(result.prose.introScore).toBeCloseTo(0.7, 1);
+    });
+
+    it("penalizes different notes content", () => {
+      const golden = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix.
+
+## Notes
+
+Best served warm with butter.
+`));
+      const actual = parseDocument(makeDoc(`
+# Test Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix.
+
+## Notes
+
+This recipe was adapted from a classic cookbook.
+`));
+      const result = compareDocuments(golden, actual);
+
+      expect(result.prose.notesScore).toBeLessThan(0.5);
+    });
+  });
 });
 
 describe("weight normalization", () => {
@@ -710,15 +1047,19 @@ describe("weight normalization", () => {
     const result1 = compareDocuments(golden, actual, {
       ingredients: 3,
       steps: 2,
+      references: 1.5,
       metadata: 0.5,
       structure: 0.5,
+      prose: 0.5,
     });
 
     const result2 = compareDocuments(golden, actual, {
       ingredients: 6,
       steps: 4,
+      references: 3,
       metadata: 1,
       structure: 1,
+      prose: 1,
     });
 
     expect(result1.score).toBe(result2.score);

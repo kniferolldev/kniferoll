@@ -7,6 +7,13 @@
 
 import type { Diagnostic } from "../core/types";
 
+/** Source context from the original import, used for faithfulness checks. */
+export interface DoctorSourceContext {
+  sourceText?: string;
+  extractedJson?: string;
+  sourceUrl?: string;
+}
+
 /**
  * Format diagnostics into a human-readable list for the LLM.
  */
@@ -61,6 +68,11 @@ YOUR TASKS (in priority order):
    - Fix wrong targets: if "vinaigrette" refers to a sub-recipe product,
      use \`[[vinaigrette -> Roasted Chile Oil Vinaigrette]]\`, not
      \`[[vinaigrette -> Chinkiang vinegar]]\`
+   - Fix BACKWARDS long form: the importer often swaps display and target.
+     Remember: display (before ->) is what appears in the step text;
+     target (after ->) must match an ingredient name. Example: for
+     ingredient "lard or vegetable oil", \`[[lard or vegetable oil -> lard]]\`
+     is backwards — fix to \`[[lard -> lard or vegetable oil]]\`.
    Then, add missing references ONLY when it meaningfully helps —
    the first mention of a key ingredient in a step, or when the reference
    would clarify which ingredient is meant.
@@ -91,6 +103,11 @@ RULES:
 - Do NOT change the recipe's meaning, ingredients, quantities, or steps
 - Do NOT add or remove ingredients or steps (splitting into sub-recipes
   is a structural reorganization, not adding/removing)
+- Do NOT invent sub-recipes or steps. If a sub-recipe's ingredients and
+  steps are not already present in the markdown, do not fabricate them
+- Strip page references from ingredients — they are meaningless outside
+  the physical book. E.g. "1 recipe Salsa Macha (page 89)" →
+  "Salsa Macha - 1 recipe"
 - Do NOT add text to steps — never insert new sentences or clauses that
   were not in the original
 - Do NOT change the recipe title
@@ -108,6 +125,10 @@ RULES:
 - Preserve all existing attributes (also=, noscale, anchor, etc.)
   unchanged
 - If the recipe has no issues, return it unchanged
+- If ORIGINAL SOURCE context is provided, use it to verify faithfulness:
+  ingredient names, quantities, and step instructions should match the
+  source. Fix any import errors where the markdown diverges from what
+  the original recipe says
 
 Below is the complete specification for Kniferoll Markdown:
 
@@ -124,8 +145,26 @@ ${schema}`;
 export function buildDoctorUserMessage(
   markdown: string,
   diagnostics: Diagnostic[],
+  sourceContext?: DoctorSourceContext,
 ): string {
-  return `Here is the recipe markdown to improve:
+  let sourceSection = "";
+  if (sourceContext) {
+    const parts: string[] = [];
+    if (sourceContext.sourceUrl) {
+      parts.push(`Source URL: ${sourceContext.sourceUrl}`);
+    }
+    if (sourceContext.sourceText) {
+      parts.push(`Source text:\n${sourceContext.sourceText}`);
+    }
+    if (sourceContext.extractedJson) {
+      parts.push(`Extracted JSON:\n${sourceContext.extractedJson}`);
+    }
+    if (parts.length > 0) {
+      sourceSection = `ORIGINAL SOURCE (use to verify faithfulness):\n\n${parts.join("\n\n")}\n\n---\n\n`;
+    }
+  }
+
+  return `${sourceSection}Here is the recipe markdown to improve:
 
 ${markdown}
 

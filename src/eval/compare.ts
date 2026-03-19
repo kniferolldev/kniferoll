@@ -14,6 +14,8 @@ import type {
   IngredientsSection,
   StepsSection,
   SectionLine,
+  ReferenceToken,
+  TextBlock,
 } from "../core";
 import { DEFAULT_WEIGHTS, type ComparisonWeights } from "./weights";
 
@@ -67,6 +69,20 @@ export interface MetadataComparison {
   issues: string[];
 }
 
+export interface ReferenceComparison {
+  totalRefs: number;
+  brokenRefs: number;
+  score: number;
+  issues: string[];
+}
+
+export interface ProseComparison {
+  introScore: number;
+  notesScore: number;
+  overallScore: number;
+  issues: string[];
+}
+
 export interface ComparisonResult {
   /** Scalar score for hill climbing (0-100) */
   score: number;
@@ -77,6 +93,8 @@ export interface ComparisonResult {
   /** Category subscores (0-1) */
   ingredientScore: number;
   stepScore: number;
+  referenceScore: number;
+  proseScore: number;
   metadataScore: number;
   structureScore: number;
 
@@ -85,6 +103,12 @@ export interface ComparisonResult {
 
   /** Metadata comparison */
   metadata: MetadataComparison;
+
+  /** Reference validity comparison */
+  references: ReferenceComparison;
+
+  /** Prose (intro + notes) comparison */
+  prose: ProseComparison;
 
   /** Missing/extra recipes */
   missingRecipes: string[];
@@ -187,7 +211,7 @@ function nameSimilarityScore(golden: string, actual: string): number {
     // For shorter substrings, use length ratio but with a boost
     const longer = Math.max(goldenNorm.length, actualNorm.length);
     const containmentScore = shorter / longer;
-    return Math.max(levScore, containmentScore * 1.5, 0.5);
+    return Math.min(1, Math.max(levScore, containmentScore * 1.5, 0.5));
   }
 
   return levScore;
@@ -491,38 +515,66 @@ function compareSteps(
   const goldenSteps = getStepLines(goldenSection);
   const actualSteps = getStepLines(actualSection);
 
+  // Pre-resolve all step text for comparison
+  const goldenResolved = goldenSteps.map((s) => normalize(resolveStepRefs(s, goldenLookup)));
+  const actualResolved = actualSteps.map((s) => normalize(resolveStepRefs(s, actualLookup)));
+
+  // Sliding-window greedy alignment: for each golden step, find the best
+  // matching actual step within ±2 index positions. This prevents one
+  // step split/merge from cascading misalignment across all subsequent steps.
+  // A minimum similarity threshold avoids forcing bad matches that block
+  // better ones later.
+  const WINDOW = 2;
+  const MIN_ALIGNMENT_SCORE = 0.35;
+  const claimedActual = new Set<number>();
   const comparisons: StepComparison[] = [];
-  const minLen = Math.min(goldenSteps.length, actualSteps.length);
+  const goldenMatched = new Set<number>();
 
-  for (let i = 0; i < minLen; i++) {
-    const goldenText = goldenSteps[i]!;
-    const actualText = actualSteps[i]!;
+  for (let gi = 0; gi < goldenSteps.length; gi++) {
+    let bestIdx = -1;
+    let bestTextScore = -1;
 
-    // Resolve references to display text, then compare
-    const goldenResolved = resolveStepRefs(goldenText, goldenLookup);
-    const actualResolved = resolveStepRefs(actualText, actualLookup);
-    const textScore = levenshteinRatio(normalize(goldenResolved), normalize(actualResolved));
+    const lo = Math.max(0, gi - WINDOW);
+    const hi = Math.min(actualSteps.length - 1, gi + WINDOW);
 
-    // Reference accuracy - compare resolved display texts with fuzzy matching
-    const goldenRefs = extractRefDisplays(goldenText, goldenLookup);
-    const actualRefs = extractRefDisplays(actualText, actualLookup);
-    const refComparison = compareRefSets(goldenRefs, actualRefs);
+    for (let ai = lo; ai <= hi; ai++) {
+      if (claimedActual.has(ai)) continue;
+      const score = levenshteinRatio(goldenResolved[gi]!, actualResolved[ai]!);
+      if (score > bestTextScore) {
+        bestTextScore = score;
+        bestIdx = ai;
+      }
+    }
 
-    const totalScore =
-      weights.stepText * textScore + weights.stepRefs * refComparison.score;
+    if (bestIdx >= 0 && bestTextScore >= MIN_ALIGNMENT_SCORE) {
+      claimedActual.add(bestIdx);
+      goldenMatched.add(gi);
 
-    comparisons.push({
-      index: i + 1,
-      textScore,
-      refsScore: refComparison.score,
-      totalScore,
-      missingRefs: refComparison.missingRefs,
-      extraRefs: refComparison.extraRefs,
-    });
+      const goldenText = goldenSteps[gi]!;
+      const actualText = actualSteps[bestIdx]!;
+      const textScore = bestTextScore;
+
+      // Reference accuracy
+      const goldenRefs = extractRefDisplays(goldenText, goldenLookup);
+      const actualRefs = extractRefDisplays(actualText, actualLookup);
+      const refComparison = compareRefSets(goldenRefs, actualRefs);
+
+      const totalScore =
+        weights.stepText * textScore + weights.stepRefs * refComparison.score;
+
+      comparisons.push({
+        index: gi + 1,
+        textScore,
+        refsScore: refComparison.score,
+        totalScore,
+        missingRefs: refComparison.missingRefs,
+        extraRefs: refComparison.extraRefs,
+      });
+    }
   }
 
-  const missingCount = Math.max(0, goldenSteps.length - actualSteps.length);
-  const extraCount = Math.max(0, actualSteps.length - goldenSteps.length);
+  const missingCount = goldenSteps.length - goldenMatched.size;
+  const extraCount = actualSteps.length - claimedActual.size;
 
   // Calculate score
   const matchedScore = comparisons.reduce((sum, c) => sum + c.totalScore, 0);
@@ -708,6 +760,121 @@ function compareStructure(
 }
 
 // ============================================================================
+// Reference Validity Scoring
+// ============================================================================
+
+/**
+ * Score what fraction of actual's references are valid (resolve to a real ingredient).
+ * Each broken reference = one manual fix. The fraction maps to editing burden.
+ */
+function compareReferences(
+  _golden: DocumentParseResult,
+  actual: DocumentParseResult
+): ReferenceComparison {
+  const refs = actual.references;
+  const totalRefs = refs.length;
+
+  if (totalRefs === 0) {
+    return { totalRefs: 0, brokenRefs: 0, score: 1, issues: [] };
+  }
+
+  const brokenRefs = refs.filter((r) => !r.resolvedTarget).length;
+  const score = (totalRefs - brokenRefs) / totalRefs;
+
+  // Deduplicate broken reference issues
+  const seen = new Set<string>();
+  const issues: string[] = [];
+  for (const ref of refs) {
+    if (!ref.resolvedTarget && !seen.has(ref.original)) {
+      seen.add(ref.original);
+      issues.push(`broken reference: ${ref.original}`);
+    }
+  }
+
+  return { totalRefs, brokenRefs, score, issues };
+}
+
+// ============================================================================
+// Prose Scoring (Intro + Notes)
+// ============================================================================
+
+function joinTextBlocks(blocks: TextBlock[]): string {
+  return blocks.map((b) => b.content).join("\n");
+}
+
+/**
+ * Compare intro and notes prose content between golden and actual recipes.
+ * Scores are weighted by golden content length so longer prose matters more.
+ */
+function compareProse(
+  goldenRecipes: Recipe[],
+  actualRecipes: Recipe[]
+): ProseComparison {
+  const issues: string[] = [];
+  let introWeightedSum = 0;
+  let introWeightTotal = 0;
+  let notesWeightedSum = 0;
+  let notesWeightTotal = 0;
+
+  for (const goldenRecipe of goldenRecipes) {
+    const actualRecipe = actualRecipes.find((r) => r.id === goldenRecipe.id);
+
+    const goldenIntro = joinTextBlocks(goldenRecipe.intro);
+    const actualIntro = actualRecipe ? joinTextBlocks(actualRecipe.intro) : "";
+
+    const introScore = scoreProseField(goldenIntro, actualIntro);
+    const introWeight = Math.max(goldenIntro.length, 1);
+    introWeightedSum += introScore * introWeight;
+    introWeightTotal += introWeight;
+
+    if (introScore < 0.9 && goldenIntro) {
+      issues.push(`${goldenRecipe.title}: intro differs`);
+    }
+
+    const goldenNotes = joinTextBlocks(goldenRecipe.notes);
+    const actualNotes = actualRecipe ? joinTextBlocks(actualRecipe.notes) : "";
+
+    const notesScore = scoreProseField(goldenNotes, actualNotes);
+    const notesWeight = Math.max(goldenNotes.length, 1);
+    notesWeightedSum += notesScore * notesWeight;
+    notesWeightTotal += notesWeight;
+
+    if (notesScore < 0.9 && goldenNotes) {
+      issues.push(`${goldenRecipe.title}: notes differ`);
+    }
+  }
+
+  const introScore = introWeightTotal > 0 ? introWeightedSum / introWeightTotal : 1;
+  const notesScore = notesWeightTotal > 0 ? notesWeightedSum / notesWeightTotal : 1;
+
+  // Average intro and notes, weighted by total content length
+  const totalIntroLen = introWeightTotal;
+  const totalNotesLen = notesWeightTotal;
+  const totalLen = totalIntroLen + totalNotesLen;
+  const overallScore =
+    totalLen > 2
+      ? (introScore * totalIntroLen + notesScore * totalNotesLen) / totalLen
+      : (introScore + notesScore) / 2;
+
+  return { introScore, notesScore, overallScore, issues };
+}
+
+/**
+ * Score a single prose field (intro or notes).
+ * Both empty → 1.0. Golden has content, actual doesn't → 0. Vice versa → 0.7.
+ */
+function scoreProseField(golden: string, actual: string): number {
+  const goldenNorm = normalize(golden);
+  const actualNorm = normalize(actual);
+
+  if (!goldenNorm && !actualNorm) return 1.0;
+  if (goldenNorm && !actualNorm) return 0;
+  if (!goldenNorm && actualNorm) return 0.7;
+
+  return levenshteinRatio(goldenNorm, actualNorm);
+}
+
+// ============================================================================
 // Main Comparison Function
 // ============================================================================
 
@@ -733,10 +900,14 @@ export function compareDocuments(
       parsed: false,
       ingredientScore: 0,
       stepScore: 0,
+      referenceScore: 0,
+      proseScore: 0,
       metadataScore: 0,
       structureScore: 0,
       recipes: [],
       metadata: { titleScore: 0, sourceScore: 0, overallScore: 0, issues: [] },
+      references: { totalRefs: 0, brokenRefs: 0, score: 0, issues: [] },
+      prose: { introScore: 0, notesScore: 0, overallScore: 0, issues: [] },
       missingRecipes: golden.recipes.map((r) => r.id),
       extraRecipes: [],
       issues: ["actual failed to parse"],
@@ -796,14 +967,24 @@ export function compareDocuments(
   const metadata = compareMetadata(golden, actual);
   issues.push(...metadata.issues);
 
+  // Reference validity comparison
+  const references = compareReferences(golden, actual);
+  issues.push(...references.issues);
+
+  // Prose comparison (intro + notes)
+  const prose = compareProse(golden.recipes, actual.recipes);
+  issues.push(...prose.issues);
+
   // Calculate final weighted score
   const totalWeight =
-    w.ingredients + w.steps + w.metadata + w.structure;
+    w.ingredients + w.steps + w.references + w.metadata + w.structure + w.prose;
   const weightedScore =
     (w.ingredients * avgIngredientScore +
       w.steps * avgStepScore +
+      w.references * references.score +
       w.metadata * metadata.overallScore +
-      w.structure * structure.score) /
+      w.structure * structure.score +
+      w.prose * prose.overallScore) /
     totalWeight;
 
   return {
@@ -811,10 +992,14 @@ export function compareDocuments(
     parsed: true,
     ingredientScore: avgIngredientScore,
     stepScore: avgStepScore,
+    referenceScore: references.score,
+    proseScore: prose.overallScore,
     metadataScore: metadata.overallScore,
     structureScore: structure.score,
     recipes: recipeComparisons,
     metadata,
+    references,
+    prose,
     missingRecipes: structure.missingRecipes,
     extraRecipes: structure.extraRecipes,
     issues,

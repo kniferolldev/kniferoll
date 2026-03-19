@@ -9,6 +9,8 @@ export type {
   IngredientComparison,
   StepComparison,
   MetadataComparison,
+  ReferenceComparison,
+  ProseComparison,
 } from "./compare";
 
 export { DEFAULT_WEIGHTS } from "./weights";

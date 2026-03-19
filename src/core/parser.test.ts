@@ -114,6 +114,26 @@ test("no W0104 for valid frontmatter + heading", () => {
   expect(warnings).toHaveLength(0);
 });
 
+test("no W0104 for prose after document title in multi-recipe doc", () => {
+  const input = [
+    "# My Recipe Collection",
+    "",
+    "Some intro text about this recipe.",
+    "",
+    "# Sub-Recipe A",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Stir.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const warnings = byCode(result.diagnostics, "W0104");
+
+  expect(warnings).toHaveLength(0);
+  expect(result.documentTitle?.text).toBe("My Recipe Collection");
+});
+
 test("no W0104 for blank lines before heading", () => {
   const input = ["", "  ", "# Bread"].join("\n");
 

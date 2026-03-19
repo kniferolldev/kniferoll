@@ -9,6 +9,8 @@ function makeResult(overrides: Partial<ComparisonResult> = {}): ComparisonResult
     score: 85,
     ingredientScore: 0.9,
     stepScore: 0.8,
+    referenceScore: 1.0,
+    proseScore: 1.0,
     metadataScore: 1.0,
     structureScore: 1.0,
     recipes: [],
@@ -17,6 +19,18 @@ function makeResult(overrides: Partial<ComparisonResult> = {}): ComparisonResult
     metadata: {
       titleScore: 1.0,
       sourceScore: 1.0,
+      overallScore: 1.0,
+      issues: [],
+    },
+    references: {
+      totalRefs: 0,
+      brokenRefs: 0,
+      score: 1.0,
+      issues: [],
+    },
+    prose: {
+      introScore: 1.0,
+      notesScore: 1.0,
       overallScore: 1.0,
       issues: [],
     },
@@ -94,15 +108,22 @@ describe("formatDetailed", () => {
     const result = makeResult({
       ingredientScore: 0.9,
       stepScore: 0.8,
+      referenceScore: 0.75,
+      proseScore: 0.6,
       metadataScore: 0.95,
       structureScore: 1.0,
     });
     const lines = formatDetailed(result);
 
+    // Always shown
     expect(lines).toContain("Ingredients: 90%");
     expect(lines).toContain("Steps: 80%");
+    expect(lines).toContain("References: 75%");
+    // Only shown when < 100%
+    expect(lines).toContain("Prose: 60%");
     expect(lines).toContain("Metadata: 95%");
-    expect(lines).toContain("Structure: 100%");
+    // Structure rounds to 100% so it should be hidden
+    expect(lines.some((l) => l.startsWith("Structure:"))).toBe(false);
   });
 
   test("shows recipe details", () => {
@@ -256,6 +277,39 @@ describe("formatDetailed", () => {
     expect(lines.some((l) => l.includes("step 1") && l.includes("text=70%"))).toBe(true);
     expect(lines.some((l) => l.includes("missing refs: salt"))).toBe(true);
     expect(lines.some((l) => l.includes("extra refs: pepper"))).toBe(true);
+  });
+
+  test("shows broken references", () => {
+    const result = makeResult({
+      references: {
+        totalRefs: 6,
+        brokenRefs: 4,
+        score: 1 / 3,
+        issues: [
+          "broken reference: [[kosher salt -> salt]]",
+          "broken reference: [[olive oil -> oil]]",
+        ],
+      },
+    });
+    const lines = formatDetailed(result);
+
+    expect(lines.some((l) => l.includes("Broken references: 4/6"))).toBe(true);
+    expect(lines.some((l) => l.includes("broken reference: [[kosher salt -> salt]]"))).toBe(true);
+  });
+
+  test("shows prose issues", () => {
+    const result = makeResult({
+      prose: {
+        introScore: 0.5,
+        notesScore: 0.3,
+        overallScore: 0.4,
+        issues: ["Test Recipe: intro differs", "Test Recipe: notes differ"],
+      },
+    });
+    const lines = formatDetailed(result);
+
+    expect(lines.some((l) => l.includes("Test Recipe: intro differs"))).toBe(true);
+    expect(lines.some((l) => l.includes("Test Recipe: notes differ"))).toBe(true);
   });
 
   test("shows missing recipes", () => {

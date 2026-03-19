@@ -8,8 +8,10 @@ export interface ComparisonWeights {
   // Category weights (how much each category matters in final score)
   ingredients: number;
   steps: number;
+  references: number;
   metadata: number;
   structure: number;
+  prose: number;
 
   // Ingredient sub-weights (must sum to 1.0)
   ingredientName: number;
@@ -48,8 +50,10 @@ export const DEFAULT_WEIGHTS: ComparisonWeights = {
   // Category weights
   ingredients: 3.0,
   steps: 2.0,
+  references: 1.5,
   metadata: 0.5,
   structure: 0.5,
+  prose: 0.5,
 
   // Ingredient sub-weights
   ingredientName: 0.25,

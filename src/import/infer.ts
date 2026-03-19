@@ -2,50 +2,36 @@
  * Main inference orchestration for recipe import
  */
 
-import type { InferenceInput, ImportResult, ImportOptions, ExtractionResult, FormatResult, TwoStageMetrics, ResolvedInput, LoadedImage, InferenceMetrics } from "./types";
+import type { InferenceInput, ImportResult, ImportOptions, ExtractionResult, FormatResult, TwoStageMetrics, LoadedImage, InferenceMetrics, Provider } from "./types";
 import { parseModelSpec, formatModelSpec } from "./types";
 import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, loadSchema, getApiKey, getApiKeyEnvVar } from "./config";
 import { buildExtractionPrompt } from "./extract-prompt";
 import { buildFormatPrompt } from "./format-prompt";
 import { resolveInput } from "./utils";
 import { getProvider } from "./providers";
-import { decode, encode } from "jpeg-js";
+import { rotateImage } from "./rotate";
 import { buildRotationDetectionPrompt, ROTATION_DETECTION_MODEL, type RotationAngle } from "./rotation-prompt";
 
 /**
- * Rotate a JPEG image by the specified angle (clockwise) using jpeg-js.
+ * Resolve API key for a provider with fallback chain:
+ * options.apiKeys[provider] → options.apiKey → process.env
  */
-function rotateImage(data: ArrayBuffer, angle: RotationAngle): ArrayBuffer {
-  if (angle === 0) return data;
+function resolveApiKey(provider: Provider, options?: ImportOptions): string | null {
+  return options?.apiKeys?.[provider] ?? options?.apiKey ?? getApiKey(provider);
+}
 
-  const image = decode(new Uint8Array(data));
-  const { width, height, data: pixels } = image;
-
-  const swap = angle === 90 || angle === 270;
-  const newWidth = swap ? height : width;
-  const newHeight = swap ? width : height;
-  const newPixels = Buffer.alloc(newWidth * newHeight * 4);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const srcIdx = (y * width + x) * 4;
-      let dstX: number, dstY: number;
-      if (angle === 90) { dstX = height - 1 - y; dstY = x; }
-      else if (angle === 180) { dstX = width - 1 - x; dstY = height - 1 - y; }
-      else { dstX = y; dstY = width - 1 - x; } // 270
-      const dstIdx = (dstY * newWidth + dstX) * 4;
-      newPixels[dstIdx] = pixels[srcIdx]!;
-      newPixels[dstIdx + 1] = pixels[srcIdx + 1]!;
-      newPixels[dstIdx + 2] = pixels[srcIdx + 2]!;
-      newPixels[dstIdx + 3] = pixels[srcIdx + 3]!;
-    }
+/**
+ * Resolve API key or throw with a helpful error message.
+ */
+function requireApiKey(provider: Provider, options?: ImportOptions): string {
+  const key = resolveApiKey(provider, options);
+  if (!key) {
+    const envVar = getApiKeyEnvVar(provider);
+    throw new Error(
+      `${envVar} environment variable is not set.\nSet it with: export ${envVar}=your-key-here`
+    );
   }
-
-  const encoded = encode({ data: newPixels, width: newWidth, height: newHeight }, 80);
-  return (encoded.data.buffer as ArrayBuffer).slice(
-    encoded.data.byteOffset,
-    encoded.data.byteOffset + encoded.data.byteLength,
-  );
+  return key;
 }
 
 /**
@@ -110,13 +96,7 @@ async function correctImageRotation(
     throw new Error(`Invalid rotation detection model: ${ROTATION_DETECTION_MODEL}`);
   }
 
-  const apiKey = options?.apiKey ?? getApiKey(modelSpec.provider);
-  if (!apiKey) {
-    const envVar = getApiKeyEnvVar(modelSpec.provider);
-    throw new Error(
-      `${envVar} environment variable is not set (needed for rotation detection).\nSet it with: export ${envVar}=your-key-here`
-    );
-  }
+  const apiKey = requireApiKey(modelSpec.provider, options);
 
   const correctedImages: Array<Omit<LoadedImage, "kind">> = [];
   let totalDuration = 0;
@@ -204,18 +184,12 @@ export async function importRecipe(
   const modelSpec = parseModelSpec(modelString);
   if (!modelSpec) {
     throw new Error(
-      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., openai/gpt-4o)`
+      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., google/gemini-3-flash-preview)`
     );
   }
 
   // Get API key
-  const apiKey = options?.apiKey ?? getApiKey(modelSpec.provider);
-  if (!apiKey) {
-    const envVar = getApiKeyEnvVar(modelSpec.provider);
-    throw new Error(
-      `${envVar} environment variable is not set.\nSet it with: export ${envVar}=your-key-here`
-    );
-  }
+  const apiKey = requireApiKey(modelSpec.provider, options);
 
   // Get schema
   const schema = options?.schema ?? (await loadSchema());
@@ -266,18 +240,12 @@ export async function extractRecipe(
   const modelSpec = parseModelSpec(modelString);
   if (!modelSpec) {
     throw new Error(
-      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., openai/gpt-4o)`
+      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., google/gemini-3-flash-preview)`
     );
   }
 
   // Get API key
-  const apiKey = options?.apiKey ?? getApiKey(modelSpec.provider);
-  if (!apiKey) {
-    const envVar = getApiKeyEnvVar(modelSpec.provider);
-    throw new Error(
-      `${envVar} environment variable is not set.\nSet it with: export ${envVar}=your-key-here`
-    );
-  }
+  const apiKey = requireApiKey(modelSpec.provider, options);
 
   // Build extraction prompt
   const systemPrompt = buildExtractionPrompt();
@@ -299,7 +267,7 @@ export async function extractRecipe(
     apiKey,
   });
 
-  // Strip code fences and parse the JSON response
+  // Strip code fences, then parse JSON
   const cleanedJson = stripCodeFences(result.text);
   let extracted: ExtractionResult["extracted"];
   try {
@@ -342,18 +310,12 @@ export async function formatRecipe(
   const modelSpec = parseModelSpec(modelString);
   if (!modelSpec) {
     throw new Error(
-      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., openai/gpt-4o-mini)`
+      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., google/gemini-3-flash-preview)`
     );
   }
 
   // Get API key
-  const apiKey = options?.apiKey ?? getApiKey(modelSpec.provider);
-  if (!apiKey) {
-    const envVar = getApiKeyEnvVar(modelSpec.provider);
-    throw new Error(
-      `${envVar} environment variable is not set.\nSet it with: export ${envVar}=your-key-here`
-    );
-  }
+  const apiKey = requireApiKey(modelSpec.provider, options);
 
   // Get schema
   const schema = options?.schema ?? (await loadSchema());

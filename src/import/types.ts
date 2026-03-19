@@ -147,10 +147,12 @@ export interface TwoStageMetrics {
 
 /** Options for importRecipe() */
 export interface ImportOptions {
-  /** Model to use, e.g. "openai/gpt-4o". Defaults to DEFAULT_IMPORT_MODEL */
+  /** Model to use, e.g. "google/gemini-3-flash-preview". Defaults to DEFAULT_IMPORT_MODEL */
   model?: string;
-  /** API key. Defaults to environment variable based on provider */
+  /** API key (single provider). Defaults to environment variable based on provider */
   apiKey?: string;
+  /** API keys keyed by provider. Takes precedence over apiKey for matching provider */
+  apiKeys?: Partial<Record<Provider, string>>;
   /** Schema content. Defaults to loading from SCHEMA.md */
   schema?: string;
 }

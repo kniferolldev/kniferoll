@@ -367,18 +367,18 @@ describe("importRecipe", () => {
   });
 
   test("throws error when API key is missing", async () => {
-    delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
 
     await expect(
-      importRecipe({ text: "test" }, { model: "openai/gpt-4o" })
-    ).rejects.toThrow("OPENAI_API_KEY");
+      importRecipe({ text: "test" }, { model: "google/gemini-3-flash-preview" })
+    ).rejects.toThrow("GEMINI_API_KEY");
   });
 
   test("throws error for empty input", async () => {
-    process.env.OPENAI_API_KEY = "test-key";
+    process.env.GEMINI_API_KEY = "test-key";
 
     await expect(
-      importRecipe({}, { model: "openai/gpt-4o", schema: "test schema" })
+      importRecipe({}, { model: "google/gemini-3-flash-preview", schema: "test schema" })
     ).rejects.toThrow("No input provided");
   });
 });
@@ -400,21 +400,21 @@ describe("extractRecipe", () => {
   });
 
   test("throws error when API key is missing", async () => {
-    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.GEMINI_API_KEY;
 
     await expect(
       extractRecipe(
         { images: [{ kind: "loaded", data: new ArrayBuffer(10), mimeType: "image/jpeg" }] },
-        { model: "anthropic/claude-sonnet-4-5-20250514" }
+        { model: "google/gemini-3-flash-preview" }
       )
-    ).rejects.toThrow("ANTHROPIC_API_KEY");
+    ).rejects.toThrow("GEMINI_API_KEY");
   });
 
   test("throws error when no images provided", async () => {
-    process.env.OPENAI_API_KEY = "test-key";
+    process.env.GEMINI_API_KEY = "test-key";
 
     await expect(
-      extractRecipe({ text: "just text" }, { model: "openai/gpt-4o" })
+      extractRecipe({ text: "just text" }, { model: "google/gemini-3-flash-preview" })
     ).rejects.toThrow("No images provided");
   });
 });
@@ -442,20 +442,6 @@ describe("formatRecipe", () => {
 });
 
 describe("getProvider", () => {
-  test("returns anthropic adapter", () => {
-    const provider = getProvider("anthropic");
-
-    expect(provider).toBeDefined();
-    expect(typeof provider.infer).toBe("function");
-  });
-
-  test("returns openai adapter", () => {
-    const provider = getProvider("openai");
-
-    expect(provider).toBeDefined();
-    expect(typeof provider.infer).toBe("function");
-  });
-
   test("returns google adapter", () => {
     const provider = getProvider("google");
 
@@ -463,7 +449,15 @@ describe("getProvider", () => {
     expect(typeof provider.infer).toBe("function");
   });
 
+  test("throws for unsupported provider (anthropic)", () => {
+    expect(() => getProvider("anthropic")).toThrow(/Unknown provider/);
+  });
+
+  test("throws for unsupported provider (openai)", () => {
+    expect(() => getProvider("openai")).toThrow(/Unknown provider/);
+  });
+
   test("throws for unknown provider", () => {
-    expect(() => getProvider("unknown" as never)).toThrow("Unknown provider");
+    expect(() => getProvider("unknown" as never)).toThrow(/Unknown provider/);
   });
 });

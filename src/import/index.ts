@@ -2,7 +2,10 @@
  * Recipe Import Module
  *
  * Unified infrastructure for importing recipes from text or images
- * using LLMs. Supports both Anthropic and OpenAI providers.
+ * using LLMs. Uses Google Gemini via raw HTTP (no SDK dependencies).
+ *
+ * Works in Node, Bun, and Cloudflare Workers. In Workers, pass
+ * `schema` and `apiKeys` explicitly (no filesystem / process.env).
  *
  * @example
  * import { importRecipe } from "./import";
@@ -10,17 +13,31 @@
  * // Import from text
  * const result = await importRecipe({ text: "1 cup flour..." });
  * console.log(result.markdown);
- * console.log(`Used model: ${result.model}`);
  *
  * @example
  * // Import from images (CLI)
  * const result = await importRecipe({
  *   images: [{ kind: "lazy", path: "recipe.jpg" }]
- * }, { model: "anthropic/claude-sonnet-4-5-20250514" });
+ * });
+ *
+ * @example
+ * // Import in a Worker
+ * const result = await importRecipe(
+ *   { text: htmlContent },
+ *   { apiKeys: { google: env.GEMINI_API_KEY }, schema: env.SCHEMA_MD },
+ * );
  */
 
 // Main functions
 export { importRecipe, extractRecipe, formatRecipe, importRecipeTwoStage } from "./infer";
+
+// LLM convenience wrapper (for doctor-handler and other simple callers)
+export { callLlm } from "./call-llm";
+export type { CallLlmContent, CallLlmApiKeys } from "./call-llm";
+
+// Image rotation
+export { rotateImage } from "./rotate";
+export type { RotationAngle } from "./rotate";
 
 // Types
 export type {
