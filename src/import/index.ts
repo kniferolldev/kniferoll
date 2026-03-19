@@ -29,7 +29,7 @@
  */
 
 // Main functions
-export { importRecipe, extractRecipe, formatRecipe, importRecipeTwoStage } from "./infer";
+export { importRecipe, extractRecipe, extractRecipeFromText, formatRecipe, importRecipeTwoStage } from "./infer";
 
 // LLM convenience wrapper (for doctor-handler and other simple callers)
 export { callLlm } from "./call-llm";
@@ -63,13 +63,14 @@ export type {
 export { parseModelSpec, formatModelSpec } from "./types";
 
 // Configuration
-export { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, DEFAULT_JUDGE_MODEL, loadSchema, getApiKey, getApiKeyEnvVar } from "./config";
+export { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, loadSchema, getApiKey, getApiKeyEnvVar } from "./config";
 
 // Browser-safe helpers
 export { getProviderDisplayName, getProviderApiKeyUrl } from "./constants";
 
-// Prompt (exported for transparency/debugging)
+// Prompts (exported for transparency/debugging)
 export { buildFormatPrompt } from "./format-prompt";
+export { buildTextExtractionPrompt } from "./text-extract-prompt";
 
 // Utilities (for consumers that need to convert Blobs)
 export { blobToLoadedImage, arrayBufferToBase64, resolveInput } from "./utils";

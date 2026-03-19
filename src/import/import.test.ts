@@ -5,7 +5,6 @@ import {
   buildFormatPrompt,
   DEFAULT_IMPORT_MODEL,
   DEFAULT_FORMAT_MODEL,
-  DEFAULT_JUDGE_MODEL,
   getApiKeyEnvVar,
   getApiKey,
   loadSchema,
@@ -287,15 +286,6 @@ describe("DEFAULT_FORMAT_MODEL", () => {
   });
 });
 
-describe("DEFAULT_JUDGE_MODEL", () => {
-  test("is a valid model spec", () => {
-    const result = parseModelSpec(DEFAULT_JUDGE_MODEL);
-
-    expect(result).not.toBeNull();
-    expect(result?.provider).toBe("anthropic");
-  });
-});
-
 describe("getApiKey", () => {
   const originalEnv = { ...process.env };
 
@@ -379,7 +369,7 @@ describe("importRecipe", () => {
 
     await expect(
       importRecipe({}, { model: "google/gemini-3-flash-preview", schema: "test schema" })
-    ).rejects.toThrow("No input provided");
+    ).rejects.toThrow("No text provided for extraction");
   });
 });
 

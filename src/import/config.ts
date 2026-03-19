@@ -12,9 +12,6 @@ export { DEFAULT_IMPORT_MODEL } from "./constants";
 /** Default model for formatting stage (text-only, can be smaller/cheaper) */
 export const DEFAULT_FORMAT_MODEL = "google/gemini-3-flash-preview";
 
-/** Default model for judging eval quality */
-export const DEFAULT_JUDGE_MODEL = "anthropic/claude-sonnet-4-5-20250514";
-
 /** Cached schema content */
 let cachedSchema: string | null = null;
 

@@ -6,9 +6,6 @@
  */
 
 import { join } from "path";
-import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { parseDocument } from "../core";
 import type { DocumentParseResult } from "../core";
 import type { IO } from "../types";
@@ -16,6 +13,7 @@ import { compareDocuments, formatDetailed, type ComparisonResult } from "../eval
 import {
   importRecipe,
   extractRecipe,
+  extractRecipeFromText,
   formatRecipe,
   parseModelSpec,
   formatModelSpec,
@@ -23,7 +21,6 @@ import {
   getApiKeyEnvVar,
   DEFAULT_IMPORT_MODEL,
   DEFAULT_FORMAT_MODEL,
-  DEFAULT_JUDGE_MODEL,
   type ModelSpec,
   type InferenceInput,
   type LazyImage,
@@ -46,17 +43,13 @@ interface TestCaseResult {
   /** Detailed comparison result */
   comparison?: ComparisonResult;
   actual: string;
-  judgeScore?: number; // 1-10
-  judgeIssues?: string;
   importMetrics?: InferenceMetrics;
 }
 
 /** Metadata about the eval run */
 interface EvalMetadata {
-  /** Model used for import, e.g. "openai/gpt-5.2" */
+  /** Model used for import, e.g. "google/gemini-3-flash-preview" */
   importerModel?: string;
-  /** Model used for judging, e.g. "anthropic/claude-sonnet-4-5" */
-  judgeModel?: string;
 }
 
 /** Baseline data structure */
@@ -67,7 +60,6 @@ interface Baseline {
   summary: {
     parseRate: number;
     avgScore: number;
-    avgJudgeScore?: number;
     totalDurationMs?: number;
     totalInputTokens?: number;
     totalOutputTokens?: number;
@@ -88,12 +80,10 @@ interface TestCase {
 interface ParsedArgs {
   save: boolean;
   diff: boolean;
-  judge: boolean;
   regenerate: boolean;
   extractOnly: boolean;
   formatOnly: boolean;
   model: ModelSpec | null;
-  judgeModel: ModelSpec | null;
   evalsDir: string;
   only: string | null;
 }
@@ -106,12 +96,10 @@ interface ParseResult {
 function parseArgs(args: string[]): ParseResult {
   let save = false;
   let diff = false;
-  let judge = false;
   let regenerate = false;
   let extractOnly = false;
   let formatOnly = false;
   let model: ModelSpec | null = null;
-  let judgeModel: ModelSpec | null = null;
   let evalsDir = "evals";
   let only: string | null = null;
   let error: string | undefined;
@@ -120,7 +108,6 @@ function parseArgs(args: string[]): ParseResult {
     const arg = args[i]!;
     if (arg === "--save") save = true;
     else if (arg === "--diff") diff = true;
-    else if (arg === "--judge") judge = true;
     else if (arg === "--regenerate") {
       regenerate = true;
       save = true; // --regenerate implies --save
@@ -138,14 +125,7 @@ function parseArgs(args: string[]): ParseResult {
       const spec = args[++i]!;
       model = parseModelSpec(spec);
       if (!model) {
-        error = `Invalid model format: "${spec}"\nExpected format: <provider>/<model> (e.g., openai/gpt-4o, anthropic/claude-sonnet-4-5)`;
-      }
-    }
-    else if (arg === "--judge-model" && args[i + 1]) {
-      const spec = args[++i]!;
-      judgeModel = parseModelSpec(spec);
-      if (!judgeModel) {
-        error = `Invalid judge model format: "${spec}"\nExpected format: <provider>/<model> (e.g., openai/gpt-4o, anthropic/claude-sonnet-4-5)`;
+        error = `Invalid model format: "${spec}"\nExpected format: <provider>/<model> (e.g., google/gemini-3-flash-preview)`;
       }
     }
     else if (arg === "--only" && args[i + 1]) {
@@ -154,7 +134,7 @@ function parseArgs(args: string[]): ParseResult {
     else if (!arg.startsWith("-")) evalsDir = arg;
   }
 
-  return { args: { save, diff, judge, regenerate, extractOnly, formatOnly, model, judgeModel, evalsDir, only }, error };
+  return { args: { save, diff, regenerate, extractOnly, formatOnly, model, evalsDir, only }, error };
 }
 
 // ============================================================================
@@ -209,7 +189,9 @@ async function runExtractor(
   input: TestCase["input"],
 ): Promise<ExtractionResult> {
   if (input.kind === "text") {
-    throw new Error("Extraction requires images, not text input");
+    return extractRecipeFromText({ text: input.text }, {
+      model: formatModelSpec(model),
+    });
   }
 
   // Convert file paths to LazyImage format
@@ -232,132 +214,6 @@ interface ExtractionTestResult {
   rawJson: string;
   metrics?: InferenceMetrics;
   error?: string;
-}
-
-// ============================================================================
-// Judge Functions
-// ============================================================================
-
-const JUDGE_PROMPT = `You are evaluating a recipe import. Compare the actual output to the expected (human-edited) version.
-
-Rate the quality from 1-10:
-- 10: Identical or trivially different (whitespace, minor formatting)
-- 7-9: Good, minor issues (missing optional fields, slight rewording)
-- 4-6: Usable but needs editing (wrong quantities, missing ingredients)
-- 1-3: Significant problems (missing sections, wrong recipe)
-
-Expected:
-<expected>
-{expected}
-</expected>
-
-Actual:
-<actual>
-{actual}
-</actual>
-
-Respond with JSON only, no other text:
-{"score": <1-10>, "issues": "<brief list of what needs fixing, or 'none'>"}`;
-
-interface JudgeResult {
-  score: number;
-  issues: string;
-}
-
-async function judgeWithAnthropic(expected: string, actual: string, model: string): Promise<JudgeResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-
-  const client = new Anthropic({ apiKey });
-  const prompt = JUDGE_PROMPT.replace("{expected}", expected).replace("{actual}", actual);
-
-  const response = await client.messages.create({
-    model,
-    max_tokens: 256,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const first = response.content[0];
-  const text = first?.type === "text" ? first.text : "";
-  return parseJudgeResponse(text);
-}
-
-async function judgeWithOpenAI(expected: string, actual: string, model: string): Promise<JudgeResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY not set");
-
-  const client = new OpenAI({ apiKey });
-  const prompt = JUDGE_PROMPT.replace("{expected}", expected).replace("{actual}", actual);
-
-  const response = await client.chat.completions.create({
-    model,
-    max_tokens: 256,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const text = response.choices[0]?.message?.content ?? "";
-  return parseJudgeResponse(text);
-}
-
-async function judgeWithGoogle(expected: string, actual: string, model: string): Promise<JudgeResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not set");
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const geminiModel = genAI.getGenerativeModel({ model });
-  const prompt = JUDGE_PROMPT.replace("{expected}", expected).replace("{actual}", actual);
-
-  const result = await geminiModel.generateContent(prompt);
-  const text = result.response.text();
-  return parseJudgeResponse(text);
-}
-
-function parseJudgeResponse(text: string): JudgeResult {
-  try {
-    // Try to find JSON in the response
-    const jsonMatch = text.match(/\{[\s\S]*?\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        score: Math.max(1, Math.min(10, Number(parsed.score) || 5)),
-        issues: String(parsed.issues || "unknown"),
-      };
-    }
-
-    // Fallback: try to extract score from text like "Score: 7" or "7/10"
-    const scoreMatch = text.match(/(?:score[:\s]*)?(\d+)(?:\/10)?/i);
-    if (scoreMatch) {
-      const score = Math.max(1, Math.min(10, Number(scoreMatch[1])));
-      // Try to extract issues after the score
-      const issuesMatch = text.match(/issues?[:\s]*["']?([^"'\n]+)/i);
-      return {
-        score,
-        issues: issuesMatch?.[1]?.trim() || "extracted from non-JSON response",
-      };
-    }
-
-    throw new Error("No score found");
-  } catch (err) {
-    const preview = text.slice(0, 100).replace(/\n/g, " ");
-    return { score: 5, issues: `parse error: ${preview}...` };
-  }
-}
-
-async function runJudge(
-  spec: ModelSpec,
-  expected: string,
-  actual: string
-): Promise<JudgeResult> {
-  switch (spec.provider) {
-    case "anthropic":
-      return judgeWithAnthropic(expected, actual, spec.model);
-    case "google":
-      return judgeWithGoogle(expected, actual, spec.model);
-    case "openai":
-      return judgeWithOpenAI(expected, actual, spec.model);
-    default:
-      throw new Error(`Unsupported judge provider: ${spec.provider}`);
-  }
 }
 
 // ============================================================================
@@ -479,14 +335,11 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     return 2;
   }
 
-  const { save, diff, judge, regenerate, extractOnly, formatOnly, model, judgeModel, evalsDir, only } = parseResult.args;
+  const { save, diff, regenerate, extractOnly, formatOnly, model, evalsDir, only } = parseResult.args;
 
   // Resolve models: use defaults when not specified
   const importModel = regenerate
     ? (model ?? parseModelSpec(DEFAULT_IMPORT_MODEL)!)
-    : null;
-  const resolvedJudgeModel = judge
-    ? (judgeModel ?? model ?? parseModelSpec(DEFAULT_JUDGE_MODEL)!)
     : null;
 
   // Check API keys early if we need models
@@ -495,16 +348,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     if (!apiKey) {
       const envVar = getApiKeyEnvVar(importModel.provider);
       writeErr(`Error: ${envVar} environment variable is not set.\n`);
-      writeErr(`Set it with: export ${envVar}=your-key-here\n`);
-      return 1;
-    }
-  }
-
-  if (resolvedJudgeModel) {
-    const apiKey = getApiKey(resolvedJudgeModel.provider);
-    if (!apiKey) {
-      const envVar = getApiKeyEnvVar(resolvedJudgeModel.provider);
-      writeErr(`Error: ${envVar} environment variable is not set (for judging).\n`);
       writeErr(`Set it with: export ${envVar}=your-key-here\n`);
       return 1;
     }
@@ -546,20 +389,13 @@ export async function runEval(args: string[], io: IO): Promise<number> {
   // Extract-only mode: just run text extraction and save JSON
   // ========================================================================
   if (extractOnly) {
-    // Filter to only image-based test cases
-    const imageTestCases = testCases.filter(tc => tc.input.kind === "images");
-    if (imageTestCases.length === 0) {
-      writeErr(`No image-based test cases found for extraction.\n`);
-      return 1;
-    }
-
-    write(`Extracting text from ${imageTestCases.length} image test case(s)...`);
+    write(`Extracting from ${testCases.length} test case(s)...`);
     write(` [model: ${formatModelSpec(importModel!)}]`);
     write("\n\n");
 
     const extractResults: ExtractionTestResult[] = [];
 
-    for (const tc of imageTestCases) {
+    for (const tc of testCases) {
       write(`  ${tc.id}... `);
 
       try {
@@ -768,15 +604,8 @@ export async function runEval(args: string[], io: IO): Promise<number> {
   // ========================================================================
 
   // Header line with mode info
-  const headerParts: string[] = [];
   if (regenerate && importModel) {
-    headerParts.push(`regenerating with ${formatModelSpec(importModel)}`);
-  }
-  if (judge && resolvedJudgeModel) {
-    headerParts.push(`judging with ${formatModelSpec(resolvedJudgeModel)}`);
-  }
-  if (headerParts.length > 0) {
-    write(`[${headerParts.join(", ")}]\n`);
+    write(`[regenerating with ${formatModelSpec(importModel)}]\n`);
   }
 
   // Find column width for test case names
@@ -806,16 +635,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
       const result = evaluateOutput(tc.id, actual, tc.expected);
       result.importMetrics = importMetrics;
 
-      if (judge && result.parsed && resolvedJudgeModel) {
-        try {
-          const judgeResult = await runJudge(resolvedJudgeModel, tc.expected, actual);
-          result.judgeScore = judgeResult.score;
-          result.judgeIssues = judgeResult.issues;
-        } catch (err) {
-          result.judgeIssues = `judge error: ${err instanceof Error ? err.message : err}`;
-        }
-      }
-
       results[tc.id] = result;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -826,7 +645,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
         warningCount: 0,
         score: 0,
         actual: "",
-        judgeIssues: `import error: ${msg}`,
       };
     }
 
@@ -838,16 +656,8 @@ export async function runEval(args: string[], io: IO): Promise<number> {
 
     let line = `  ${tc.id.padEnd(maxIdLen)}  ${scoreStr}`;
 
-    if (judge) {
-      line += r.judgeScore !== undefined ? `  ${r.judgeScore}/10` : `  -/10`;
-    }
-
     if (prev !== undefined) {
       line += `  ${formatDelta(r.score, prev.score, "%")}`;
-    }
-
-    if (judge && r.judgeIssues && r.judgeIssues !== "none" && r.judgeIssues.length < 40) {
-      line += `  (${r.judgeIssues})`;
     }
 
     write(line + "\n");
@@ -856,10 +666,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
       const m = r.importMetrics;
       const durationSec = (m.durationMs / 1000).toFixed(1);
       write(`${"".padEnd(maxIdLen + 4)}${durationSec}s | ${m.inputTokens.toLocaleString()} in / ${m.outputTokens.toLocaleString()} out\n`);
-    }
-
-    if (judge && r.judgeIssues && r.judgeIssues !== "none" && r.judgeIssues.length >= 40) {
-      write(`${"".padEnd(maxIdLen + 4)}${r.judgeIssues}\n`);
     }
 
     if (diff && r.parsed && r.comparison) {
@@ -879,17 +685,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     Math.max(parsedCount, 1)
   );
 
-  let avgJudgeScore: number | undefined;
-  if (judge) {
-    const judgedResults = resultList.filter(r => r.judgeScore !== undefined);
-    if (judgedResults.length > 0) {
-      avgJudgeScore = Math.round(
-        judgedResults.reduce((sum, r) => sum + (r.judgeScore ?? 0), 0) /
-        judgedResults.length * 10
-      ) / 10;
-    }
-  }
-
   // Calculate aggregate metrics
   const resultsWithMetrics = resultList.filter(r => r.importMetrics);
   const totalDurationMs = resultsWithMetrics.reduce((sum, r) => sum + (r.importMetrics?.durationMs ?? 0), 0);
@@ -906,9 +701,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
   if (failCount > 0) {
     summaryLine += `  (${failCount} parse failed)`;
   }
-  if (judge && avgJudgeScore !== undefined) {
-    summaryLine += `  quality ${avgJudgeScore}/10`;
-  }
   write(summaryLine + "\n");
 
   if (resultsWithMetrics.length > 0) {
@@ -923,9 +715,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     if (importModel) {
       metadata.importerModel = formatModelSpec(importModel);
     }
-    if (resolvedJudgeModel) {
-      metadata.judgeModel = formatModelSpec(resolvedJudgeModel);
-    }
 
     const newBaseline: Baseline = {
       timestamp: new Date().toISOString(),
@@ -934,7 +723,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
       summary: {
         parseRate,
         avgScore,
-        avgJudgeScore,
         totalDurationMs: resultsWithMetrics.length > 0 ? totalDurationMs : undefined,
         totalInputTokens: resultsWithMetrics.length > 0 ? totalInputTokens : undefined,
         totalOutputTokens: resultsWithMetrics.length > 0 ? totalOutputTokens : undefined,

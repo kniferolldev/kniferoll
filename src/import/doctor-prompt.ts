@@ -70,12 +70,30 @@ YOUR TASKS (in priority order):
      \`[[vinaigrette -> Chinkiang vinegar]]\`
    - Fix BACKWARDS long form: the importer often swaps display and target.
      Remember: display (before ->) is what appears in the step text;
-     target (after ->) must match an ingredient name. Example: for
-     ingredient "lard or vegetable oil", \`[[lard or vegetable oil -> lard]]\`
-     is backwards — fix to \`[[lard -> lard or vegetable oil]]\`.
+     target (after ->) must match an ingredient name.
+     Detection rule: if the LEFT side of \`->\` matches an ingredient name
+     but the RIGHT side does NOT, the reference is backwards — FLIP it.
+     The fix is ALWAYS to swap the two sides, never to drop the alias.
+     Examples:
+     - Ingredient "extra virgin olive oil", step says "oil":
+       \`[[extra virgin olive oil -> oil]]\` is backwards →
+       fix to \`[[oil -> extra virgin olive oil]]\`
+     - Ingredient "flat anchovy fillets", step says "chopped anchovies":
+       \`[[flat anchovy fillets -> chopped anchovies]]\` is backwards →
+       fix to \`[[chopped anchovies -> flat anchovy fillets]]\`
+     - Ingredient "parsley", step says "chopped parsley":
+       \`[[parsley -> chopped parsley]]\` is backwards →
+       fix to \`[[chopped parsley -> parsley]]\`
    Then, add missing references ONLY when it meaningfully helps —
    the first mention of a key ingredient in a step, or when the reference
    would clarify which ingredient is meant.
+   Each ingredient should be referenced AT MOST ONCE per step — the first
+   meaningful mention. Remove duplicate references to the same ingredient
+   within a step. Example:
+   WRONG: "Put the [[garlic]] and [[oil -> extra virgin olive oil]] in a
+   pan, cook and stir the [[garlic]] until pale gold."
+   RIGHT: "Put the [[garlic]] and [[oil -> extra virgin olive oil]] in a
+   pan, cook and stir the garlic until pale gold."
    Do NOT add references for:
    - Ingredients already referenced earlier in the same step
    - Ubiquitous seasonings (salt, pepper, oil) in generic instructions

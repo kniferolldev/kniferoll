@@ -64,24 +64,6 @@ describe("eval argument parsing", () => {
     }
   });
 
-  test("--judge without --model uses default judge model", async () => {
-    // Save and clear API key to trigger early exit
-    const savedKey = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-
-    try {
-      const { io, stderr } = stubIO();
-      const exitCode = await runEval(["--judge"], io);
-
-      // Should fail due to missing API key (default judge uses Anthropic)
-      expect(exitCode).toBe(1);
-      expect(stderr.read()).toContain("ANTHROPIC_API_KEY");
-      expect(stderr.read()).not.toContain("--model is required");
-    } finally {
-      if (savedKey) process.env.ANTHROPIC_API_KEY = savedKey;
-    }
-  });
-
   test("--model with invalid format fails", async () => {
     const { io, stderr } = stubIO();
     const exitCode = await runEval(["--regenerate", "--model", "gpt-4o"], io);
@@ -132,7 +114,7 @@ describe("eval argument parsing", () => {
     }
   });
 
-  test("basic eval without --regenerate or --judge does not require --model", async () => {
+  test("basic eval without --regenerate does not require --model", async () => {
     const { io, stderr } = stubIO();
     const exitCode = await runEval([emptyEvalsDir], io);
 

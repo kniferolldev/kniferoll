@@ -6,6 +6,7 @@ import type { InferenceInput, ImportResult, ImportOptions, ExtractionResult, For
 import { parseModelSpec, formatModelSpec } from "./types";
 import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, loadSchema, getApiKey, getApiKeyEnvVar } from "./config";
 import { buildExtractionPrompt } from "./extract-prompt";
+import { buildTextExtractionPrompt } from "./text-extract-prompt";
 import { buildFormatPrompt } from "./format-prompt";
 import { resolveInput } from "./utils";
 import { getProvider } from "./providers";
@@ -174,51 +175,12 @@ export async function importRecipe(
   const hasText = input.text && input.text.trim().length > 0;
 
   if (hasImages && !hasText) {
-    // Image-only input: use two-stage pipeline
+    // Image-only input: use two-stage pipeline (rotation → extract → format)
     return importRecipeTwoStage(input, options);
   }
 
-  // Text input (or mixed): use single-stage direct conversion
-  // Parse model specification
-  const modelString = options?.model ?? DEFAULT_IMPORT_MODEL;
-  const modelSpec = parseModelSpec(modelString);
-  if (!modelSpec) {
-    throw new Error(
-      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., google/gemini-3-flash-preview)`
-    );
-  }
-
-  // Get API key
-  const apiKey = requireApiKey(modelSpec.provider, options);
-
-  // Get schema
-  const schema = options?.schema ?? (await loadSchema());
-
-  // Build system prompt
-  const systemPrompt = buildFormatPrompt(schema);
-
-  // Resolve input (load lazy images)
-  const resolvedInput = await resolveInput(input);
-
-  // Validate we have something to process
-  if (!resolvedInput.text && (!resolvedInput.images || resolvedInput.images.length === 0)) {
-    throw new Error("No input provided (text or images required)");
-  }
-
-  // Get provider and run inference
-  const provider = getProvider(modelSpec.provider);
-  const result = await provider.infer({
-    input: resolvedInput,
-    systemPrompt,
-    model: modelSpec.model,
-    apiKey,
-  });
-
-  return {
-    markdown: result.text,
-    model: formatModelSpec(modelSpec),
-    metrics: result.metrics,
-  };
+  // Text input (or mixed): use two-stage pipeline (extract → format)
+  return importRecipeTextTwoStage(input, options);
 }
 
 /**
@@ -287,6 +249,121 @@ export async function extractRecipe(
     rawJson: cleanedJson,
     model: formatModelSpec(modelSpec),
     metrics: result.metrics,
+  };
+}
+
+/**
+ * Extract recipe content from text or HTML (stage 1 of two-stage import for text inputs).
+ *
+ * This extracts structured recipe JSON from raw text/HTML, stripping ads,
+ * navigation, comments, and other non-recipe content.
+ *
+ * @param input - Text to extract recipe from
+ * @param options - Model, API key options
+ * @returns Extracted structured data and metrics
+ */
+export async function extractRecipeFromText(
+  input: InferenceInput,
+  options?: Omit<ImportOptions, "schema">
+): Promise<ExtractionResult> {
+  // Parse model specification
+  const modelString = options?.model ?? DEFAULT_IMPORT_MODEL;
+  const modelSpec = parseModelSpec(modelString);
+  if (!modelSpec) {
+    throw new Error(
+      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., google/gemini-3-flash-preview)`
+    );
+  }
+
+  // Get API key
+  const apiKey = requireApiKey(modelSpec.provider, options);
+
+  // Build text extraction prompt
+  const systemPrompt = buildTextExtractionPrompt();
+
+  // Validate we have text
+  if (!input.text || input.text.trim().length === 0) {
+    throw new Error("No text provided for extraction");
+  }
+
+  // Get provider and run inference (text-only, no images)
+  const provider = getProvider(modelSpec.provider);
+  const result = await provider.infer({
+    input: { text: input.text },
+    systemPrompt,
+    model: modelSpec.model,
+    apiKey,
+  });
+
+  // Strip code fences, then parse JSON
+  const cleanedJson = stripCodeFences(result.text);
+  let extracted: ExtractionResult["extracted"];
+  try {
+    extracted = JSON.parse(cleanedJson);
+  } catch {
+    // If parsing fails, return a minimal structure with the raw text
+    extracted = {
+      sections: [{
+        type: "other",
+        content: [result.text],
+      }],
+    };
+  }
+
+  return {
+    extracted,
+    rawJson: cleanedJson,
+    model: formatModelSpec(modelSpec),
+    metrics: result.metrics,
+  };
+}
+
+/**
+ * Import a recipe from text using two-stage pipeline (extract → format).
+ *
+ * Stage 1: Extract structured recipe JSON from text/HTML
+ * Stage 2: Format extracted JSON into Kniferoll Markdown
+ *
+ * @param input - Text to process
+ * @param options - Options for both stages
+ * @returns Import result with combined metrics
+ */
+async function importRecipeTextTwoStage(
+  input: InferenceInput,
+  options?: ImportOptions & { formatModel?: string }
+): Promise<ImportResult & { twoStageMetrics?: TwoStageMetrics; extractedJson?: string }> {
+  // Stage 1: Extract structured JSON from text
+  const extractResult = await extractRecipeFromText(input, options);
+
+  // Stage 2: Format into Kniferoll Markdown
+  const formatOptions: ImportOptions = {
+    ...options,
+    model: options?.formatModel ?? DEFAULT_FORMAT_MODEL,
+  };
+  const formatResult = await formatRecipe(extractResult.rawJson, formatOptions);
+
+  // Combine metrics
+  let twoStageMetrics: TwoStageMetrics | undefined;
+  if (extractResult.metrics && formatResult.metrics) {
+    twoStageMetrics = {
+      extract: extractResult.metrics,
+      format: formatResult.metrics,
+      totalDurationMs: extractResult.metrics.durationMs + formatResult.metrics.durationMs,
+      totalInputTokens: extractResult.metrics.inputTokens + formatResult.metrics.inputTokens,
+      totalOutputTokens: extractResult.metrics.outputTokens + formatResult.metrics.outputTokens,
+    };
+  }
+
+  return {
+    markdown: formatResult.markdown,
+    model: extractResult.model,
+    metrics: twoStageMetrics ? {
+      durationMs: twoStageMetrics.totalDurationMs,
+      inputTokens: twoStageMetrics.totalInputTokens,
+      outputTokens: twoStageMetrics.totalOutputTokens,
+    } : undefined,
+    twoStageMetrics,
+    extractedJson: extractResult.rawJson,
   };
 }
 
