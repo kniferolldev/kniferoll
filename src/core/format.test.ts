@@ -43,7 +43,7 @@ test("formatQuantity preserves unknown units", () => {
 test("formatQuantity can choose preferred unit automatically", () => {
   const q = quantity("12 tsp");
   const scaled = scaleQuantity(q, 5);
-  expect(formatQuantity(q, { scaled, usePreferredUnit: true })).toBe("1¼ cup");
+  expect(formatQuantity(q, { scaled, usePreferredUnit: true })).toBe("1¼ cups");
 });
 
 test("formatQuantity handles metric promotion", () => {
@@ -102,7 +102,7 @@ test("formatQuantity returns raw text for unscaled compound", () => {
 test("formatQuantity formats scaled compound parts independently", () => {
   const q = quantity("1 cup + 3 tbsp");
   const scaled = scaleQuantity(q, 2);
-  expect(formatQuantity(q, { scaled })).toBe("2 cup + 6 tbsp");
+  expect(formatQuantity(q, { scaled })).toBe("2 cups + 6 tbsp");
 });
 
 test("formatQuantity expands unit-only quantities when scaling", () => {

@@ -177,6 +177,107 @@ export function splitPrefix(text: string): { prefix: string; content: string } {
 }
 
 /**
+ * Rewrap an entire markdown document to a consistent line width.
+ *
+ * Steps, bullets, paragraphs, and sub-headers are unwrapped and re-wrapped
+ * with proper continuation-line indentation. Frontmatter, recipe titles (#),
+ * section headers (##), ingredient sections, and blank lines pass through
+ * unchanged.
+ */
+export function rewrapMarkdown(markdown: string, maxWidth = 80): string {
+  const lines = markdown.split("\n");
+  const result: string[] = [];
+  let inFrontmatter = false;
+  let seenFrontmatterOpen = false;
+  let inIngredients = false;
+  let blockLines: string[] = [];
+
+  const flushBlock = () => {
+    if (blockLines.length === 0) return;
+    const joined = blockLines.map((l) => l.trim()).join(" ");
+    const { prefix } = splitPrefix(joined);
+    result.push(wrapLine(joined, prefix.length, maxWidth));
+    blockLines = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Frontmatter delimiters
+    if (trimmed === "---") {
+      flushBlock();
+      if (!seenFrontmatterOpen) {
+        seenFrontmatterOpen = true;
+        inFrontmatter = true;
+      } else if (inFrontmatter) {
+        inFrontmatter = false;
+      }
+      result.push(line);
+      continue;
+    }
+    if (inFrontmatter) {
+      result.push(line);
+      continue;
+    }
+
+    // Section headers (##) — track ingredient sections
+    if (/^##\s+/.test(trimmed)) {
+      flushBlock();
+      inIngredients = /^##\s+ingredients\s*$/i.test(trimmed);
+      result.push(line);
+      continue;
+    }
+
+    // Recipe titles (#) — reset section tracking
+    if (/^#\s+/.test(trimmed) && !/^##/.test(trimmed)) {
+      flushBlock();
+      inIngredients = false;
+      result.push(line);
+      continue;
+    }
+
+    // Ingredient sections pass through unchanged
+    if (inIngredients) {
+      result.push(line);
+      continue;
+    }
+
+    // Blank lines end current block
+    if (trimmed === "") {
+      flushBlock();
+      result.push(line);
+      continue;
+    }
+
+    // Detect block starters
+    const isStep = /^\d+\.\s+/.test(trimmed);
+    const isBullet = /^[-*]\s+/.test(trimmed);
+    const isSubHeader = /^#{3,6}\s+/.test(trimmed);
+
+    if (isStep || isBullet || isSubHeader) {
+      flushBlock();
+      if (isSubHeader) {
+        // Headers don't accept continuations — emit immediately
+        const { prefix } = splitPrefix(trimmed);
+        result.push(wrapLine(trimmed, prefix.length, maxWidth));
+      } else {
+        blockLines = [trimmed];
+      }
+    } else if (blockLines.length > 0) {
+      // Continuation of current block
+      blockLines.push(trimmed);
+    } else {
+      // Start new paragraph
+      blockLines = [trimmed];
+    }
+  }
+
+  flushBlock();
+
+  return result.join("\n");
+}
+
+/**
  * Wrap text to a maximum line width, indenting continuation lines.
  *
  * The first line is kept as-is up to maxWidth. Continuation lines

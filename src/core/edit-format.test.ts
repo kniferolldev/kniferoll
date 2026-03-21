@@ -8,6 +8,7 @@ import {
   unwrapText,
   splitPrefix,
   wrapLine,
+  rewrapMarkdown,
 } from "./edit-format";
 
 describe("reconstructIngredientLine", () => {
@@ -476,6 +477,248 @@ describe("roundtrip: unwrap → edit → wrap", () => {
     const wrapped = wrapLine(prefix + content, prefix.length, 30);
     expect(wrapped).toBe(
       "1. First note item that is\n   quite long.",
+    );
+  });
+});
+
+// ─── rewrapMarkdown ─────────────────────────────────────────────
+
+describe("rewrapMarkdown", () => {
+  it("preserves frontmatter unchanged", () => {
+    const md = "---\nversion: 1\nsource: Test\n---\n\n# Recipe";
+    expect(rewrapMarkdown(md)).toBe(md);
+  });
+
+  it("preserves ingredient sections unchanged", () => {
+    const md = [
+      "# Recipe",
+      "",
+      "## Ingredients",
+      "",
+      "- flour - 2 cups, sifted",
+      "- butter - 1 stick, cold and cubed into small pieces :: sub=margarine",
+      "",
+      "## Steps",
+      "",
+      "1. Mix.",
+    ].join("\n");
+    expect(rewrapMarkdown(md)).toBe(md);
+  });
+
+  it("rewraps long steps with proper continuation indent", () => {
+    const md = [
+      "# Recipe",
+      "",
+      "## Steps",
+      "",
+      "1. Mix everything together until the dough comes together and forms a ball.",
+    ].join("\n");
+    const result = rewrapMarkdown(md, 40);
+    expect(result).toBe(
+      [
+        "# Recipe",
+        "",
+        "## Steps",
+        "",
+        "1. Mix everything together until the",
+        "   dough comes together and forms a",
+        "   ball.",
+      ].join("\n"),
+    );
+  });
+
+  it("unwraps and rewraps badly wrapped steps", () => {
+    const md = [
+      "# Recipe",
+      "",
+      "## Steps",
+      "",
+      "1. Mix everything",
+      "together until combined.",
+    ].join("\n");
+    const result = rewrapMarkdown(md, 80);
+    expect(result).toBe(
+      [
+        "# Recipe",
+        "",
+        "## Steps",
+        "",
+        "1. Mix everything together until combined.",
+      ].join("\n"),
+    );
+  });
+
+  it("rewraps properly indented continuation lines", () => {
+    const md = [
+      "1. First do this thing then",
+      "   do that other thing.",
+    ].join("\n");
+    const result = rewrapMarkdown(md, 80);
+    expect(result).toBe("1. First do this thing then do that other thing.");
+  });
+
+  it("rewraps note bullets", () => {
+    const md = [
+      "## Notes",
+      "",
+      "- This is a note that goes on for quite a while and should be wrapped properly.",
+    ].join("\n");
+    const result = rewrapMarkdown(md, 40);
+    expect(result).toBe(
+      [
+        "## Notes",
+        "",
+        "- This is a note that goes on for quite",
+        "  a while and should be wrapped",
+        "  properly.",
+      ].join("\n"),
+    );
+  });
+
+  it("rewraps intro paragraphs", () => {
+    const md = [
+      "# Recipe",
+      "",
+      "This is a long intro paragraph that describes the recipe in great detail.",
+    ].join("\n");
+    const result = rewrapMarkdown(md, 40);
+    expect(result).toBe(
+      [
+        "# Recipe",
+        "",
+        "This is a long intro paragraph that",
+        "describes the recipe in great detail.",
+      ].join("\n"),
+    );
+  });
+
+  it("joins and rewraps paragraph continuation lines", () => {
+    const md = [
+      "# Recipe",
+      "",
+      "This is a paragraph",
+      "that continues here.",
+    ].join("\n");
+    expect(rewrapMarkdown(md, 80)).toBe(
+      ["# Recipe", "", "This is a paragraph that continues here."].join("\n"),
+    );
+  });
+
+  it("preserves blank lines between blocks", () => {
+    const md = [
+      "## Steps",
+      "",
+      "1. First step.",
+      "",
+      "2. Second step.",
+    ].join("\n");
+    expect(rewrapMarkdown(md)).toBe(md);
+  });
+
+  it("handles sub-headers in notes", () => {
+    const md = [
+      "## Notes",
+      "",
+      "### Tips",
+      "",
+      "- A tip.",
+    ].join("\n");
+    expect(rewrapMarkdown(md)).toBe(md);
+  });
+
+  it("handles multiple recipes in one document", () => {
+    const md = [
+      "# Recipe One",
+      "",
+      "## Ingredients",
+      "",
+      "- flour - 2 cups",
+      "",
+      "## Steps",
+      "",
+      "1. Mix.",
+      "",
+      "# Recipe Two",
+      "",
+      "## Ingredients",
+      "",
+      "- sugar - 1 cup",
+      "",
+      "## Steps",
+      "",
+      "1. Stir.",
+    ].join("\n");
+    expect(rewrapMarkdown(md)).toBe(md);
+  });
+
+  it("does not rewrap ingredient section after second recipe title", () => {
+    const md = [
+      "# Recipe One",
+      "",
+      "## Steps",
+      "",
+      "1. Mix.",
+      "",
+      "# Recipe Two",
+      "",
+      "## Ingredients",
+      "",
+      "- butter - 1 stick, cold and cubed into small pieces :: sub=margarine",
+    ].join("\n");
+    expect(rewrapMarkdown(md)).toBe(md);
+  });
+
+  it("full document round-trip", () => {
+    const md = [
+      "---",
+      "version: 1",
+      "---",
+      "",
+      "# Test Recipe",
+      "",
+      "A short intro.",
+      "",
+      "## Ingredients",
+      "",
+      "- flour - 2 cups",
+      "- sugar - 1 cup",
+      "",
+      "## Steps",
+      "",
+      "1. Combine the flour and sugar in a large bowl and whisk until evenly distributed throughout the mixture.",
+      "2. Done.",
+      "",
+      "## Notes",
+      "",
+      "- Store in an airtight container at room temperature for up to three days or refrigerate for longer storage.",
+    ].join("\n");
+    const result = rewrapMarkdown(md, 80);
+    expect(result).toBe(
+      [
+        "---",
+        "version: 1",
+        "---",
+        "",
+        "# Test Recipe",
+        "",
+        "A short intro.",
+        "",
+        "## Ingredients",
+        "",
+        "- flour - 2 cups",
+        "- sugar - 1 cup",
+        "",
+        "## Steps",
+        "",
+        "1. Combine the flour and sugar in a large bowl and whisk until evenly",
+        "   distributed throughout the mixture.",
+        "2. Done.",
+        "",
+        "## Notes",
+        "",
+        "- Store in an airtight container at room temperature for up to three days or",
+        "  refrigerate for longer storage.",
+      ].join("\n"),
     );
   });
 });

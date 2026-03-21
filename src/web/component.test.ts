@@ -279,6 +279,38 @@ test("renderDocument renders diagnostics controls according to mode", () => {
   expect(inlineHtml).toContain('data-kr-diagnostic-severity="error"');
 });
 
+test("inline diagnostics attach to element spanning continuation lines", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  // The reference [[penne]] on line 7 is unresolved, but the notes paragraph
+  // starts on line 6. The diagnostic marker should appear on the paragraph element.
+  const markdown = [
+    "# Pasta",                                // 1
+    "## Ingredients",                          // 2
+    "- pasta - 1 lb",                          // 3
+    "## Steps",                                // 4
+    "1. Cook [[pasta]].",                      // 5
+    "## Notes",                                // 6
+    "- This is great with",                    // 7
+    "  factory-made [[penne]].",               // 8
+  ].join("\n");
+
+  const parsed = parseDocument(markdown);
+  // [[penne]] should be unresolved
+  const w0302 = parsed.diagnostics.filter((d) => d.code === "W0302");
+  expect(w0302.length).toBe(1);
+  expect(w0302[0]!.line).toBe(8);
+
+  const html = componentModule.renderDocument(parsed, { diagnosticsMode: "inline" });
+  // The notes paragraph starts at line 7 — it should have the diagnostic marker
+  // despite the diagnostic being on line 8 (a continuation line)
+  expect(html).toContain('data-kr-diagnostic-severity="warning"');
+  // The diagnostic popover should mention W0302
+  expect(html).toContain("W0302");
+});
+
 test("step references include aria-controls and focusable targets", () => {
   if (!componentModule) {
     throw new Error("Component module was not initialized");
@@ -335,14 +367,14 @@ test("KrRecipeElement responds to scale and quantity-display attributes", () => 
 
   element.setAttribute("scale", "3");
   const scaled = element.shadowRoot?.innerHTML ?? "";
-  expect(scaled).toContain('data-kr-quantity="3 cup"');
+  expect(scaled).toContain('data-kr-quantity="3 cups"');
 
   // "metric" mode shows alternate mass quantity, native in tooltip
   element.setAttribute("quantity-display", "metric");
   const metricHtml = element.shadowRoot?.innerHTML ?? "";
   expect(metricHtml).toContain('data-kr-quantity-mode="metric"');
   expect(metricHtml).toContain('data-kr-quantity="270 g"');
-  expect(metricHtml).toContain('title="3 cup"');
+  expect(metricHtml).toContain('title="3 cups"');
   expect(metricHtml).not.toContain("kr-ingredient__quantity-secondary");
 
   element.setAttribute("layout", "two-column");
@@ -388,7 +420,7 @@ test("renderDocument applies scale factor and alternate quantity display", () =>
 
   const parsed = parseDocument(markdown);
   const scaledHtml = componentModule.renderDocument(parsed, { scaleFactor: 2 });
-  expect(scaledHtml).toContain('data-kr-quantity="2 cup"');
+  expect(scaledHtml).toContain('data-kr-quantity="2 cups"');
   expect(scaledHtml).toContain('data-kr-quantity-mode="native"');
 
   const altHtml = componentModule.renderDocument(parsed, {
@@ -889,7 +921,7 @@ test("imperial quantity-display prefers non-metric also values", () => {
     quantityDisplay: "imperial",
   });
   expect(html).toContain('data-kr-quantity-mode="imperial"');
-  expect(html).toContain('data-kr-quantity="4 cup"');
+  expect(html).toContain('data-kr-quantity="4 cups"');
   expect(html).toContain('title="500 g"');
 });
 

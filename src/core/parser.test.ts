@@ -285,6 +285,45 @@ test("missing reference target emits W0302", () => {
   expect(byCode(result.diagnostics, "W0302").length).toBe(1);
 });
 
+test("W0302 reports correct line for reference on continuation line of multi-line step", () => {
+  const input = [
+    "# Salsa",                               // 1
+    "## Ingredients",                         // 2
+    "- serrano chiles - 2",                   // 3
+    "## Steps",                               // 4
+    "1. Add the",                             // 5
+    "   [[chiles -> serrano chiles]] and",    // 6
+    "   roast. Remove the",                   // 7
+    "   [[serrano chiles -> chiles]].",       // 8
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const w0302 = byCode(result.diagnostics, "W0302");
+  expect(w0302.length).toBe(1);
+  expect(w0302[0]!.line).toBe(8);
+});
+
+test("W0302 reports correct line for reference on continuation line in notes", () => {
+  const input = [
+    "# Pasta",                                  // 1
+    "## Ingredients",                            // 2
+    "- pasta - 1 lb",                            // 3
+    "## Steps",                                  // 4
+    "1. Cook [[pasta]].",                        // 5
+    "## Notes",                                  // 6
+    "- This is great with",                      // 7
+    "  factory-made [[penne]]",                  // 8
+    "  or [[rigatoni]].",                         // 9
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const w0302 = byCode(result.diagnostics, "W0302");
+  // [[penne]] on line 8 and [[rigatoni]] on line 9 are unresolved
+  expect(w0302.length).toBe(2);
+  expect(w0302[0]!.line).toBe(8);
+  expect(w0302[1]!.line).toBe(9);
+});
+
 test("malformed reference emits W0303", () => {
   const input = [
     "# Cake",
@@ -479,6 +518,34 @@ test("inline value token indices correct after multi-line continuation", () => {
     const extracted = notesLine.content.slice(token.index, token.index + token.raw.length);
     expect(extracted).toBe(token.raw);
   }
+});
+
+test("inline value line numbers correct on continuation lines in notes", () => {
+  const input = [
+    "# Cake",                            // 1
+    "## Ingredients",                     // 2
+    "- flour - 200 g",                    // 3
+    "## Steps",                           // 4
+    "1. Bake at {350F}.",                 // 5
+    "## Notes",                           // 6
+    "- Use {1 1/2 cups} of flour",        // 7
+    "  and bake at {375F}",               // 8
+    "  for about {45 min}.",              // 9
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const stepTemp = result.inlineValues.find((t) => t.line === 5);
+  expect(stepTemp).toBeDefined();
+  expect(stepTemp!.raw).toBe("{350F}");
+
+  const notesQty = result.inlineValues.find((t) => t.raw === "{1 1/2 cups}");
+  expect(notesQty!.line).toBe(7);
+
+  const notesTemp = result.inlineValues.find((t) => t.raw === "{375F}");
+  expect(notesTemp!.line).toBe(8);
+
+  const notesTimer = result.inlineValues.find((t) => t.raw === "{45 min}");
+  expect(notesTimer!.line).toBe(9);
 });
 
 test("same ingredient name in different recipes does not conflict", () => {

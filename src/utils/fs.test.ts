@@ -57,6 +57,14 @@ describe("slugify", () => {
     expect(slugify("Pasta e Fagioli")).toBe("pasta-e-fagioli");
   });
 
+  test("normalizes unicode characters", () => {
+    expect(slugify("Bo Ssäm")).toBe("bo-ssam");
+    expect(slugify("Danish Rye Bread (Rågbrød)")).toBe("danish-rye-bread-ragbrod");
+    expect(slugify("Smørrebrød")).toBe("smorrebrod");
+    expect(slugify("Jalapeño Poppers")).toBe("jalapeno-poppers");
+    expect(slugify("Crème Brûlée")).toBe("creme-brulee");
+  });
+
   test("handles empty string", () => {
     expect(slugify("")).toBe("");
   });

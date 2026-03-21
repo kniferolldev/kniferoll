@@ -67,6 +67,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
   define({
     canonical: "cup",
     display: "cup",
+    pluralDisplay: "cups",
     aliases: ["cup", "cups"],
     dimension: "volume",
     rounding: { increment: 0.25, precision: 2 },
@@ -125,6 +126,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
   define({
     canonical: "recipe",
     display: "recipe",
+    pluralDisplay: "recipes",
     aliases: ["recipe", "recipes"],
     dimension: "other",
     rounding: { increment: 0.5 },
@@ -132,6 +134,7 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
   define({
     canonical: "batch",
     display: "batch",
+    pluralDisplay: "batches",
     aliases: ["batch", "batches"],
     dimension: "other",
     rounding: { increment: 0.5 },

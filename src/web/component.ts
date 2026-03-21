@@ -194,35 +194,58 @@ const renderTextBlocks = (
   targetMeta?: Map<string, TargetInfo>,
   diffSection?: "intro" | "notes",
 ): string => {
-  const renderInlineDiag = (lineNum: number) => {
+  const renderInlineDiag = (lineNum: number, lineSpans?: [number, number][]) => {
     if (!options || options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
       return null;
     }
-    const diagnostics = options.diagnosticsMap.get(lineNum);
-    if (!diagnostics?.length) return null;
-    const severity = diagnostics.some((d) => d.code.startsWith("E"))
+    // Collect diagnostics from all lines the block spans
+    const allDiagnostics: Diagnostic[] = [];
+    const baseDiags = options.diagnosticsMap.get(lineNum);
+    if (baseDiags) allDiagnostics.push(...baseDiags);
+    if (lineSpans) {
+      for (const [, spanLine] of lineSpans) {
+        if (spanLine === lineNum) continue;
+        const spanDiags = options.diagnosticsMap.get(spanLine);
+        if (spanDiags) allDiagnostics.push(...spanDiags);
+      }
+    }
+    if (allDiagnostics.length === 0) return null;
+    const severity = allDiagnostics.some((d) => d.code.startsWith("E"))
       ? "error"
       : "warning";
     const controlsId = options.nextDiagnosticId?.() ?? `diag-${lineNum}`;
-    const popover = `<div class="kr-diagnostic-popover" id="${escapeAttr(controlsId)}" popover="auto">${diagnostics
+    const popover = `<span class="kr-diagnostic-popover" id="${escapeAttr(controlsId)}" role="status" hidden>${allDiagnostics
       .map(
         (d) =>
-          `<div class="kr-diagnostic-popover__item kr-diagnostic-popover__item--${d.code.startsWith("E") ? "error" : "warning"}">${escapeHtml(d.message)}</div>`,
+          `<span class="kr-diagnostic-popover__item kr-diagnostic-popover__item--${d.code.startsWith("E") ? "error" : "warning"}">${escapeHtml(d.message)}</span>`,
       )
-      .join("")}</div>`;
+      .join("")}</span>`;
     return { severity, controlsId, popover };
   };
 
   const renderInline = (block: TextBlock): string => {
     if (inlineValuesByLine && options) {
-      const lineTokens = inlineValuesByLine.get(block.line) ?? [];
+      const lineTokens: DocumentInlineValueAny[] = [];
+      if (block.lineSpans) {
+        // Gather tokens from all spanned lines
+        const seen = new Set<number>();
+        for (const [, spanLine] of block.lineSpans) {
+          if (seen.has(spanLine)) continue;
+          seen.add(spanLine);
+          const tokens = inlineValuesByLine.get(spanLine);
+          if (tokens) lineTokens.push(...tokens);
+        }
+      } else {
+        const tokens = inlineValuesByLine.get(block.line);
+        if (tokens) lineTokens.push(...tokens);
+      }
       return renderNotesInline(block.content, lineTokens, options, targetMeta);
     }
     return renderMarkdownInline(block.content);
   };
 
-  const diagAttrs = (lineNum: number) => {
-    const diag = renderInlineDiag(lineNum);
+  const diagAttrs = (lineNum: number, lineSpans?: [number, number][]) => {
+    const diag = renderInlineDiag(lineNum, lineSpans);
     if (!diag) return { cls: "", attr: "", content: "" };
     return {
       cls: " kr-diagnostic-target",
@@ -264,7 +287,7 @@ const renderTextBlocks = (
       const items: string[] = [];
       while (i < blocks.length && blocks[i]!.kind === block.kind) {
         const item = blocks[i]!;
-        const d = diagAttrs(item.line);
+        const d = diagAttrs(item.line, item.lineSpans);
         const content = renderBlockContent(item, i);
         items.push(`<li class="${cls.listItem}${d.cls}" data-kr-line="${item.line}"${d.attr}>${d.content}${content}</li>`);
         i++;
@@ -274,7 +297,7 @@ const renderTextBlocks = (
     }
 
     // paragraph
-    const d = diagAttrs(block.line);
+    const d = diagAttrs(block.line, block.lineSpans);
     const content = renderBlockContent(block, i);
     parts.push(`<p class="${cls.paragraph}${d.cls}" data-kr-line="${block.line}"${d.attr}>${d.content}${content}</p>`);
     i++;
@@ -625,22 +648,34 @@ const renderDiagnosticsSection = (diagnostics: Diagnostic[], mode: DiagnosticsMo
 const renderInlineDiagnostics = (
   lineNumber: number,
   options: RenderOptions,
+  lineSpans?: [number, number][],
 ): { popover: string; severity: "error" | "warning"; controlsId: string } | null => {
   if (options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
     return null;
   }
 
+  // Collect diagnostics from all lines this element spans
+  const allDiagnostics: Diagnostic[] = [];
   const diagnostics = options.diagnosticsMap.get(lineNumber);
-  if (!diagnostics || diagnostics.length === 0) {
+  if (diagnostics) allDiagnostics.push(...diagnostics);
+  if (lineSpans) {
+    for (const [, spanLine] of lineSpans) {
+      if (spanLine === lineNumber) continue;
+      const spanDiags = options.diagnosticsMap.get(spanLine);
+      if (spanDiags) allDiagnostics.push(...spanDiags);
+    }
+  }
+
+  if (allDiagnostics.length === 0) {
     return null;
   }
 
-  const severity = diagnostics.some((diag) => diag.severity === "error") ? "error" : "warning";
+  const severity = allDiagnostics.some((diag) => diag.severity === "error") ? "error" : "warning";
   const markerId = options.nextDiagnosticId
     ? options.nextDiagnosticId()
     : `kr-diagnostic-${lineNumber}-${Math.random().toString(36).slice(2)}`;
 
-  const items = diagnostics
+  const items = allDiagnostics
     .map(
       (diag) =>
         `<span class="kr-diagnostic-popover__item"><strong>${escapeHtml(diag.code)}</strong> ${escapeHtml(diag.message)}</span>`,
@@ -916,7 +951,7 @@ const renderStepLine = (
     parts.push(renderMarkdownInline(remainder));
   }
 
-  const inlineDiagnostics = renderInlineDiagnostics(line.line, options);
+  const inlineDiagnostics = renderInlineDiagnostics(line.line, options, line.lineSpans);
   const diagnosticClass = inlineDiagnostics ? " kr-diagnostic-target" : "";
   const diagnosticAttr = inlineDiagnostics
     ? ` data-kr-diagnostic-severity="${inlineDiagnostics.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiagnostics.controlsId)}" tabindex="0"`
@@ -1127,10 +1162,24 @@ const renderStepsSection = (
       const stepMatch = STEP_NUMBER_PATTERN.exec(fullText);
       const currentStepIndex = stepMatch ? stepIndex++ : null;
       const currentDiffIndex = isEmpty ? undefined : nonEmptyIndex++;
+      // Gather tokens from all lines this step spans
+      let lineTokens: DocumentInlineValueAny[];
+      if (line.lineSpans) {
+        lineTokens = [];
+        const seen = new Set<number>();
+        for (const [, spanLine] of line.lineSpans) {
+          if (seen.has(spanLine)) continue;
+          seen.add(spanLine);
+          const tokens = inlineValuesByLine.get(spanLine);
+          if (tokens) lineTokens.push(...tokens);
+        }
+      } else {
+        lineTokens = inlineValuesByLine.get(line.line) ?? [];
+      }
       return renderStepLine(
         line,
         targetMeta,
-        inlineValuesByLine.get(line.line) ?? [],
+        lineTokens,
         { recipeId: recipe.id, recipeTitle: recipe.title },
         options,
         currentStepIndex,
@@ -2226,6 +2275,25 @@ export class KrRecipeElement extends HTMLElement {
     root.addEventListener("click", () => {
       closeAll();
     });
+
+    // Make diagnostic list items clickable to emit kr:diagnostic-click
+    const listItems = Array.from(
+      root.querySelectorAll<HTMLElement>(".kr-diagnostics__item[data-kr-line]"),
+    );
+    for (const item of listItems) {
+      item.style.cursor = "pointer";
+      item.addEventListener("click", () => {
+        const line = parseInt(item.dataset.krLine ?? "", 10);
+        if (!isNaN(line)) {
+          this.dispatchEvent(
+            new CustomEvent("kr:diagnostic-click", {
+              detail: { line },
+              bubbles: true,
+            }),
+          );
+        }
+      });
+    }
   }
 
 
@@ -2497,8 +2565,13 @@ export interface KrRecipeContentChangeDetail {
   markdown: string;
 }
 
+export interface KrRecipeDiagnosticClickDetail {
+  line: number;
+}
+
 export interface KrRecipeEventMap extends HTMLElementEventMap {
   "kr:content-change": CustomEvent<KrRecipeContentChangeDetail>;
+  "kr:diagnostic-click": CustomEvent<KrRecipeDiagnosticClickDetail>;
 }
 
 /** Merge typed addEventListener/removeEventListener onto the class. */

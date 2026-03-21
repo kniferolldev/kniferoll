@@ -48,6 +48,17 @@ const warning = (code: string, message: string, line: number): Diagnostic => ({
   column: 1,
 });
 
+/** Resolve the source line number for a character offset within a reflowed SectionLine. */
+const resolveLineAt = (line: Pick<SectionLine, "line" | "lineSpans">, offset: number): number => {
+  if (!line.lineSpans) return line.line;
+  let resolved = line.line;
+  for (const [spanOffset, spanLine] of line.lineSpans) {
+    if (spanOffset > offset) break;
+    resolved = spanLine;
+  }
+  return resolved;
+};
+
 const isHeadingLine = (line: string): boolean => {
   const trimmed = line.trim();
   return /^#{1,6}\s+/.test(trimmed);
@@ -92,10 +103,14 @@ const unwrapStepLines = (lines: SectionLine[]): SectionLine[] => {
 
     // If there's a current step, join this line to it (reflow)
     if (current) {
+      const spans: [number, number][] = current.lineSpans ?? [[0, current.line]];
+      const newOffset = current.content.length + 1; // +1 for the joining space
+      spans.push([newOffset, line.line]);
       current = {
         text: current.text + " " + trimmed,
         content: current.content + " " + trimmed,
         line: current.line, // Keep the line number of the step start
+        lineSpans: spans,
       };
       continue;
     }
@@ -193,10 +208,14 @@ const unwrapTextBlocks = (lines: SectionLine[]): TextBlock[] => {
 
     // Continuation line — join to current block
     if (current) {
+      const spans: [number, number][] = current.lineSpans ?? [[0, current.line]];
+      const newOffset = current.content.length + 1; // +1 for the joining space
+      spans.push([newOffset, line.line]);
       current = {
         ...current,
         text: current.text + " " + trimmed,
         content: current.content + " " + trimmed,
+        lineSpans: spans,
       };
       continue;
     }
@@ -533,7 +552,7 @@ export const parseDocument = (
   const referencePattern = /\[\[([^[\]]+)\]\]/g;
 
   const extractProseTokens = (
-    lines: { content: string; line: number }[],
+    lines: Pick<SectionLine, "content" | "line" | "lineSpans">[],
     label: string,
     recipe: Recipe,
   ) => {
@@ -545,16 +564,17 @@ export const parseDocument = (
           warning(
             "W0402",
             `Unknown inline value "${bad.raw}" in ${label} for recipe "${recipe.title}".`,
-            line.line,
+            resolveLineAt(line, bad.index),
           ),
         );
       }
 
       for (const token of extractedTokens) {
+        const tokenLine = resolveLineAt(line, token.index);
         if (token.kind === "temperature") {
           inlineValues.push({
             ...token,
-            line: line.line,
+            line: tokenLine,
             column: token.index + 1,
             recipeId: recipe.id,
             recipeTitle: recipe.title,
@@ -562,7 +582,7 @@ export const parseDocument = (
         } else {
           inlineValues.push({
             ...token,
-            line: line.line,
+            line: tokenLine,
             column: token.index + 1,
             recipeId: recipe.id,
             recipeTitle: recipe.title,
@@ -590,7 +610,7 @@ export const parseDocument = (
                 error(
                   "E0208",
                   "Multiple alternates in the same unit system.",
-                  line.line,
+                  tokenLine,
                 ),
               );
             }
@@ -603,6 +623,7 @@ export const parseDocument = (
       while ((match = referencePattern.exec(line.content)) !== null) {
         const innerRaw = match[1]?.trim() ?? "";
         const column = match.index + 1;
+        const resolvedLine = resolveLineAt(line, match.index);
         let display: string | undefined;
         let target: string | undefined;
 
@@ -612,7 +633,7 @@ export const parseDocument = (
           target = slug(innerRaw.slice(arrowIndex + 2).trim());
           if (!display || !target) {
             diagnostics.push(
-              warning("W0303", `Malformed reference token ${match[0]}.`, line.line),
+              warning("W0303", `Malformed reference token ${match[0]}.`, resolvedLine),
             );
             continue;
           }
@@ -620,7 +641,7 @@ export const parseDocument = (
           target = slug(innerRaw);
           if (!target) {
             diagnostics.push(
-              warning("W0303", `Malformed reference token ${match[0]}.`, line.line),
+              warning("W0303", `Malformed reference token ${match[0]}.`, resolvedLine),
             );
             continue;
           }
@@ -631,7 +652,7 @@ export const parseDocument = (
           display,
           target,
           recipeId: recipe.id,
-          line: line.line,
+          line: resolvedLine,
           column,
         });
       }

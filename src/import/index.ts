@@ -31,10 +31,6 @@
 // Main functions
 export { importRecipe, extractRecipe, extractRecipeFromText, formatRecipe, importRecipeTwoStage } from "./infer";
 
-// LLM convenience wrapper (for doctor-handler and other simple callers)
-export { callLlm } from "./call-llm";
-export type { CallLlmContent, CallLlmApiKeys } from "./call-llm";
-
 // Image rotation
 export { rotateImage } from "./rotate";
 export type { RotationAngle } from "./rotate";

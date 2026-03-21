@@ -128,6 +128,17 @@ const toUnitMatch = (
   } satisfies UnitMatch;
 };
 
+const pluralizeUnit = (
+  unit: UnitMatch | null,
+  value: number,
+  fallback: string | null,
+): string => {
+  if (unit?.pluralDisplay && Math.abs(value) > 1) {
+    return unit.pluralDisplay;
+  }
+  return unit?.matched ?? fallback ?? "";
+};
+
 const formatQuantitySingle = (
   quantity: QuantitySingle | ScaledQuantitySingle,
   sourceUnit: UnitMatch | null,
@@ -138,7 +149,9 @@ const formatQuantitySingle = (
   const rawValue = "scaledValue" in quantity ? quantity.scaledValue : (quantity as QuantitySingle).value;
   const targetUnit = displayUnit ?? sourceUnit;
   const value = convertValue(rawValue, sourceUnit, targetUnit);
-  const unit = targetUnit?.matched ?? originalUnit ?? quantity.unit ?? "";
+  const unit = targetUnit
+    ? pluralizeUnit(targetUnit, value, originalUnit ?? quantity.unit)
+    : originalUnit ?? quantity.unit ?? "";
   const formattedNumber = formatNumber(value, targetUnit ?? sourceUnit, allowFractions);
   return unit ? `${formattedNumber} ${unit}`.trim() : formattedNumber;
 };
@@ -155,7 +168,10 @@ const formatQuantityRange = (
   const targetUnit = displayUnit ?? sourceUnit;
   const min = convertValue(rawMin, sourceUnit, targetUnit);
   const max = convertValue(rawMax, sourceUnit, targetUnit);
-  const unit = targetUnit?.matched ?? originalUnit ?? quantity.unit ?? "";
+  // Ranges are always plural (a range implies quantity > 1)
+  const unit = targetUnit
+    ? pluralizeUnit(targetUnit, max, originalUnit ?? quantity.unit)
+    : originalUnit ?? quantity.unit ?? "";
   const formattedMin = formatNumber(min, targetUnit ?? sourceUnit, allowFractions);
   const formattedMax = formatNumber(max, targetUnit ?? sourceUnit, allowFractions);
   return unit ? `${formattedMin}-${formattedMax} ${unit}`.trim() : `${formattedMin}-${formattedMax}`;

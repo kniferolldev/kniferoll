@@ -22,6 +22,8 @@ export interface RoundingProfile {
 export interface UnitDefinition {
   canonical: string;
   display: string;
+  /** Plural form for display (e.g. "cups"). Only needed for units whose display form changes with count. */
+  pluralDisplay?: string;
   aliases: readonly string[];
   dimension: UnitDimension;
   rounding: RoundingProfile;
@@ -95,6 +97,12 @@ export interface SectionLine {
   /** Display content with list/step prefix stripped. Tokens are indexed against this. */
   content: string;
   line: number;
+  /**
+   * When a step spans multiple source lines (after reflow), maps character
+   * offsets in `content` to their original source line numbers.
+   * Each entry is [charOffset, sourceLine]. Sorted by charOffset ascending.
+   */
+  lineSpans?: [number, number][];
 }
 
 export interface TextBlock extends SectionLine {
