@@ -189,6 +189,11 @@ const parseIngredientLine = (
           continue;
         }
 
+        if (token === "anchor") {
+          attributes.push({ key: "anchor", value: null });
+          continue;
+        }
+
         diagnostics.push(
           error(
             "E0203",
@@ -246,6 +251,8 @@ const parseIngredientLine = (
         }
       } else if (key === "noscale") {
         hasNoscale = true;
+        attribute.value = null;
+      } else if (key === "anchor") {
         attribute.value = null;
       } else {
         diagnostics.push(

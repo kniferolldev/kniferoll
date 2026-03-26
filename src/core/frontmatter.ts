@@ -6,7 +6,6 @@ import type {
   Frontmatter,
   FrontmatterParseResult,
   ParseOptions,
-  Quantity,
   ScalePreset,
   Source,
   UrlSource,
@@ -315,56 +314,6 @@ const normalizeScales = (
   return presets;
 };
 
-const normalizeYield = (
-  value: unknown,
-  diagnostics: Diagnostic[],
-): Quantity | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  // YAML may parse a unitless yield (e.g. `yield: 4`) as a number
-  const yieldStr =
-    typeof value === "number" && Number.isFinite(value)
-      ? String(value)
-      : typeof value === "string"
-        ? value
-        : null;
-
-  if (!yieldStr || yieldStr.trim().length === 0) {
-    diagnostics.push(
-      error(
-        "E0003",
-        'Frontmatter yield must be a quantity string (e.g. "12 cookies").',
-      ),
-    );
-    return undefined;
-  }
-
-  // Must start with a digit or vulgar fraction — reject bare text
-  if (!/^\d|^[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/.test(yieldStr.trim())) {
-    diagnostics.push(
-      error(
-        "E0003",
-        `Frontmatter yield "${yieldStr}" is not a valid quantity.`,
-      ),
-    );
-    return undefined;
-  }
-
-  const quantityResult = parseQuantity(yieldStr, {
-    line: 1,
-    invalid: {
-      code: "E0003",
-      message: `Frontmatter yield "${yieldStr}" is not a valid quantity.`,
-    },
-  });
-  if (quantityResult.diagnostics.length > 0) {
-    diagnostics.push(...quantityResult.diagnostics);
-  }
-  return quantityResult.quantity ?? undefined;
-};
-
 const FRONTMATTER_PATTERN = /^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/;
 
 export const extractFrontmatter = (
@@ -438,11 +387,6 @@ export const extractFrontmatter = (
     frontmatter.scales = scales;
   }
 
-  const yieldQuantity = normalizeYield(record.yield, diagnostics);
-  if (yieldQuantity) {
-    frontmatter.yield = yieldQuantity;
-  }
-
   const hasError = diagnostics.some((diag) => diag.severity === "error");
   return {
     frontmatter: hasError ? null : (frontmatter as Frontmatter),
@@ -461,10 +405,6 @@ export const serializeFrontmatter = (fm: Frontmatter): string => {
 
   if (fm.source) {
     lines.push(`source: ${serializeSource(fm.source)}`);
-  }
-
-  if (fm.yield) {
-    lines.push(`yield: ${fm.yield.raw}`);
   }
 
   if (fm.scales && fm.scales.length > 0) {

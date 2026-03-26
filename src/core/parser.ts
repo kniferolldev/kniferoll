@@ -546,6 +546,43 @@ export const parseDocument = (
       const qualifiedId = `${recipe.id}/${ingredient.id}`;
       registerId(qualifiedId, "ingredient", ingredient.line, ingredient.name);
     }
+
+    // Anchor attribute validation
+    const anchorIngredients = recipe.ingredients.ingredients.filter(
+      (ing) => ing.attributes.some((attr) => attr.key === "anchor"),
+    );
+
+    if (anchorIngredients.length > 1) {
+      for (const ing of anchorIngredients.slice(1)) {
+        diagnostics.push(
+          error(
+            "E0209",
+            `Recipe "${recipe.title}" has multiple anchor ingredients; at most one is allowed.`,
+            ing.line,
+          ),
+        );
+      }
+    }
+
+    for (const ing of anchorIngredients) {
+      if (!ing.quantity) {
+        diagnostics.push(
+          error(
+            "E0210",
+            `Anchor ingredient "${ing.name}" must have a quantity.`,
+            ing.line,
+          ),
+        );
+      } else if (ing.quantity.kind !== "single") {
+        diagnostics.push(
+          error(
+            "E0211",
+            `Anchor ingredient "${ing.name}" must have a single quantity (not ${ing.quantity.kind}).`,
+            ing.line,
+          ),
+        );
+      }
+    }
   }
 
   // Token and reference extraction from prose sections

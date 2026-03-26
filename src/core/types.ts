@@ -79,7 +79,6 @@ export interface Frontmatter {
   version: number;
   source?: Source;
   scales?: ScalePreset[];
-  yield?: Quantity;
 }
 
 export interface ParseOptions {

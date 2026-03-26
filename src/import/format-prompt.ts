@@ -47,12 +47,17 @@ CONVERSION GUIDELINES:
    The original measurement stays in the quantity; the alternate goes to \`also=\`.
    Example: source says "1/2 stick (4 tablespoons) butter" →
    \`- butter - 1/2 stick :: also="4 tbsp"\`.
-5. Do NOT tag times or durations with \`{}\`. Only temperatures and scalable amounts get
+5. When a recipe defines quantities relative to a variable-weight base ingredient
+   (e.g., "2% salt by weight of cabbage", "salt to 3% of the meat"), mark the base
+   ingredient with \`:: anchor\`. Express all quantities as concrete values computed
+   from a reasonable default weight. Example: a sauerkraut recipe using 2% salt →
+   \`- cabbage - 1000 g :: anchor\` and \`- salt - 20 g\`.
+6. Do NOT tag times or durations with \`{}\`. Only temperatures and scalable amounts get
    curly-brace markup. Wrong: \`rest for {1 hour}\`. Right: \`rest for 1 hour\`.
-6. Use natural ingredient names in references — \`[[butter]]\`,
+7. Use natural ingredient names in references — \`[[butter]]\`,
    \`[[all-purpose flour]]\`, not slugified forms like \`[[all-purpose-flour]]\`.
    The reference matching is flexible with case, spacing, and punctuation.
-7. INGREDIENT REFERENCES — the syntax is \`[[TEXT_IN_STEP -> NAME_IN_LIST]]\`:
+8. INGREDIENT REFERENCES — the syntax is \`[[TEXT_IN_STEP -> NAME_IN_LIST]]\`:
    - LEFT of \`->\` = the exact word as it appears in the step prose
    - RIGHT of \`->\` = the full ingredient name, copy-pasted from the \`- name\` line
 
@@ -81,19 +86,19 @@ CONVERSION GUIDELINES:
    Each name between commas is matched to an ingredient independently.
    Do NOT invent collective refs when the original lists ingredients
    individually — \`flour, sugar, and eggs\` should stay as separate refs.
-8. Reference each ingredient AT MOST ONCE per step — on its first meaningful
+9. Reference each ingredient AT MOST ONCE per step — on its first meaningful
    mention. Do not re-reference the same ingredient later in the same step.
    After the first reference in the recipe, use plain text (no brackets) for
    subsequent mentions where context is clear.
-9. The \`## Ingredients\` section must be a FLAT list of \`- name\` lines.
+10. The \`## Ingredients\` section must be a FLAT list of \`- name\` lines.
    Do NOT use H3 subsection headers (\`### ...\`) inside \`## Ingredients\`.
    If the source has subsections (e.g. "For the sauce", "Scald", "Accompaniments"),
    just list all ingredients in order without headers.
    Ingredient names must be unique within a recipe — never repeat the same name.
-10. Modifiers (", finely diced") MUST come BEFORE the \`::\` attribute separator.
+11. Modifiers (", finely diced") MUST come BEFORE the \`::\` attribute separator.
     WRONG: \`- carrots - 2 bunches :: also="1 lb", peeled and chopped\`
     RIGHT: \`- carrots - 2 bunches, peeled and chopped :: also="1 lb"\`
-11. Multi-recipe documents: when the source has NAMED components with their own
+12. Multi-recipe documents: when the source has NAMED components with their own
     ingredient list, create a separate \`# Title\` block for each with its own
     \`## Ingredients\` and \`## Steps\`. This includes sauces, dressings,
     vinaigrettes, pickles, brittles, toppings, spice blends — anything with its
@@ -114,7 +119,7 @@ CONVERSION GUIDELINES:
     Do NOT split preparation stages (scald, brine, day-1 prep) into sub-recipes.
     These are steps within the same recipe — keep all their ingredients in one
     flat list and their instructions in one \`## Steps\` section.
-12. When "salt and pepper" are listed together as a single seasoning line
+13. When "salt and pepper" are listed together as a single seasoning line
     (e.g., "salt and pepper, to taste"), split them into separate ingredient lines:
     \`- salt, to taste\` and \`- pepper, to taste\`.
 

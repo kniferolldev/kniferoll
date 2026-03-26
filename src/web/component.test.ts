@@ -1783,78 +1783,100 @@ Serve warm.`;
   });
 });
 
-// ── yield rendering ────────────────────────────────────────────────
+// ── anchor auto-activation ─────────────────────────────────────────────
 
-test("renderDocument renders yield in header", () => {
-  if (!componentModule) throw new Error("Component module was not initialized");
+test("anchor attribute auto-activates scale-by-ingredient mode", () => {
+  if (!componentModule) throw new Error("Module not loaded");
 
-  const markdown = [
-    "---",
-    "version: 1",
-    "yield: 12 cookies",
-    "---",
-    "",
-    "# Cookies",
-    "",
+  const { KrRecipeElement } = componentModule;
+  const element = new KrRecipeElement();
+  element.content = [
+    "# Sauerkraut",
     "## Ingredients",
-    "",
-    "- flour - 2 cups",
-    "",
+    "- cabbage - 1000 g :: anchor",
+    "- salt - 20 g",
     "## Steps",
-    "",
-    "1. Mix.",
+    "1. Shred [[cabbage]], mix with [[salt]].",
   ].join("\n");
 
-  const html = componentModule.renderDocument(parseDocument(markdown));
-  expect(html).toContain('class="kr-yield"');
-  expect(html).toContain("12 cookies");
+  element.connectedCallback();
+
+  const html = element.shadowRoot?.innerHTML ?? "";
+  // The anchor ingredient should be rendered with anchor mode active
+  // (data-kr-scaled won't appear since factor is 1× with default amount,
+  //  but the anchor icon/class should be present in the scale bar state)
+  expect(html).toContain('data-kr-id="cabbage"');
+  expect(html).toContain('data-kr-id="salt"');
+  // Scale factor should be 1 (anchor amount matches default)
+  expect(html).toContain('data-kr-scale="1"');
 });
 
-test("renderDocument scales yield when scale factor applied", () => {
-  if (!componentModule) throw new Error("Component module was not initialized");
+test("scale=2 on anchor recipe stays in anchor mode", () => {
+  if (!componentModule) throw new Error("Module not loaded");
 
-  const markdown = [
-    "---",
-    "version: 1",
-    "yield: 12 cookies",
-    "---",
-    "",
-    "# Cookies",
-    "",
+  const { KrRecipeElement } = componentModule;
+  const element = new KrRecipeElement();
+  element.content = [
+    "# Sauerkraut",
     "## Ingredients",
-    "",
-    "- flour - 2 cups",
-    "",
+    "- cabbage - 1000 g :: anchor",
+    "- salt - 20 g",
     "## Steps",
-    "",
     "1. Mix.",
   ].join("\n");
 
-  const html = componentModule.renderDocument(parseDocument(markdown), { scaleFactor: 2 });
-  expect(html).toContain('class="kr-yield"');
-  expect(html).toContain("24 cookies");
-  expect(html).toContain('title="12 cookies"');
+  // Capture scale-change events to verify mode
+  const events: { factor: number; mode: string; anchorId?: string }[] = [];
+  element.addEventListener("kr:scale-change", ((e: CustomEvent) => {
+    events.push(e.detail);
+  }) as EventListener);
+
+  element.setAttribute("scale", "2");
+  element.connectedCallback();
+
+  const html = element.shadowRoot?.innerHTML ?? "";
+  expect(html).toContain('data-kr-quantity="2000 g"');
+  expect(html).toContain('data-kr-quantity="40 g"');
+  // Must be in anchor mode, not fixed mode
+  expect(events.length).toBeGreaterThan(0);
+  expect(events[events.length - 1]!.mode).toBe("by-ingredient");
+  expect(events[events.length - 1]!.anchorId).toBe("cabbage");
 });
 
-test("renderDocument does not render yield when not in frontmatter", () => {
-  if (!componentModule) throw new Error("Component module was not initialized");
+test("scale attribute changes stay in anchor mode for anchor recipes", () => {
+  if (!componentModule) throw new Error("Module not loaded");
 
-  const markdown = [
-    "---",
-    "version: 1",
-    "---",
-    "",
-    "# Cookies",
-    "",
+  const { KrRecipeElement } = componentModule;
+  const element = new KrRecipeElement();
+  element.content = [
+    "# Sauerkraut",
     "## Ingredients",
-    "",
-    "- flour - 2 cups",
-    "",
+    "- cabbage - 1000 g :: anchor",
+    "- salt - 20 g",
     "## Steps",
-    "",
     "1. Mix.",
   ].join("\n");
 
-  const html = componentModule.renderDocument(parseDocument(markdown));
-  expect(html).not.toContain('class="kr-yield"');
+  const events: { factor: number; mode: string; anchorId?: string }[] = [];
+  element.addEventListener("kr:scale-change", ((e: CustomEvent) => {
+    events.push(e.detail);
+  }) as EventListener);
+
+  element.connectedCallback();
+
+  // Simulate picking ½ scale
+  element.setAttribute("scale", "0.5");
+  const halfHtml = element.shadowRoot?.innerHTML ?? "";
+  expect(halfHtml).toContain('data-kr-quantity="500 g"');
+  expect(halfHtml).toContain('data-kr-quantity="10 g"');
+  // Must still be in anchor mode
+  const lastEvent = events[events.length - 1]!;
+  expect(lastEvent.mode).toBe("by-ingredient");
+  expect(lastEvent.anchorId).toBe("cabbage");
+
+  // Reset back to 1×
+  element.removeAttribute("scale");
+  const resetHtml = element.shadowRoot?.innerHTML ?? "";
+  expect(resetHtml).toContain('data-kr-quantity="1000 g"');
+  expect(resetHtml).toContain('data-kr-quantity="20 g"');
 });

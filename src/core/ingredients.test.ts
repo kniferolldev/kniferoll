@@ -348,3 +348,93 @@ test("also= with different systems does not emit E0208", () => {
   const { diagnostics } = getIngredientsSection(input);
   expect(diagnostics.some((d) => d.code === "E0208")).toBe(false);
 });
+
+// ── anchor attribute ──────────────────────────────────────────────────
+
+test("anchor attribute parses as bare keyword", () => {
+  const { section, diagnostics } = getIngredientsSection(
+    withRecipe(["- cabbage - 1000 g :: anchor"]),
+  );
+
+  expect(diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+  const ingredient = section.ingredients[0];
+  expect(ingredient?.attributes).toEqual([{ key: "anchor", value: null }]);
+});
+
+test("anchor=value is coerced to null like noscale", () => {
+  const { section, diagnostics } = getIngredientsSection(
+    withRecipe(["- cabbage - 1000 g :: anchor=true"]),
+  );
+
+  expect(diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+  const attr = section.ingredients[0]?.attributes.find(({ key }) => key === "anchor");
+  expect(attr).toEqual({ key: "anchor", value: null });
+});
+
+test("multiple anchors in one recipe emits E0209", () => {
+  const { diagnostics } = getIngredientsSection(
+    withRecipe([
+      "- cabbage - 1000 g :: anchor",
+      "- pork - 2 kg :: anchor",
+      "- salt - 20 g",
+    ]),
+  );
+
+  expect(diagnostics.some((d) => d.code === "E0209")).toBe(true);
+});
+
+test("anchor without quantity emits E0210", () => {
+  const { diagnostics } = getIngredientsSection(
+    withRecipe(["- cabbage :: anchor", "- salt - 20 g"]),
+  );
+
+  expect(diagnostics.some((d) => d.code === "E0210")).toBe(true);
+});
+
+test("anchor with range quantity emits E0211", () => {
+  const { diagnostics } = getIngredientsSection(
+    withRecipe(["- cabbage - 900-1100 g :: anchor", "- salt - 20 g"]),
+  );
+
+  expect(diagnostics.some((d) => d.code === "E0211")).toBe(true);
+});
+
+test("anchor with compound quantity emits E0211", () => {
+  const { diagnostics } = getIngredientsSection(
+    withRecipe(["- water - 1 cup + 3 tbsp :: anchor", "- salt - 20 g"]),
+  );
+
+  expect(diagnostics.some((d) => d.code === "E0211")).toBe(true);
+});
+
+test("single anchor with single quantity is valid", () => {
+  const { diagnostics } = getIngredientsSection(
+    withRecipe([
+      "- cabbage - 1000 g :: anchor",
+      "- salt - 20 g",
+      "- caraway seeds - 1 tsp",
+    ]),
+  );
+
+  expect(diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+});
+
+test("anchor in separate subrecipes is allowed", () => {
+  const input = [
+    "# Main",
+    "## Ingredients",
+    "- cabbage - 1000 g :: anchor",
+    "- salt - 20 g",
+    "## Steps",
+    "1. Mix [[cabbage]] and [[salt]].",
+    "# Brine",
+    "## Ingredients",
+    "- water - 1000 ml :: anchor",
+    "- salt - 30 g",
+    "## Steps",
+    "1. Dissolve [[salt]] in [[water]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+});

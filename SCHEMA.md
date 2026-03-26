@@ -109,6 +109,12 @@ H1.
 Space-separated. Values MUST be quoted if they contain spaces. Prefer double
 quotes (`"...`) for consistency.
 
+- `anchor` — marks this ingredient as the recipe's variable-weight base.
+  Renderers auto-activate scale-by-ingredient mode, presenting an editable
+  quantity input on this ingredient. Use for recipes where the base amount
+  varies (whole cuts of meat, heads of cabbage, caught fish) and other
+  quantities scale relative to it. Must have a single quantity (not a range
+  or compound). At most one per recipe.
 - `noscale` — force non-scaling even if a quantity exists. Use sparingly: it is
   unnecessary for any ingredient without an explicit quantity, since those lines
   do not scale by definition.
@@ -294,7 +300,6 @@ If present, frontmatter must be the very first content in the file (opening
 ---
 version: 1
 source: Grandma
-yield: 12 cookies
 scales:
   - name: Family size
     anchor: oats
@@ -311,10 +316,6 @@ scales:
     `{ title: <string>, author?: <string>, pages?: <number|string>, isbn?: <string>, year?: <number> }`.
     - `pages` may be a single page (e.g., `123`) or a range string (e.g.,
       `"123–125"`).
-- **yield** (optional): how much the recipe produces. Accepts any quantity
-  expression: a single amount (`12 cookies`, `2 loaves`), a range
-  (`6-8 servings`), or a compound (`1 cup + 3 tbsp`). When the recipe is
-  scaled, the yield scales proportionally.
 - **scales** (optional): named presets. Each preset names an **anchor**
   ingredient (the same way ingredients are referenced elsewhere) and a target
   **amount** (a quantity, e.g. `900 g`). When a preset is selected, renderers
@@ -341,11 +342,6 @@ source:
     title: The Superiority Burger Cookbook
     author: Brooks Headley
     pages: "112–115"
----
-
----
-version: 1
-yield: 2 loaves
 ---
 ```
 
@@ -450,4 +446,38 @@ wait — the meat should fall apart at the touch of a fork.
 
 1. Combine [[flat-leaf parsley]], [[lemon zest]], [[garlic]], and [[fresh rosemary]].
 2. Toss with [[olive oil]] just before serving. Spoon over the [[braised short ribs -> Braised Short Ribs]].
+```
+
+### C) Variable-weight anchor recipe
+
+Use `:: anchor` when the recipe's quantities are defined relative to a
+variable-weight base ingredient. The anchor ingredient's quantity is a
+sensible default; the renderer presents an editable input so the cook can
+enter their actual weight and scale everything proportionally.
+
+```markdown
+# Sauerkraut
+
+## Ingredients
+
+- green cabbage - 1000 g :: anchor
+- fine sea salt - 20 g
+- caraway seeds - 1 tsp
+- juniper berries - 4, lightly crushed
+
+## Steps
+
+1. Quarter and core [[cabbage -> green cabbage]]. Shred into thin ribbons.
+2. Toss cabbage with [[salt -> fine sea salt]] in a large bowl. Massage
+   firmly for 5 to 10 minutes until the cabbage releases enough brine to
+   be submerged.
+3. Pack into a clean jar, pressing down so brine covers the cabbage.
+   Scatter [[caraway seeds]] and [[juniper berries]] between layers.
+4. Weigh down with a plate or fermentation weight. Cover loosely and
+   ferment at room temperature 1 to 4 weeks, tasting periodically.
+
+## Notes
+
+- Salt is 2% of the cabbage weight — the standard ratio for sauerkraut.
+  Adjust the cabbage weight to match what you have and everything scales.
 ```
