@@ -71,7 +71,8 @@ export interface ScaleAnchor {
 
 export interface ScalePreset {
   name: string;
-  anchor: ScaleAnchor;
+  anchor: string;
+  amount: Quantity;
 }
 
 export interface Frontmatter {
@@ -289,12 +290,12 @@ export interface DocumentTitle {
 export interface ReferenceToken {
   original: string;
   display?: string;
-  /** The raw target slug from the reference text. */
-  target: string;
+  /** Raw target slug(s) from the reference text. Multi-ingredient refs have multiple entries. */
+  targets: string[];
   /** The recipe ID where this reference appears (for scoped resolution). */
   recipeId: string;
-  /** The resolved qualified ID after two-phase lookup. */
-  resolvedTarget?: string;
+  /** Resolved qualified IDs after two-phase lookup (parallel to targets). */
+  resolvedTargets: string[];
   line: number;
   column: number;
 }

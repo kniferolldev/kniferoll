@@ -198,9 +198,20 @@ step; the ingredient name (after `->`) is matched flexibly as described above.
 
 Examples:
 - `[[flour -> all-purpose flour]]` — step reads "flour", links to "all-purpose flour"
-- `[[vinegar -> distilled white vinegar, rice vinegar, or pineapple vinegar]]` —
-  step reads "vinegar", links to the full ingredient
 - `[[stock -> homemade chicken stock or store-bought broth]]`
+
+#### Multi-ingredient references
+
+Use commas after `->` to link one display word to multiple ingredients:
+
+```
+[[accompaniments -> kimchi, ginger scallion sauce, ssäm sauce, rice]]
+```
+
+This renders as "accompaniments" and highlights all four ingredients on
+hover/click. Each name between commas is matched flexibly just like a
+single-ingredient reference. Commas are only meaningful after `->` — they
+have no special meaning in display text or bare `[[name]]` references.
 
 Whitespace inside the brackets and around `->` is tolerated.
 
@@ -285,7 +296,8 @@ version: 1
 source: Grandma
 scales:
   - name: Family size
-    anchor: { id: oats, amount: 900, unit: g }   # applies to the whole file
+    anchor: oats
+    amount: 900 g
 ---
 ```
 
@@ -298,10 +310,11 @@ scales:
     `{ title: <string>, author?: <string>, pages?: <number|string>, isbn?: <string>, year?: <number> }`.
     - `pages` may be a single page (e.g., `123`) or a range string (e.g.,
       `"123–125"`).
-- **scales** (optional): named presets. Each preset supplies an **anchor** (an
-  ingredient `id` plus a target `amount` + `unit`). When a preset is selected,
-  renderers compute `factor = target / current` and scale all scalable
-  ingredients in the file.
+- **scales** (optional): named presets. Each preset names an **anchor**
+  ingredient (the same way ingredients are referenced elsewhere) and a target
+  **amount** (a quantity, e.g. `900 g`). When a preset is selected, renderers
+  compute `factor = target / current` and scale all scalable ingredients in
+  the file.
 
 Frontmatter examples:
 
@@ -337,7 +350,8 @@ source:
 version: 1
 scales:
   - name: Family size
-    anchor: { id: milk, amount: 480, unit: ml }
+    anchor: milk
+    amount: 480 ml
 ---
 
 # Buttermilk Pancakes

@@ -778,14 +778,16 @@ function compareReferences(
     return { totalRefs: 0, brokenRefs: 0, score: 1, issues: [] };
   }
 
-  const brokenRefs = refs.filter((r) => !r.resolvedTarget).length;
-  const score = (totalRefs - brokenRefs) / totalRefs;
+  const totalTargets = refs.reduce((n, r) => n + r.targets.length, 0);
+  const resolvedTargets = refs.reduce((n, r) => n + r.resolvedTargets.length, 0);
+  const brokenRefs = totalTargets - resolvedTargets;
+  const score = totalTargets === 0 ? 1 : resolvedTargets / totalTargets;
 
   // Deduplicate broken reference issues
   const seen = new Set<string>();
   const issues: string[] = [];
   for (const ref of refs) {
-    if (!ref.resolvedTarget && !seen.has(ref.original)) {
+    if (ref.resolvedTargets.length < ref.targets.length && !seen.has(ref.original)) {
       seen.add(ref.original);
       issues.push(`broken reference: ${ref.original}`);
     }

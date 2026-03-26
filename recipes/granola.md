@@ -2,7 +2,8 @@
 version: 1
 scales:
     - name: 1/4 sheet
-      anchor: { id: oats, amount: 150, unit: g }
+      anchor: oats
+      amount: 150 g
 ---
 
 # Granola

@@ -289,7 +289,8 @@ test("scale preset name must be non-empty string", () => {
       "version: 1",
       "scales:",
       "  - name: \"\"",
-      "    anchor: { id: salt, amount: 10, unit: g }",
+      "    anchor: salt",
+      "    amount: 10 g",
     ].join("\n"),
   );
   expect(msgs).toContain("Scale preset name must be a non-empty string.");
@@ -301,66 +302,59 @@ test("scale preset requires anchor", () => {
       "version: 1",
       "scales:",
       "  - name: Test",
+      "    amount: 10 g",
     ].join("\n"),
   );
   expect(msgs.some((msg) => msg.includes("missing anchor"))).toBe(true);
 });
 
-test("scale preset anchor must be object", () => {
+test("scale preset anchor must be non-empty string", () => {
   const msgs = messagesFrom(
     [
       "version: 1",
       "scales:",
       "  - name: Test",
-      "    anchor: not-an-object",
+      '    anchor: ""',
+      "    amount: 10 g",
     ].join("\n"),
   );
-  expect(msgs.some((msg) => msg.includes("anchor must be an object"))).toBe(true);
+  expect(msgs.some((msg) => msg.includes("anchor must be a non-empty string"))).toBe(true);
 });
 
-test("scale preset anchor.id must be non-empty string", () => {
+test("scale preset requires amount", () => {
   const msgs = messagesFrom(
     [
       "version: 1",
       "scales:",
       "  - name: Test",
-      "    anchor: { id: \"\", amount: 10, unit: g }",
+      "    anchor: salt",
     ].join("\n"),
   );
-  expect(msgs.some((msg) => msg.includes("anchor.id must be a non-empty string"))).toBe(true);
+  expect(msgs.some((msg) => msg.includes("missing amount"))).toBe(true);
 });
 
-test("scale preset anchor.amount must be number", () => {
+test("scale preset amount must be valid quantity string", () => {
   const msgs = messagesFrom(
     [
       "version: 1",
       "scales:",
       "  - name: Test",
-      "    anchor: { id: salt, amount: \"ten\", unit: g }",
+      "    anchor: salt",
+      "    amount: not-a-quantity",
     ].join("\n"),
   );
-  expect(msgs.some((msg) => msg.includes("anchor.amount must be a number"))).toBe(true);
+  expect(msgs.some((msg) => msg.includes("not a valid quantity"))).toBe(true);
 });
 
-test("scale preset anchor.unit must be non-empty string", () => {
+test("scale preset rejects unsupported keys", () => {
   const msgs = messagesFrom(
     [
       "version: 1",
       "scales:",
       "  - name: Test",
-      "    anchor: { id: salt, amount: 10, unit: \"\" }",
-    ].join("\n"),
-  );
-  expect(msgs.some((msg) => msg.includes("anchor.unit must be a non-empty string"))).toBe(true);
-});
-
-test("scale preset anchor rejects unsupported keys", () => {
-  const msgs = messagesFrom(
-    [
-      "version: 1",
-      "scales:",
-      "  - name: Test",
-      "    anchor: { id: salt, amount: 10, unit: g, extra: true }",
+      "    anchor: salt",
+      "    amount: 10 g",
+      "    extra: true",
     ].join("\n"),
   );
   expect(msgs.some((msg) => msg.includes("unsupported keys"))).toBe(true);
@@ -373,16 +367,24 @@ test("parses valid scales array", () => {
         "version: 1",
         "scales:",
         "  - name: Half",
-        "    anchor: { id: salt, amount: 5, unit: g }",
+        "    anchor: salt",
+        "    amount: 5 g",
         "  - name: Double",
-        "    anchor: { id: salt, amount: 20, unit: g }",
+        "    anchor: salt",
+        "    amount: 20 g",
       ].join("\n"),
     ),
   );
 
   expect(result.frontmatter?.scales).toHaveLength(2);
   expect(result.frontmatter?.scales?.[0]?.name).toBe("Half");
-  expect(result.frontmatter?.scales?.[1]?.anchor.amount).toBe(20);
+  expect(result.frontmatter?.scales?.[0]?.anchor).toBe("salt");
+  const doubleAmount = result.frontmatter?.scales?.[1]?.amount;
+  expect(doubleAmount?.kind).toBe("single");
+  if (doubleAmount?.kind === "single") {
+    expect(doubleAmount.value).toBe(20);
+    expect(doubleAmount.unit).toBe("g");
+  }
   expect(result.diagnostics).toHaveLength(0);
 });
 
@@ -509,18 +511,21 @@ test("block mapping cookbook with numeric pages", () => {
 
 // --- Arrays of objects (scales) ---
 
-test("scales with flow anchor objects", () => {
+test("scales with string anchor and quantity amount", () => {
   const result = extractFrontmatter(
     doc([
       "version: 1",
       "scales:",
       "  - name: Family size",
-      "    anchor: { id: oats, amount: 900, unit: g }",
+      "    anchor: oats",
+      "    amount: 900 g",
     ].join("\n")),
   );
-  expect(result.frontmatter?.scales).toEqual([
-    { name: "Family size", anchor: { id: "oats", amount: 900, unit: "g" } },
-  ]);
+  expect(result.frontmatter?.scales).toHaveLength(1);
+  const preset = result.frontmatter?.scales?.[0];
+  expect(preset?.name).toBe("Family size");
+  expect(preset?.anchor).toBe("oats");
+  expect(preset?.amount).toMatchObject({ kind: "single", value: 900, unit: "g" });
 });
 
 test("multiple scale presets", () => {
@@ -529,16 +534,23 @@ test("multiple scale presets", () => {
       "version: 1",
       "scales:",
       "  - name: Half",
-      "    anchor: { id: flour, amount: 90, unit: g }",
+      "    anchor: flour",
+      "    amount: 90 g",
       "  - name: Double",
-      "    anchor: { id: flour, amount: 360, unit: g }",
+      "    anchor: flour",
+      "    amount: 360 g",
       "  - name: Party",
-      "    anchor: { id: flour, amount: 720, unit: g }",
+      "    anchor: flour",
+      "    amount: 720 g",
     ].join("\n")),
   );
   expect(result.frontmatter?.scales).toHaveLength(3);
   expect(result.frontmatter?.scales?.[2]?.name).toBe("Party");
-  expect(result.frontmatter?.scales?.[2]?.anchor.amount).toBe(720);
+  const partyAmount = result.frontmatter?.scales?.[2]?.amount;
+  expect(partyAmount?.kind).toBe("single");
+  if (partyAmount?.kind === "single") {
+    expect(partyAmount.value).toBe(720);
+  }
 });
 
 // --- Whitespace variations ---
@@ -607,10 +619,15 @@ test("decimal anchor amount is parsed correctly", () => {
       "version: 1",
       "scales:",
       "  - name: Precise",
-      "    anchor: { id: salt, amount: 2.5, unit: g }",
+      "    anchor: salt",
+      "    amount: 2.5 g",
     ].join("\n")),
   );
-  expect(result.frontmatter?.scales?.[0]?.anchor.amount).toBe(2.5);
+  const amount = result.frontmatter?.scales?.[0]?.amount;
+  expect(amount?.kind).toBe("single");
+  if (amount?.kind === "single") {
+    expect(amount.value).toBe(2.5);
+  }
 });
 
 // --- YAML comment handling ---
@@ -639,7 +656,7 @@ test("null source is treated as undefined", () => {
 // --- Full end-to-end from SCHEMA.md examples ---
 
 test("SCHEMA.md example: simple text source", () => {
-  const input = "---\nversion: 1\nsource: Grandma\nscales:\n  - name: Family size\n    anchor: { id: oats, amount: 900, unit: g }\n---\n# Recipe\n";
+  const input = "---\nversion: 1\nsource: Grandma\nscales:\n  - name: Family size\n    anchor: oats\n    amount: 900 g\n---\n# Recipe\n";
   const result = extractFrontmatter(input);
   expect(result.frontmatter?.version).toBe(1);
   expect(result.frontmatter?.source).toEqual({ kind: "text", value: "Grandma" });
@@ -719,11 +736,13 @@ test("serializeFrontmatter: cookbook source round-trips through parser", () => {
 test("serializeFrontmatter: scales round-trip through parser", () => {
   const fm: Frontmatter = {
     version: 1,
-    scales: [{ name: "Double", anchor: { id: "flour", amount: 500, unit: "g" } }],
+    scales: [{ name: "Double", anchor: "flour", amount: { kind: "single", raw: "500 g", value: 500, unit: "g" } }],
   };
   const serialized = serializeFrontmatter(fm) + "\n# Body\n";
   const parsed = extractFrontmatter(serialized);
   expect(parsed.diagnostics).toEqual([]);
-  expect(parsed.frontmatter?.scales).toEqual(fm.scales);
+  expect(parsed.frontmatter?.scales?.[0]?.name).toBe("Double");
+  expect(parsed.frontmatter?.scales?.[0]?.anchor).toBe("flour");
+  expect(parsed.frontmatter?.scales?.[0]?.amount).toMatchObject({ kind: "single", value: 500, unit: "g" });
 });
 

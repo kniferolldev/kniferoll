@@ -401,12 +401,14 @@ export async function formatRecipe(
   const systemPrompt = buildFormatPrompt(schema);
 
   // Get provider and run inference (text-only, no images)
+  // Low temperature: formatting is transcription, not creative writing
   const provider = getProvider(modelSpec.provider);
   const result = await provider.infer({
     input: { text: extractedJson },
     systemPrompt,
     model: modelSpec.model,
     apiKey,
+    temperature: 0.2,
   });
 
   return {

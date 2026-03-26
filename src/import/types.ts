@@ -177,5 +177,6 @@ export interface ProviderAdapter {
     systemPrompt: string;
     model: string;
     apiKey: string;
+    temperature?: number;
   }): Promise<InferenceResult>;
 }

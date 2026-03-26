@@ -348,38 +348,46 @@ const renderNotesInline = (
       let display = innerRaw;
       let target = innerRaw;
 
+      let targets: string[];
       const arrowIndex = innerRaw.indexOf("->");
       if (arrowIndex !== -1) {
         const displayPart = innerRaw.slice(0, arrowIndex).trim();
-        const targetPart = innerRaw.slice(arrowIndex + 2).trim();
+        const rhs = innerRaw.slice(arrowIndex + 2).trim();
+        targets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
         if (displayPart) display = displayPart;
-        if (targetPart) target = slug(targetPart);
-        if (!display) {
-          const fallback = targetMeta.get(target)?.name;
+        if (!display && targets.length === 1) {
+          const fallback = targetMeta.get(targets[0]!)?.name;
           if (fallback) display = fallback;
         }
       } else {
         target = slug(innerRaw);
-        const fallback = targetMeta.get(target)?.name;
+        targets = target ? [target] : [];
+        const fallback = target ? targetMeta.get(target)?.name : undefined;
         if (fallback) display = fallback;
       }
 
-      if (!target) {
+      if (targets.length === 0) {
         inlineTokens.push({ start, end, html: escapeHtml(full) });
         continue;
       }
 
-      const meta = targetMeta.get(target);
-      const controlsId = meta
-        ? meta.type === "ingredient"
-          ? `kr-ingredient-${target}`
-          : `kr-recipe-${target}`
-        : null;
+      const targetAttr = targets.join(" ");
+      const controlsIds = targets
+        .map((t) => {
+          const meta = targetMeta.get(t);
+          return meta
+            ? meta.type === "ingredient"
+              ? `kr-ingredient-${t}`
+              : `kr-recipe-${t}`
+            : null;
+        })
+        .filter(Boolean)
+        .join(" ");
 
       const buttonHtml = `<span role="button" tabindex="0" class="kr-ref" data-kr-target="${escapeAttr(
-        target,
-      )}" data-kr-display="${escapeAttr(display)}"${controlsId ? ` aria-controls="${escapeAttr(
-        controlsId,
+        targetAttr,
+      )}" data-kr-display="${escapeAttr(display)}"${controlsIds ? ` aria-controls="${escapeAttr(
+        controlsIds,
       )}"` : ""}>${escapeHtml(display)}</span>`;
 
       const trailingPunct = text.slice(end).match(/^[.,;:!?)]+/);
@@ -874,46 +882,52 @@ const renderStepLine = (
     let display = innerRaw;
     let target = innerRaw;
 
+    let targets: string[];
     const arrowIndex = innerRaw.indexOf("->");
     if (arrowIndex !== -1) {
       const displayPart = innerRaw.slice(0, arrowIndex).trim();
-      const targetPart = innerRaw.slice(arrowIndex + 2).trim();
+      const rhs = innerRaw.slice(arrowIndex + 2).trim();
+      targets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
       if (displayPart) {
         display = displayPart;
       }
-      if (targetPart) {
-        target = slug(targetPart);
-      }
-      if (!display) {
-        const fallback = targetMeta.get(target)?.name;
+      if (!display && targets.length === 1) {
+        const fallback = targetMeta.get(targets[0]!)?.name;
         if (fallback) {
           display = fallback;
         }
       }
     } else {
       target = slug(innerRaw);
-      const fallback = targetMeta.get(target)?.name;
+      targets = target ? [target] : [];
+      const fallback = target ? targetMeta.get(target)?.name : undefined;
       if (fallback) {
         display = fallback;
       }
     }
 
-    if (!target) {
+    if (targets.length === 0) {
       inlineTokens.push({ start, end, html: escapeHtml(full) });
       continue;
     }
 
-    const meta = targetMeta.get(target);
-    const controlsId = meta
-      ? meta.type === "ingredient"
-        ? `kr-ingredient-${target}`
-        : `kr-recipe-${target}`
-      : null;
+    const targetAttr = targets.join(" ");
+    const controlsIds = targets
+      .map((t) => {
+        const meta = targetMeta.get(t);
+        return meta
+          ? meta.type === "ingredient"
+            ? `kr-ingredient-${t}`
+            : `kr-recipe-${t}`
+          : null;
+      })
+      .filter(Boolean)
+      .join(" ");
 
     const buttonHtml = `<span role="button" tabindex="0" class="kr-ref" data-kr-target="${escapeAttr(
-        target,
-      )}" data-kr-display="${escapeAttr(display)}"${controlsId ? ` aria-controls="${escapeAttr(
-        controlsId,
+        targetAttr,
+      )}" data-kr-display="${escapeAttr(display)}"${controlsIds ? ` aria-controls="${escapeAttr(
+        controlsIds,
       )}"` : ""}>${escapeHtml(display)}</span>`;
 
     // Grab trailing punctuation so it wraps as a unit with the button
@@ -2007,11 +2021,14 @@ export class KrRecipeElement extends HTMLElement {
       activeRef = null;
     };
 
-    const highlight = (ref: HTMLElement, targetId: string, lock: boolean) => {
-      const escaped = cssEscape(targetId);
-      const targetNodes = Array.from(
-        root.querySelectorAll<HTMLElement>(`[data-kr-id="${escaped}"]`),
-      );
+    const highlight = (ref: HTMLElement, targetIds: string[], lock: boolean) => {
+      const targetNodes: HTMLElement[] = [];
+      for (const id of targetIds) {
+        const escaped = cssEscape(id);
+        root.querySelectorAll<HTMLElement>(`[data-kr-id="${escaped}"]`).forEach(
+          (node) => targetNodes.push(node),
+        );
+      }
       if (targetNodes.length === 0) {
         return;
       }
@@ -2028,7 +2045,7 @@ export class KrRecipeElement extends HTMLElement {
         });
       }
       ref.classList.add("kr-ref--active");
-       if (lock) {
+      if (lock) {
         ref.setAttribute("aria-pressed", "true");
       } else {
         ref.removeAttribute("aria-pressed");
@@ -2047,16 +2064,17 @@ export class KrRecipeElement extends HTMLElement {
     };
 
     refs.forEach((ref) => {
-      const targetId = ref.getAttribute("data-kr-target");
-      if (!targetId) {
+      const targetAttr = ref.getAttribute("data-kr-target");
+      if (!targetAttr) {
         return;
       }
+      const targetIds = targetAttr.split(" ").filter(Boolean);
 
       ref.addEventListener("pointerenter", () => {
         if (lockedRef && lockedRef !== ref) {
           return;
         }
-        highlight(ref, targetId, false);
+        highlight(ref, targetIds, false);
       });
 
       ref.addEventListener("pointerleave", () => {
@@ -2069,7 +2087,7 @@ export class KrRecipeElement extends HTMLElement {
       });
 
       ref.addEventListener("focus", () => {
-        highlight(ref, targetId, false);
+        highlight(ref, targetIds, false);
       });
 
       ref.addEventListener("blur", () => {
@@ -2084,7 +2102,7 @@ export class KrRecipeElement extends HTMLElement {
           clearHighlight();
           return;
         }
-        highlight(ref, targetId, lock);
+        highlight(ref, targetIds, lock);
       };
 
       ref.addEventListener("click", (event) => {

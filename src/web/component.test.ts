@@ -508,6 +508,29 @@ test("ingredients render with wrapper div for highlight compatibility", () => {
   expect(html).toContain('id="kr-ingredient-pepper"');
 });
 
+test("multi-ingredient reference renders with space-separated targets", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# Dinner",
+    "",
+    "# Bo Ssäm",
+    "## Ingredients",
+    "- kimchi - 1 cup",
+    "- rice - 2 cups",
+    "- ssäm sauce - 1/2 cup",
+    "## Steps",
+    "1. Serve with [[accompaniments -> kimchi, rice, ssäm sauce]].",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  expect(html).toContain('data-kr-target="kimchi rice ssam-sauce"');
+  expect(html).toContain(">accompaniments<");
+  expect(html).toContain('aria-controls="kr-ingredient-kimchi kr-ingredient-rice kr-ingredient-ssam-sauce"');
+});
+
 test("renderDocument includes intro text", () => {
   if (!componentModule) {
     throw new Error("Component module was not initialized");
@@ -1076,7 +1099,7 @@ test("renderDocument includes hidden scale bar with canned options", () => {
 test("renderDocument includes named presets in scale bar", () => {
   if (!componentModule) throw new Error("Component module was not initialized");
 
-  const markdown = `---\nversion: 1\nscales:\n  - name: Family Size\n    anchor: { id: oats, amount: 900, unit: g }\n---\n# Demo\n\n# Porridge\n## Ingredients\n- oats - 300 g\n## Steps\n1. Cook.`;
+  const markdown = `---\nversion: 1\nscales:\n  - name: Family Size\n    anchor: oats\n    amount: 900 g\n---\n# Demo\n\n# Porridge\n## Ingredients\n- oats - 300 g\n## Steps\n1. Cook.`;
   const html = componentModule.renderDocument(parseDocument(markdown));
 
   expect(html).toContain('data-kr-preset-index="0"');

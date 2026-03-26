@@ -1,4 +1,6 @@
 import { parseYamlSubset as parseYaml } from "./yaml-subset";
+import { parseQuantity } from "./quantity";
+import { slug } from "./slug";
 import type {
   Diagnostic,
   Frontmatter,
@@ -233,56 +235,70 @@ const normalizeScales = (
     }
 
     const anchorRaw = preset.anchor;
-    if (!anchorRaw || typeof anchorRaw !== "object" || Array.isArray(anchorRaw)) {
+    if (typeof anchorRaw !== "string" || anchorRaw.trim().length === 0) {
       diagnostics.push(
-        error("E0002", `Scale preset "${name}" anchor must be an object.`),
+        error("E0002", `Scale preset "${name}" anchor must be a non-empty string.`),
       );
       continue;
     }
 
-    const anchorRecord = anchorRaw as Record<string, unknown>;
-    const id = anchorRecord.id;
-    if (typeof id !== "string" || id.trim().length === 0) {
+    if (!("amount" in preset)) {
       diagnostics.push(
-        error("E0002", `Scale preset "${name}" anchor.id must be a non-empty string.`),
+        error("E0002", `Scale preset "${name}" is missing amount.`),
       );
       continue;
     }
 
-    const amount = anchorRecord.amount;
-    if (typeof amount !== "number" || Number.isNaN(amount)) {
+    const amountRaw = preset.amount;
+    // YAML may parse a unitless amount (e.g. `amount: 4`) as a number
+    const amountStr = typeof amountRaw === "number" && Number.isFinite(amountRaw)
+      ? String(amountRaw)
+      : typeof amountRaw === "string" ? amountRaw : null;
+    if (!amountStr || amountStr.trim().length === 0) {
       diagnostics.push(
-        error("E0002", `Scale preset "${name}" anchor.amount must be a number.`),
+        error("E0002", `Scale preset "${name}" amount must be a quantity string (e.g. "150 g").`),
       );
       continue;
     }
 
-    const unit = anchorRecord.unit;
-    if (typeof unit !== "string" || unit.trim().length === 0) {
+    // Amount must start with a digit or fraction — reject bare unit strings
+    if (!/^\d|^[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/.test(amountStr.trim())) {
       diagnostics.push(
-        error("E0002", `Scale preset "${name}" anchor.unit must be a non-empty string.`),
+        error("E0002", `Scale preset "${name}" amount "${amountStr}" is not a valid quantity.`),
       );
       continue;
     }
 
-    if (knownIds && knownIds.size > 0 && !knownIds.has(id)) {
+    const quantityResult = parseQuantity(amountStr, {
+      line: 1,
+      invalid: { code: "E0002", message: `Scale preset "${name}" amount "${amountStr}" is not a valid quantity.` },
+    });
+    if (quantityResult.diagnostics.length > 0) {
+      diagnostics.push(...quantityResult.diagnostics);
+    }
+    if (!quantityResult.quantity) {
+      continue;
+    }
+
+    const anchorSlug = slug(anchorRaw);
+    if (knownIds && knownIds.size > 0 && !knownIds.has(anchorSlug)) {
       diagnostics.push(
         error(
           "E0002",
-          `Scale preset "${name}" anchor.id "${id}" does not match any known ingredient.`,
+          `Scale preset "${name}" anchor "${anchorRaw}" does not match any known ingredient.`,
         ),
       );
       continue;
     }
 
-    const extraKeys = Object.keys(anchorRecord).filter(
-      (key) => !["id", "amount", "unit"].includes(key),
+    const extraKeys = Object.keys(preset).filter(
+      (key) => !["name", "anchor", "amount"].includes(key),
     );
     if (extraKeys.length > 0) {
       diagnostics.push(
         error(
           "E0002",
-          `Scale preset "${name}" anchor contains unsupported keys: ${extraKeys.join(", ")}`,
+          `Scale preset "${name}" contains unsupported keys: ${extraKeys.join(", ")}`,
         ),
       );
       continue;
@@ -290,11 +306,8 @@ const normalizeScales = (
 
     presets.push({
       name,
-      anchor: {
-        id,
-        amount,
-        unit,
-      },
+      anchor: anchorRaw.trim(),
+      amount: quantityResult.quantity,
     });
   }
 
@@ -397,10 +410,10 @@ export const serializeFrontmatter = (fm: Frontmatter): string => {
   if (fm.scales && fm.scales.length > 0) {
     lines.push("scales:");
     for (const preset of fm.scales) {
-      const { id, amount, unit } = preset.anchor;
       lines.push(
         `  - name: ${preset.name}`,
-        `    anchor: { id: ${id}, amount: ${amount}, unit: ${unit} }`,
+        `    anchor: ${preset.anchor}`,
+        `    amount: ${preset.amount.raw}`,
       );
     }
   }

@@ -21,9 +21,11 @@ test("computeScaleFactor resolves preset by name", () => {
       "version: 1",
       "scales:",
       "  - name: Half Batch",
-      "    anchor: { id: salt, amount: 5, unit: g }",
+      "    anchor: salt",
+      "    amount: 5 g",
       "  - name: Double Stock",
-      "    anchor: { id: stock, amount: 1000, unit: ml }",
+      "    anchor: stock",
+      "    amount: 1000 ml",
       "---",
       baseRecipe,
     ].join("\n"),
@@ -48,7 +50,8 @@ test("computeScaleFactor resolves preset by index", () => {
       "version: 1",
       "scales:",
       "  - name: Default",
-      "    anchor: { id: salt, amount: 10, unit: g }",
+      "    anchor: salt",
+      "    amount: 10 g",
       "---",
       baseRecipe,
     ].join("\n"),
@@ -83,7 +86,8 @@ test("fails when ingredient lacks quantity", () => {
       "version: 1",
       "scales:",
       "  - name: Invalid",
-      "    anchor: { id: chicken, amount: 4, unit: count }",
+      "    anchor: chicken",
+      "    amount: 4 count",
       "---",
       "# Roast Chicken",
       "## Ingredients",
@@ -105,7 +109,8 @@ test("fails when units mismatch", () => {
       "version: 1",
       "scales:",
       "  - name: Bad",
-      "    anchor: { id: salt, amount: 10, unit: teaspoons }",
+      "    anchor: salt",
+      "    amount: 10 teaspoons",
       "---",
       baseRecipe,
     ].join("\n"),
@@ -125,7 +130,8 @@ test("fails when preset missing", () => {
       "version: 1",
       "scales:",
       "  - name: Small",
-      "    anchor: { id: salt, amount: 5, unit: g }",
+      "    anchor: salt",
+      "    amount: 5 g",
       "---",
       baseRecipe,
     ].join("\n"),
@@ -200,7 +206,8 @@ test("fails when preset index is out of bounds", () => {
       "version: 1",
       "scales:",
       "  - name: Only One",
-      "    anchor: { id: salt, amount: 5, unit: g }",
+      "    anchor: salt",
+      "    amount: 5 g",
       "---",
       baseRecipe,
     ].join("\n"),
@@ -438,7 +445,8 @@ test("resolves preset by name case-insensitively", () => {
       "version: 1",
       "scales:",
       "  - name: Double Batch",
-      "    anchor: { id: salt, amount: 20, unit: g }",
+      "    anchor: salt",
+      "    amount: 20 g",
       "---",
       baseRecipe,
     ].join("\n"),
@@ -448,5 +456,30 @@ test("resolves preset by name case-insensitively", () => {
   expect(result.ok).toBe(true);
   if (result.ok) {
     expect(result.factor).toBe(2);
+  }
+});
+
+test("preset anchor matches ingredient by natural name (slugified)", () => {
+  const doc = docFrom(
+    [
+      "---",
+      "version: 1",
+      "scales:",
+      "  - name: Small",
+      "    anchor: pumpkin seeds",
+      "    amount: 50 g",
+      "---",
+      "# Granola",
+      "## Ingredients",
+      "- oats - 450 g",
+      "- pumpkin seeds - 100 g",
+    ].join("\n"),
+  );
+
+  const result = computeScaleFactor(doc, { presetName: "Small" });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.factor).toBeCloseTo(0.5);
+    expect(result.ingredient.id).toBe("pumpkin-seeds");
   }
 });

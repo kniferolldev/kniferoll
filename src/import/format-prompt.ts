@@ -17,6 +17,15 @@ export function buildFormatPrompt(schema: string): string {
 
 IMPORTANT: Output the Kniferoll Markdown directly. Do not wrap it in code fences like \`\`\`markdown or \`\`\`yaml.
 
+HARD RULES (violations will be rejected):
+- ONE input paragraph = ONE numbered step. NEVER split or merge paragraphs.
+- The display text (left of \`->\`) must ALWAYS be shorter than the ingredient
+  name (right of \`->\`). \`[[foo -> foo]]\` is ALWAYS wrong. If they're the same,
+  drop the arrow: \`[[foo]]\`.
+- When you create a sub-recipe, REMOVE its steps from the main recipe. A step
+  like "For the Vinaigrette: Combine..." belongs ONLY in the vinaigrette
+  sub-recipe's \`## Steps\`, not in the main recipe.
+
 CONVERSION GUIDELINES:
 1. Only include YAML frontmatter when there is real metadata (source attribution, scale presets).
    Do NOT add empty or version-only frontmatter.
@@ -27,7 +36,11 @@ CONVERSION GUIDELINES:
    - Cookbook object (for books): \`source: { cookbook: { title: "Book Name", author: "Author" } }\`
      Note the required \`cookbook:\` wrapper.
    When in doubt, use a plain string.
-2. Wrap lines at approximately 80 characters for readability. Steps can span multiple lines.
+2. Wrap lines at approximately 80 characters for readability. Steps can span
+   multiple lines. Preserve the source's step structure — each instruction
+   paragraph in the input should become exactly one numbered step. Do NOT split
+   a single input paragraph into multiple steps or merge multiple paragraphs
+   into one step.
 3. Normalize ALL CAPS titles to title case (capitalize major words).
    Apply to section headings too. Example: "SPICY CHICKEN TACOS" → "Spicy Chicken Tacos".
 4. When the source recipe gives a parenthetical alternate quantity, move it to \`also=\`.
@@ -60,6 +73,14 @@ CONVERSION GUIDELINES:
    Self-check: the RIGHT side of \`->\` must always be a LONGER or EQUAL-LENGTH
    name that appears in the ingredient list. If you find yourself putting the
    longer name on the LEFT, you have it backwards — swap the sides.
+   MULTI-INGREDIENT REFS: When the original text already uses a collective
+   word to refer to several ingredients (e.g. "the accompaniments", "the
+   dry ingredients", "the aromatics"), preserve that word and use
+   comma-separated names after \`->\`:
+   \`[[accompaniments -> kimchi, ginger scallion sauce, rice]]\`.
+   Each name between commas is matched to an ingredient independently.
+   Do NOT invent collective refs when the original lists ingredients
+   individually — \`flour, sugar, and eggs\` should stay as separate refs.
 8. Reference each ingredient AT MOST ONCE per step — on its first meaningful
    mention. Do not re-reference the same ingredient later in the same step.
    After the first reference in the recipe, use plain text (no brackets) for
@@ -72,12 +93,24 @@ CONVERSION GUIDELINES:
 10. Modifiers (", finely diced") MUST come BEFORE the \`::\` attribute separator.
     WRONG: \`- carrots - 2 bunches :: also="1 lb", peeled and chopped\`
     RIGHT: \`- carrots - 2 bunches, peeled and chopped :: also="1 lb"\`
-11. Multi-recipe documents: when the source has NAMED sub-recipes (sauces,
-    dressings, vinaigrettes, pickles — things you could serve or use on their
-    own), create a separate \`# Title\` block for each with its own
-    \`## Ingredients\` and \`## Steps\`. In the main recipe's ingredient list,
-    reference the sub-recipe by name
-    (e.g. \`- Roasted Chile Oil Vinaigrette - 1 recipe\`).
+11. Multi-recipe documents: when the source has NAMED components with their own
+    ingredient list, create a separate \`# Title\` block for each with its own
+    \`## Ingredients\` and \`## Steps\`. This includes sauces, dressings,
+    vinaigrettes, pickles, brittles, toppings, spice blends — anything with its
+    own named ingredient section. In the main recipe's ingredient list, reference
+    the sub-recipe by name (e.g. \`- Pecan Brittle - 1 recipe\`).
+    KEY SIGNALS: separate ingredient sections with distinct named headings
+    (e.g. "PECAN BRITTLE", "COOKIES"), or "For the X:" prefixes within an
+    ingredient list (e.g. "For the Roasted Chile Oil Vinaigrette:").
+    When creating a sub-recipe, move its instruction steps there — do not
+    leave them in the main recipe. If a step says "For the Vinaigrette:
+    Combine...", that step belongs in the vinaigrette sub-recipe, not the
+    main recipe's steps.
+    NAMING: the main recipe keeps the document's overall title (the JSON "title"
+    field). Sub-recipes get their component name. Example: title is "Oat and
+    Pecan Brittle Cookies" with sections "PECAN BRITTLE" and "COOKIES" →
+    main recipe is \`# Oat and Pecan Brittle Cookies\` (the cookies),
+    sub-recipe is \`# Pecan Brittle\`.
     Do NOT split preparation stages (scald, brine, day-1 prep) into sub-recipes.
     These are steps within the same recipe — keep all their ingredients in one
     flat list and their instructions in one \`## Steps\` section.

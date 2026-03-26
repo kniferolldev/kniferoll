@@ -625,33 +625,45 @@ export const parseDocument = (
         const column = match.index + 1;
         const resolvedLine = resolveLineAt(line, match.index);
         let display: string | undefined;
-        let target: string | undefined;
 
         const arrowIndex = innerRaw.indexOf("->");
+        let targets: string[];
         if (arrowIndex !== -1) {
           display = innerRaw.slice(0, arrowIndex).trim();
-          target = slug(innerRaw.slice(arrowIndex + 2).trim());
-          if (!display || !target) {
+          const rhs = innerRaw.slice(arrowIndex + 2).trim();
+          targets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
+          if (!display || targets.length === 0) {
             diagnostics.push(
               warning("W0303", `Malformed reference token ${match[0]}.`, resolvedLine),
             );
             continue;
+          }
+          if (targets.length === 1 && slug(display) === targets[0]) {
+            diagnostics.push(
+              warning(
+                "W0304",
+                `Redundant display name in ${match[0]}.`,
+                resolvedLine,
+              ),
+            );
           }
         } else {
-          target = slug(innerRaw);
-          if (!target) {
+          const t = slug(innerRaw);
+          if (!t) {
             diagnostics.push(
               warning("W0303", `Malformed reference token ${match[0]}.`, resolvedLine),
             );
             continue;
           }
+          targets = [t];
         }
 
         references.push({
           original: match[0],
           display,
-          target,
+          targets,
           recipeId: recipe.id,
+          resolvedTargets: [],
           line: resolvedLine,
           column,
         });
@@ -667,19 +679,20 @@ export const parseDocument = (
 
   // Reference resolution: scoped to the current recipe's ingredients
   for (const ref of references) {
-    const scopedTarget = `${ref.recipeId}/${ref.target}`;
-    if (idRegistry.has(scopedTarget)) {
-      ref.resolvedTarget = scopedTarget;
-      continue;
+    for (const target of ref.targets) {
+      const scopedTarget = `${ref.recipeId}/${target}`;
+      if (idRegistry.has(scopedTarget)) {
+        ref.resolvedTargets.push(scopedTarget);
+      } else {
+        diagnostics.push(
+          warning(
+            "W0302",
+            `Reference "${target}" does not match any known id.`,
+            ref.line,
+          ),
+        );
+      }
     }
-
-    diagnostics.push(
-      warning(
-        "W0302",
-        `Reference "${ref.target}" does not match any known id.`,
-        ref.line,
-      ),
-    );
   }
 
   // ── Recipe linking pass ───────────────────────────────────────────

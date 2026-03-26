@@ -44,16 +44,22 @@ async function callOnce(
   systemPrompt: string,
   parts: Array<Record<string, unknown>>,
   apiKey: string,
+  temperature?: number,
 ): Promise<GeminiOnceResult> {
   const body: Record<string, unknown> = {
     system_instruction: { parts: [{ text: systemPrompt }] },
     contents: [{ parts }],
   };
 
+  const generationConfig: Record<string, unknown> = {};
   if (model.includes("gemini-3")) {
-    body.generation_config = {
-      thinking_config: { thinking_level: "MINIMAL" },
-    };
+    generationConfig.thinking_config = { thinking_level: "MINIMAL" };
+  }
+  if (temperature !== undefined) {
+    generationConfig.temperature = temperature;
+  }
+  if (Object.keys(generationConfig).length > 0) {
+    body.generation_config = generationConfig;
   }
 
   const start = performance.now();
@@ -100,9 +106,9 @@ async function callOnce(
 export const googleAdapter: ProviderAdapter = {
   name: "google",
 
-  async infer({ input, systemPrompt, model, apiKey }): Promise<InferenceResult> {
+  async infer({ input, systemPrompt, model, apiKey, temperature }): Promise<InferenceResult> {
     const parts = buildParts(input);
-    const first = await callOnce(model, systemPrompt, parts, apiKey);
+    const first = await callOnce(model, systemPrompt, parts, apiKey, temperature);
 
     if (first.finishReason && first.finishReason !== "STOP" && first.finishReason !== "MAX_TOKENS") {
       if (first.finishReason !== "RECITATION") {
@@ -113,7 +119,7 @@ export const googleAdapter: ProviderAdapter = {
 
       // Retry with ★ markers to defeat recitation filter
       const augmentedPrompt = systemPrompt + "\n\n" + recitationMarkerAppendix();
-      const retry = await callOnce(model, augmentedPrompt, parts, apiKey);
+      const retry = await callOnce(model, augmentedPrompt, parts, apiKey, temperature);
 
       if (retry.finishReason && retry.finishReason !== "STOP" && retry.finishReason !== "MAX_TOKENS") {
         throw new Error(

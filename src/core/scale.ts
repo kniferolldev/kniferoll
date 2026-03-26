@@ -8,6 +8,7 @@ import type {
   ScalePreset,
   ScaleSelection,
 } from "./types";
+import { slug } from "./slug";
 import { lookupUnit, toBaseValue } from "./units";
 
 const isQuantitySingle = (
@@ -126,7 +127,19 @@ export const computeScaleFactor = (
       };
     }
 
-    anchor = resolved.preset.anchor;
+    const presetAmount = resolved.preset.amount;
+    if (presetAmount.kind !== "single") {
+      return {
+        ok: false,
+        reason: "anchor-invalid",
+        message: `Scale preset "${resolved.preset.name}" amount must be a simple quantity (not a range or compound).`,
+      };
+    }
+    anchor = {
+      id: slug(resolved.preset.anchor),
+      amount: presetAmount.value,
+      unit: presetAmount.unit ?? "",
+    };
     presetMeta = { name: resolved.preset.name, index: resolved.index };
     source = "preset";
   }

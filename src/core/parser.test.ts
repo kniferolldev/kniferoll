@@ -191,7 +191,7 @@ test("extracts references and resolves ids", () => {
   if (!ref) {
     throw new Error("Expected reference to be collected");
   }
-  expect(ref.target).toBe("lettuce");
+  expect(ref.targets).toEqual(["lettuce"]);
   expect(byCode(result.diagnostics, "W0302").length).toBe(0);
 });
 
@@ -211,9 +211,9 @@ test("normalizes reference targets with spaces and casing", () => {
 
   // All three references should be normalized and resolve successfully
   expect(result.references).toHaveLength(3);
-  expect(result.references[0]?.target).toBe("dried-porcini-mushrooms");
-  expect(result.references[1]?.target).toBe("extra-virgin-olive-oil");
-  expect(result.references[2]?.target).toBe("dried-porcini-mushrooms");
+  expect(result.references[0]?.targets).toEqual(["dried-porcini-mushrooms"]);
+  expect(result.references[1]?.targets).toEqual(["extra-virgin-olive-oil"]);
+  expect(result.references[2]?.targets).toEqual(["dried-porcini-mushrooms"]);
 
   // No warnings about unresolved references
   expect(byCode(result.diagnostics, "W0302").length).toBe(0);
@@ -235,7 +235,67 @@ test("normalizes reference targets in display->id syntax", () => {
     throw new Error("Expected reference to be collected");
   }
   expect(ref.display).toBe("flour");
-  expect(ref.target).toBe("all-purpose-flour");
+  expect(ref.targets).toEqual(["all-purpose-flour"]);
+  expect(byCode(result.diagnostics, "W0302").length).toBe(0);
+});
+
+test("multi-ingredient reference resolves all targets", () => {
+  const input = [
+    "# Bo Ssäm",
+    "## Ingredients",
+    "- napa cabbage kimchi - 1 cup",
+    "- ginger scallion sauce - 1 cup",
+    "- ssäm sauce - 1 cup",
+    "- short-grain rice - 2 cups",
+    "## Steps",
+    "1. Serve with the [[accompaniments -> napa cabbage kimchi, ginger scallion sauce, ssäm sauce, short-grain rice]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.references).toHaveLength(1);
+  const ref = result.references[0]!;
+  expect(ref.display).toBe("accompaniments");
+  expect(ref.targets).toEqual([
+    "napa-cabbage-kimchi",
+    "ginger-scallion-sauce",
+    "ssam-sauce",
+    "short-grain-rice",
+  ]);
+  expect(ref.resolvedTargets).toHaveLength(4);
+  expect(byCode(result.diagnostics, "W0302").length).toBe(0);
+});
+
+test("multi-ingredient reference warns for each unresolved target", () => {
+  const input = [
+    "# Dish",
+    "## Ingredients",
+    "- salt - 1 tsp",
+    "## Steps",
+    "1. Season with [[seasonings -> salt, pepper, cumin]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.references).toHaveLength(1);
+  const ref = result.references[0]!;
+  expect(ref.targets).toEqual(["salt", "pepper", "cumin"]);
+  expect(ref.resolvedTargets).toEqual(["dish/salt"]);
+  // Two unresolved: pepper and cumin
+  expect(byCode(result.diagnostics, "W0302").length).toBe(2);
+});
+
+test("W0304 does not fire for multi-ingredient references", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- salt - 1 tsp",
+    "- pepper",
+    "## Steps",
+    "1. Use [[salt -> salt, pepper]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  // Even though display matches first target, it's a multi-ref so no W0304
+  expect(byCode(result.diagnostics, "W0304").length).toBe(0);
   expect(byCode(result.diagnostics, "W0302").length).toBe(0);
 });
 
@@ -609,9 +669,9 @@ test("references resolve to ingredients in the same recipe", () => {
   // References should have recipeId set
   expect(result.references).toHaveLength(2);
   expect(result.references[0]?.recipeId).toBe("marinade");
-  expect(result.references[0]?.resolvedTarget).toBe("marinade/soy-sauce");
+  expect(result.references[0]?.resolvedTargets).toEqual(["marinade/soy-sauce"]);
   expect(result.references[1]?.recipeId).toBe("sauce");
-  expect(result.references[1]?.resolvedTarget).toBe("sauce/soy-sauce");
+  expect(result.references[1]?.resolvedTargets).toEqual(["sauce/soy-sauce"]);
 });
 
 test("recipe titles do not create referenceable IDs", () => {
@@ -640,10 +700,10 @@ test("recipe titles do not create referenceable IDs", () => {
 
   // Find the [[sauce]] reference - it resolves to the ingredient in Main Dish
   const sauceRef = result.references.find(
-    (r) => r.target === "sauce" && r.recipeId === "main-dish",
+    (r) => r.targets[0] === "sauce" && r.recipeId === "main-dish",
   );
   expect(sauceRef).toBeDefined();
-  expect(sauceRef?.resolvedTarget).toBe("main-dish/sauce"); // Scoped to ingredient
+  expect(sauceRef?.resolvedTargets).toEqual(["main-dish/sauce"]); // Scoped to ingredient
 });
 
 test("unresolved reference in recipe with same-named ingredient elsewhere warns", () => {

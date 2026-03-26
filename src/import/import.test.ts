@@ -231,10 +231,10 @@ describe("buildExtractionPrompt", () => {
     expect(prompt.length).toBeGreaterThan(100);
   });
 
-  test("mentions OCR/transcription", () => {
+  test("mentions verbatim copying", () => {
     const prompt = buildExtractionPrompt();
 
-    expect(prompt).toContain("OCR");
+    expect(prompt).toContain("exactly");
   });
 
   test("includes JSON output format", () => {
