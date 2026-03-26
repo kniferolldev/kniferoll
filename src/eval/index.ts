@@ -17,3 +17,6 @@ export { DEFAULT_WEIGHTS } from "./weights";
 export type { ComparisonWeights } from "./weights";
 
 export { formatScalar, formatDetailed, formatJson } from "./format";
+
+export { generateExplorerHtml } from "./explorer";
+export type { Baseline, TestCaseResult, EvalMetadata } from "./types";

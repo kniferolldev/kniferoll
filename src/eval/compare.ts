@@ -28,6 +28,8 @@ export interface IngredientComparison {
   goldenName: string;
   actualId: string | null;
   actualName: string | null;
+  goldenLine: number;
+  actualLine: number | null;
   nameScore: number;
   quantityScore: number;
   notesScore: number;
@@ -38,6 +40,8 @@ export interface IngredientComparison {
 
 export interface StepComparison {
   index: number;
+  goldenLine: number;
+  actualLine: number | null;
   textScore: number;
   refsScore: number;
   totalScore: number;
@@ -166,10 +170,17 @@ function levenshteinRatio(a: string, b: string): number {
 }
 
 /**
- * Normalize string for comparison (lowercase, trim, collapse whitespace)
+ * Normalize string for comparison: lowercase, trim, collapse whitespace,
+ * and normalize typographic variants (dashes, quotes) to ASCII equivalents.
  */
 function normalize(s: string): string {
-  return s.toLowerCase().trim().replace(/\s+/g, " ");
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/[\u2013\u2014]/g, "-")   // en-dash, em-dash → hyphen
+    .replace(/[\u2018\u2019]/g, "'")   // curly single quotes → straight
+    .replace(/[\u201c\u201d]/g, '"')   // curly double quotes → straight
+    .replace(/\s+/g, " ");
 }
 
 // ============================================================================
@@ -189,8 +200,11 @@ function serializeAttrs(attrs: IngredientAttribute[]): string {
 }
 
 /**
- * Calculate name similarity score with containment bonus.
- * If one name contains the other as a substring, boost the score.
+ * Calculate name similarity score with containment and word-overlap bonuses.
+ *
+ * Substring containment: "sea salt" in "coarse sea salt" → boost.
+ * Word overlap: all words of "grapeseed oil" appear in "grapeseed or other
+ * neutral oil" even though it's not a substring → boost.
  */
 function nameSimilarityScore(golden: string, actual: string): number {
   const goldenNorm = normalize(golden);
@@ -199,22 +213,37 @@ function nameSimilarityScore(golden: string, actual: string): number {
   // Base Levenshtein ratio
   const levScore = levenshteinRatio(goldenNorm, actualNorm);
 
-  // Containment check: if one contains the other, boost the score
-  // This handles cases like "neutral oil" vs "peanut, rice bran, or other neutral oil"
+  // Substring containment check
   if (goldenNorm.includes(actualNorm) || actualNorm.includes(goldenNorm)) {
     const shorter = Math.min(goldenNorm.length, actualNorm.length);
-    // If the shorter string is reasonably substantial (>= 5 chars) and fully contained,
-    // give it a minimum score of 0.65 regardless of length ratio
     if (shorter >= 5) {
       return Math.max(levScore, 0.65);
     }
-    // For shorter substrings, use length ratio but with a boost
     const longer = Math.max(goldenNorm.length, actualNorm.length);
     const containmentScore = shorter / longer;
     return Math.min(1, Math.max(levScore, containmentScore * 1.5, 0.5));
   }
 
+  // Word-overlap check: if all significant words of the shorter name appear
+  // in the longer name, treat it like containment. Handles cases like
+  // "maldon sea salt" vs "maldon or other high-quality coarse sea salt".
+  const goldenWords = significantWords(goldenNorm);
+  const actualWords = significantWords(actualNorm);
+  const [shorter, longerSet] =
+    goldenWords.length <= actualWords.length
+      ? [goldenWords, new Set(actualWords)]
+      : [actualWords, new Set(goldenWords)];
+  if (shorter.length >= 2 && shorter.every((w) => longerSet.has(w))) {
+    return Math.max(levScore, 0.65);
+  }
+
   return levScore;
+}
+
+/** Extract words that carry meaning (skip articles, prepositions, conjunctions) */
+const STOP_WORDS = new Set(["a", "an", "the", "of", "or", "and", "for", "with", "to", "in", "other"]);
+function significantWords(s: string): string[] {
+  return s.split(/[\s,]+/).filter((w) => w.length > 0 && !STOP_WORDS.has(w));
 }
 
 /**
@@ -268,6 +297,8 @@ function compareIngredients(
         goldenName: golden.name,
         actualId: null,
         actualName: null,
+        goldenLine: golden.line,
+        actualLine: null,
         nameScore: 0,
         quantityScore: 0,
         notesScore: 0,
@@ -332,6 +363,8 @@ function compareIngredients(
       goldenName: golden.name,
       actualId: actual.id,
       actualName: actual.name,
+      goldenLine: golden.line,
+      actualLine: actual.line,
       nameScore,
       quantityScore,
       notesScore,
@@ -478,10 +511,18 @@ function compareRefSets(
   return { score, missingRefs, extraRefs };
 }
 
-function getStepLines(section: StepsSection): string[] {
+interface StepEntry {
+  text: string;
+  line: number;
+}
+
+function getStepEntries(section: StepsSection): StepEntry[] {
   return section.lines
-    .map((l) => l.text.trim())
-    .filter((t) => t.length > 0 && /^\d+\./.test(t));
+    .filter((l) => {
+      const t = l.text.trim();
+      return t.length > 0 && /^\d+\./.test(t);
+    })
+    .map((l) => ({ text: l.text.trim(), line: l.line }));
 }
 
 function compareSteps(
@@ -503,21 +544,21 @@ function compareSteps(
     return { comparisons: [], missingCount: 0, extraCount: 0, score: 1 };
   }
   if (!actualSection) {
-    const goldenSteps = getStepLines(goldenSection);
+    const goldenEntries = getStepEntries(goldenSection);
     return {
       comparisons: [],
-      missingCount: goldenSteps.length,
+      missingCount: goldenEntries.length,
       extraCount: 0,
       score: 0,
     };
   }
 
-  const goldenSteps = getStepLines(goldenSection);
-  const actualSteps = getStepLines(actualSection);
+  const goldenEntries = getStepEntries(goldenSection);
+  const actualEntries = getStepEntries(actualSection);
 
   // Pre-resolve all step text for comparison
-  const goldenResolved = goldenSteps.map((s) => normalize(resolveStepRefs(s, goldenLookup)));
-  const actualResolved = actualSteps.map((s) => normalize(resolveStepRefs(s, actualLookup)));
+  const goldenResolved = goldenEntries.map((s) => normalize(resolveStepRefs(s.text, goldenLookup)));
+  const actualResolved = actualEntries.map((s) => normalize(resolveStepRefs(s.text, actualLookup)));
 
   // Sliding-window greedy alignment: for each golden step, find the best
   // matching actual step within ±2 index positions. This prevents one
@@ -530,12 +571,12 @@ function compareSteps(
   const comparisons: StepComparison[] = [];
   const goldenMatched = new Set<number>();
 
-  for (let gi = 0; gi < goldenSteps.length; gi++) {
+  for (let gi = 0; gi < goldenEntries.length; gi++) {
     let bestIdx = -1;
     let bestTextScore = -1;
 
     const lo = Math.max(0, gi - WINDOW);
-    const hi = Math.min(actualSteps.length - 1, gi + WINDOW);
+    const hi = Math.min(actualEntries.length - 1, gi + WINDOW);
 
     for (let ai = lo; ai <= hi; ai++) {
       if (claimedActual.has(ai)) continue;
@@ -550,8 +591,8 @@ function compareSteps(
       claimedActual.add(bestIdx);
       goldenMatched.add(gi);
 
-      const goldenText = goldenSteps[gi]!;
-      const actualText = actualSteps[bestIdx]!;
+      const goldenText = goldenEntries[gi]!.text;
+      const actualText = actualEntries[bestIdx]!.text;
       const textScore = bestTextScore;
 
       // Reference accuracy
@@ -564,6 +605,8 @@ function compareSteps(
 
       comparisons.push({
         index: gi + 1,
+        goldenLine: goldenEntries[gi]!.line,
+        actualLine: actualEntries[bestIdx]!.line,
         textScore,
         refsScore: refComparison.score,
         totalScore,
@@ -573,8 +616,8 @@ function compareSteps(
     }
   }
 
-  const missingCount = goldenSteps.length - goldenMatched.size;
-  const extraCount = actualSteps.length - claimedActual.size;
+  const missingCount = goldenEntries.length - goldenMatched.size;
+  const extraCount = actualEntries.length - claimedActual.size;
 
   // Calculate score
   const matchedScore = comparisons.reduce((sum, c) => sum + c.totalScore, 0);
@@ -582,7 +625,7 @@ function compareSteps(
     missingCount * weights.missingStepPenalty +
     extraCount * weights.extraStepPenalty;
 
-  const maxPossible = goldenSteps.length;
+  const maxPossible = goldenEntries.length;
   const rawScore = Math.max(0, matchedScore - countPenalty);
   const score = maxPossible > 0 ? rawScore / maxPossible : 1;
 
@@ -625,7 +668,7 @@ function compareRecipe(
       },
       steps: {
         comparisons: [],
-        missingCount: getStepLines(getStepsSection(golden)).length,
+        missingCount: getStepEntries(getStepsSection(golden)).length,
         extraCount: 0,
       },
     };

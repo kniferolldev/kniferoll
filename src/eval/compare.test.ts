@@ -1065,3 +1065,70 @@ describe("weight normalization", () => {
     expect(result1.score).toBe(result2.score);
   });
 });
+
+describe("typographic normalization", () => {
+  it("treats en-dashes and hyphens as equivalent in quantities", () => {
+    const golden = parseDocument(
+      makeDoc(`
+# Recipe
+
+## Ingredients
+
+- pork butt - 8\u201310 lb
+
+## Steps
+
+1. Cook the [[pork butt]].
+`),
+    );
+    const actual = parseDocument(
+      makeDoc(`
+# Recipe
+
+## Ingredients
+
+- pork butt - 8-10 lb
+
+## Steps
+
+1. Cook the [[pork butt]].
+`),
+    );
+
+    const result = compareDocuments(golden, actual);
+    expect(result.score).toBe(100);
+    expect(result.recipes[0]!.ingredients.comparisons[0]!.quantityScore).toBe(1);
+  });
+
+  it("treats curly and straight quotes as equivalent", () => {
+    const golden = parseDocument(
+      makeDoc(`
+# Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix until \u201csmooth\u201d.
+`),
+    );
+    const actual = parseDocument(
+      makeDoc(`
+# Recipe
+
+## Ingredients
+
+- flour - 1 cup
+
+## Steps
+
+1. Mix until "smooth".
+`),
+    );
+
+    const result = compareDocuments(golden, actual);
+    expect(result.stepScore).toBe(1);
+  });
+});

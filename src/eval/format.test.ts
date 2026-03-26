@@ -140,6 +140,8 @@ describe("formatDetailed", () => {
                 goldenName: "flour",
                 actualId: "flour",
                 actualName: "flour",
+                goldenLine: 5,
+                actualLine: 5,
                 nameScore: 1.0,
                 quantityScore: 0.8,
                 notesScore: 1.0,
@@ -212,6 +214,8 @@ describe("formatDetailed", () => {
                 goldenName: "flour",
                 actualId: "flour",
                 actualName: "flour",
+                goldenLine: 5,
+                actualLine: 5,
                 nameScore: 0.7,
                 quantityScore: 0.6,
                 notesScore: 0.5,
@@ -259,6 +263,8 @@ describe("formatDetailed", () => {
             comparisons: [
               {
                 index: 1,
+                goldenLine: 10,
+                actualLine: 10,
                 textScore: 0.7,
                 refsScore: 1.0,
                 missingRefs: ["salt"],

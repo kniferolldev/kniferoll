@@ -10,6 +10,7 @@ import { parseDocument } from "../core";
 import type { DocumentParseResult } from "../core";
 import type { IO } from "../types";
 import { compareDocuments, formatDetailed, type ComparisonResult } from "../eval";
+import type { TestCaseResult, Baseline, EvalMetadata } from "../eval/types";
 import {
   importRecipe,
   extractRecipe,
@@ -32,40 +33,6 @@ import {
 // Types
 // ============================================================================
 
-/** Result for a single test case */
-interface TestCaseResult {
-  id: string;
-  parsed: boolean;
-  errorCount: number;
-  warningCount: number;
-  /** Structured comparison score (0-100) */
-  score: number;
-  /** Detailed comparison result */
-  comparison?: ComparisonResult;
-  actual: string;
-  importMetrics?: InferenceMetrics;
-}
-
-/** Metadata about the eval run */
-interface EvalMetadata {
-  /** Model used for import, e.g. "google/gemini-3-flash-preview" */
-  importerModel?: string;
-}
-
-/** Baseline data structure */
-interface Baseline {
-  timestamp: string;
-  metadata: EvalMetadata;
-  results: Record<string, TestCaseResult>;
-  summary: {
-    parseRate: number;
-    avgScore: number;
-    totalDurationMs?: number;
-    totalInputTokens?: number;
-    totalOutputTokens?: number;
-  };
-}
-
 /** Test case loaded from disk */
 interface TestCase {
   id: string;
@@ -80,6 +47,7 @@ interface TestCase {
 interface ParsedArgs {
   save: boolean;
   diff: boolean;
+  explore: boolean;
   regenerate: boolean;
   extractOnly: boolean;
   formatOnly: boolean;
@@ -96,6 +64,7 @@ interface ParseResult {
 function parseArgs(args: string[]): ParseResult {
   let save = false;
   let diff = false;
+  let explore = false;
   let regenerate = false;
   let extractOnly = false;
   let formatOnly = false;
@@ -108,6 +77,7 @@ function parseArgs(args: string[]): ParseResult {
     const arg = args[i]!;
     if (arg === "--save") save = true;
     else if (arg === "--diff") diff = true;
+    else if (arg === "--explore") explore = true;
     else if (arg === "--regenerate") {
       regenerate = true;
       save = true; // --regenerate implies --save
@@ -134,7 +104,7 @@ function parseArgs(args: string[]): ParseResult {
     else if (!arg.startsWith("-")) evalsDir = arg;
   }
 
-  return { args: { save, diff, regenerate, extractOnly, formatOnly, model, evalsDir, only }, error };
+  return { args: { save, diff, explore, regenerate, extractOnly, formatOnly, model, evalsDir, only }, error };
 }
 
 // ============================================================================
@@ -335,7 +305,24 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     return 2;
   }
 
-  const { save, diff, regenerate, extractOnly, formatOnly, model, evalsDir, only } = parseResult.args;
+  const { save, diff, explore, regenerate, extractOnly, formatOnly, model, evalsDir, only } = parseResult.args;
+
+  // --explore: generate HTML visualization and open in browser
+  if (explore) {
+    const baseline = await loadBaseline(evalsDir);
+    if (!baseline) {
+      writeErr(`No baseline.json found in ${evalsDir}/. Run \`kr eval --save\` first.\n`);
+      return 1;
+    }
+    const { generateExplorerHtml } = await import("../eval/explorer");
+    const html = await generateExplorerHtml(baseline, evalsDir);
+    const outPath = join(evalsDir, "explorer.html");
+    await Bun.write(outPath, html);
+    write(`Wrote ${outPath}\n`);
+    const proc = Bun.spawn(["open", outPath]);
+    await proc.exited;
+    return 0;
+  }
 
   // Resolve models: use defaults when not specified
   const importModel = regenerate

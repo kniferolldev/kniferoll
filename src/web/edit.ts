@@ -239,6 +239,9 @@ export function setupEditInteractions(
     ta.className = className;
     ta.value = value;
     ta.setAttribute("aria-label", ariaLabel);
+    ta.setAttribute("autocorrect", "off");
+    ta.setAttribute("autocapitalize", "off");
+    ta.spellcheck = false;
     ta.rows = 1;
 
     const autoSize = () => {

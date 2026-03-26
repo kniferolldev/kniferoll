@@ -4,6 +4,7 @@ node_modules
 # output
 out
 dist
+evals/explorer.html
 *.tgz
 screenshots
 imported-recipes

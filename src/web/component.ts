@@ -20,6 +20,7 @@ import type {
   Ingredient,
   IngredientAttribute,
   IngredientsSection,
+  Quantity,
   Recipe,
   TextBlock,
   UnitDimension,
@@ -1228,6 +1229,7 @@ const renderRecipe = (
   inlineValuesByLine: Map<number, DocumentInlineValueAny[]>,
   source?: Source,
   presets?: ScalePreset[],
+  yieldQuantity?: Quantity,
 ): string => {
   const ingredientsHtml = renderIngredientsSection(recipe.ingredients, options);
   const stepsHtml = renderStepsSection(recipe.steps, recipe, options, targetMeta, inlineValuesByLine);
@@ -1244,6 +1246,7 @@ const renderRecipe = (
     : "";
   const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
   const sourceHtml = source ? renderSource(source) : "";
+  const yieldHtml = yieldQuantity ? renderYield(yieldQuantity, options.scaleFactor) : "";
   let introHtml = "";
   if (recipe.introLines.length > 0) {
     introHtml = renderIntro(recipe.introLines, options, inlineValuesByLine, targetMeta);
@@ -1255,7 +1258,7 @@ const renderRecipe = (
     recipe.id,
   )}" data-kr-layout="${escapeAttr(options.layout)}"><header class="kr-recipe__header"><div class="kr-recipe__header-row"><div class="kr-recipe__header-text"><h2 class="kr-recipe__title${diagnosticClass}" data-kr-line="${recipe.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(
     recipe.title,
-  )}</h2>${sourceHtml}</div>${scaleWidget}</div></header>${introHtml}${sections}</section>`;
+  )}</h2>${sourceHtml}${yieldHtml}</div>${scaleWidget}</div></header>${introHtml}${sections}</section>`;
 };
 
 const renderSource = (source: Source): string => {
@@ -1285,6 +1288,23 @@ const renderSource = (source: Source): string => {
   }
 
   return "";
+};
+
+const renderYield = (
+  yieldQuantity: Quantity,
+  scaleFactor: number,
+): string => {
+  const scaled = scaleFactor !== 1 ? scaleQuantity(yieldQuantity, scaleFactor) : null;
+  const formatted = formatQuantity(yieldQuantity, {
+    scaled: scaled ?? undefined,
+  });
+  const display = formatted ? escapeHtml(formatted) : escapeHtml(yieldQuantity.raw);
+
+  if (scaled) {
+    const original = formatQuantity(yieldQuantity) ?? yieldQuantity.raw;
+    return `<div class="kr-yield">Yield: <span class="kr-yield__value" title="${escapeAttr(original)}">${display}</span></div>`;
+  }
+  return `<div class="kr-yield">Yield: <span class="kr-yield__value">${display}</span></div>`;
 };
 
 export const renderDocument = (
@@ -1381,9 +1401,10 @@ export const renderDocument = (
   } else {
     const scalePresets = doc.frontmatter?.scales ?? [];
     doc.recipes.forEach((recipe, index) => {
-      // Only show source on the main recipe (index 0)
+      // Only show source and yield on the main recipe (index 0)
       const source = index === 0 ? doc.frontmatter?.source : undefined;
-      parts.push(renderRecipe(recipe, index, options, targetMeta, inlineValuesByLine, source, scalePresets));
+      const yieldQuantity = index === 0 ? doc.frontmatter?.yield : undefined;
+      parts.push(renderRecipe(recipe, index, options, targetMeta, inlineValuesByLine, source, scalePresets, yieldQuantity));
     });
   }
 
