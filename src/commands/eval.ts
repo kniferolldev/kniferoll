@@ -198,7 +198,7 @@ async function loadTestCases(evalsDir: string): Promise<LoadedTestCase[]> {
   const testCases: LoadedTestCase[] = [];
 
   const entries = await Array.fromAsync(
-    new Bun.Glob("*/golden.md").scan({ cwd: evalsDir })
+    new Bun.Glob("**/golden.md").scan({ cwd: evalsDir })
   );
 
   for (const entry of entries) {
