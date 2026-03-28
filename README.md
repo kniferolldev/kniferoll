@@ -1,3 +1,10 @@
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo/logo-white.svg">
+    <img src="logo/logo-black.svg" alt="Kniferoll" width="120">
+  </picture>
+</p>
+
 # Kniferoll
 
 A structured markdown format for recipes — parser, web component, and import engine.
