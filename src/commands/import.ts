@@ -12,11 +12,11 @@ import { stat } from "node:fs/promises";
 import type { IO } from "../types";
 import {
   importRecipe,
-  DEFAULT_IMPORT_MODEL,
   parseModelSpec,
   type InferenceInput,
   type LazyImage,
 } from "../import";
+import { DEFAULT_IMPORT_MODEL } from "../import/config";
 
 // ============================================================================
 // Argument Parsing

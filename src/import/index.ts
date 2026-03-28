@@ -58,9 +58,6 @@ export type {
 // Type utilities
 export { parseModelSpec, formatModelSpec } from "./types";
 
-// Configuration
-export { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, loadSchema, getApiKey, getApiKeyEnvVar } from "./config";
-
 // Browser-safe helpers
 export { getProviderDisplayName, getProviderApiKeyUrl } from "./constants";
 

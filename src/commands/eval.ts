@@ -18,16 +18,13 @@ import {
   formatRecipe,
   parseModelSpec,
   formatModelSpec,
-  getApiKey,
-  getApiKeyEnvVar,
-  DEFAULT_IMPORT_MODEL,
-  DEFAULT_FORMAT_MODEL,
   type ModelSpec,
   type InferenceInput,
   type LazyImage,
   type InferenceMetrics,
   type ExtractionResult,
 } from "../import";
+import { getApiKey, getApiKeyEnvVar, DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL } from "../import/config";
 
 // ============================================================================
 // Types

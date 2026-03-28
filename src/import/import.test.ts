@@ -3,16 +3,11 @@ import {
   parseModelSpec,
   formatModelSpec,
   buildFormatPrompt,
-  DEFAULT_IMPORT_MODEL,
-  DEFAULT_FORMAT_MODEL,
-  getApiKeyEnvVar,
-  getApiKey,
-  loadSchema,
   arrayBufferToBase64,
   blobToLoadedImage,
   resolveInput,
 } from "./index";
-import { clearSchemaCache } from "./config";
+import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, getApiKeyEnvVar, getApiKey, loadSchema, clearSchemaCache } from "./config";
 import { buildExtractionPrompt } from "./extract-prompt";
 import { buildRotationDetectionPrompt } from "./rotation-prompt";
 import {
