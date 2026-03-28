@@ -8,7 +8,8 @@
     ".": "./dist/kniferoll.min.js",
     "./core": "./src/core/index.ts",
     "./import": "./src/import/index.ts",
-    "./component": "./src/web/index.ts"
+    "./component": "./src/web/index.ts",
+    "./SCHEMA.md": "./SCHEMA.md"
   },
   "files": [
     "dist/",
