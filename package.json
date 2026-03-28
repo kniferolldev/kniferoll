@@ -1,16 +1,26 @@
 {
   "name": "kniferoll",
-  "module": "index.ts",
+  "version": "1.0.0",
   "type": "module",
-  "private": true,
+  "license": "MIT",
+  "description": "A structured markdown format for recipes — parser, web component, and import engine",
+  "exports": {
+    ".": "./dist/kniferoll.min.js",
+    "./core": "./src/core/index.ts",
+    "./import": "./src/import/index.ts",
+    "./component": "./src/web/index.ts"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "SCHEMA.md"
+  ],
   "scripts": {
-    "homeplate": "cd apps/homeplate && bun run dev",
     "kr": "bun src/kr.ts",
     "test": "bun test",
-    "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage",
-    "typecheck": "bunx tsc --noEmit && bunx tsc --noEmit --project apps/homeplate/tsconfig.json",
-    "screenshot": "bun scripts/screenshot.ts",
-    "build": "bun scripts/build.ts && bun run --cwd apps/homeplate build"
+    "typecheck": "bunx tsc --noEmit",
+    "build": "bun scripts/build.ts",
+    "screenshot": "bun scripts/screenshot.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

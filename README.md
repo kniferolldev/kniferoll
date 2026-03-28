@@ -1,21 +1,15 @@
-# kniferoll
+# Kniferoll
 
-A single-tag web component (`<kr-recipe>`) that renders Kniferoll Markdown offline in the browser.
+A structured markdown format for recipes — parser, web component, and import engine.
 
-## Getting Started
+## Quick Start
 
-### Basic Usage
+Drop a single script tag, then write your recipe:
 
 ```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>My Recipe</title>
-  <script type="module" src="kniferoll.min.js"></script>
-</head>
-<body>
-  <kr-recipe>
+<script type="module" src="https://kniferoll.dev/kr@1.js"></script>
+
+<kr-recipe>
 # Pasta Aglio e Olio
 
 ## Ingredients
@@ -26,162 +20,86 @@ A single-tag web component (`<kr-recipe>`) that renders Kniferoll Markdown offli
 - parsley - 1/4 cup, chopped
 
 ## Steps
-1. Boil [[spaghetti]] @10m until al dente.
-2. Sauté [[garlic]] in [[olive-oil]] until fragrant, about 2 minutes.
-3. Add [[red-pepper-flakes]] and drained pasta.
-4. Toss and garnish with [[parsley]].
-  </kr-recipe>
-</body>
-</html>
-```
-
-**Note:** Distribution method (CDN, npm, self-hosted) is TBD. For now, build locally or use the demo server.
-
-### Interactive Playground
-
-Try the [interactive playground](http://127.0.0.1:5173/) (`bun run demo`) to:
-- Edit recipes in real-time
-- Customize appearance with CSS variables
-- Test different layouts
-- Export embed-ready HTML snippets
-
-## API Reference
-
-### Attributes
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| (content) | Markdown | Recipe content as child text or via `content` property |
-| `scale` | number | Multiplicative scale factor (default: `1`) |
-| `preset` | string \| number | Select frontmatter scale preset by name or index |
-| `quantity-display` | `native` \| `metric` \| `imperial` | Which quantity representation to show |
-| `layout` | `stacked` \| `two-column` \| `steps-left` \| `ingredients-left` \| `print-compact` | Layout mode |
-| `diagnostics` | `off` \| `inline` \| `summary` \| `panel` | Diagnostics visibility (default: `summary`) |
-
-### CSS Custom Properties
-
-Customize appearance by setting CSS variables on the `<kr-recipe>` element:
-
-```css
-kr-recipe {
-  /* Typography */
-  --kr-font-family: 'Inter', system-ui, sans-serif;
-  --kr-font-size-base: 1rem;
-  --kr-line-height: 1.6;
-
-  /* Colors */
-  --kr-color-text: #1a1a1a;
-  --kr-color-muted: #666;
-  --kr-color-accent: #2563eb;
-  --kr-color-surface: #fff;
-  --kr-color-border: #e5e5e5;
-
-  /* Spacing */
-  --kr-section-gap: 2rem;
-  --kr-header-gap: 1rem;
-  --kr-item-gap: 0.5rem;
-
-  /* Card */
-  --kr-card-radius: 0.5rem;
-  --kr-card-padding: 2rem;
-
-  /* Chips */
-  --kr-color-temperature: #dbeafe;
-  --kr-color-temperature-text: #1e40af;
-}
-```
-
-See the playground for a complete list of customizable properties.
-
-## Examples
-
-### Scaling Recipes
-
-```html
-<kr-recipe scale="2">
-# Pancakes
-## Ingredients
-- flour - 1 cup
-- milk - 1 cup
-- eggs - 2
+1. Boil [[spaghetti]] in salted water until al dente.
+2. Sauté [[garlic]] in [[olive-oil]] over medium-low heat until golden.
+3. Add [[red-pepper-flakes]] and toss with drained pasta.
+4. Finish with [[parsley]] and a splash of pasta water.
 </kr-recipe>
 ```
 
-Displays doubled quantities (2 cups flour, 2 cups milk, 4 eggs).
+That's it. No build step, no framework, no dependencies.
 
-### Custom Layout
+## What You Get
 
-```html
-<kr-recipe layout="two-column">
-<!-- kniferoll markdown -->
-</kr-recipe>
-```
+- **Scaling** — Click to scale recipes up or down. Quantities update everywhere.
+- **Unit conversion** — Toggle between metric and imperial.
+- **Ingredient linking** — References in steps highlight the corresponding ingredient.
+- **Inline editing** — Click any ingredient or step to edit in place.
+- **Theming** — CSS custom properties for full visual control.
+- **Five layouts** — Stacked, two-column, steps-left, ingredients-left, print-compact.
+- **Diagnostics** — Parser warnings shown inline to help fix formatting issues.
 
-### Programmatic Content
+## The Format
 
-```javascript
-const recipe = document.querySelector('kr-recipe');
-recipe.content = `
-# Soup
-## Ingredients
-- broth - 4 cups
-## Steps
-1. Heat and serve.
-`;
-```
+Kniferoll Markdown is designed to be readable as plain text while enabling rich rendering. See [SCHEMA.md](SCHEMA.md) for the full specification.
 
-## Installation
+Key syntax:
+- `- ingredient - quantity unit, modifier :: attribute` for ingredients
+- `[[ingredient-id]]` to reference ingredients in steps
+- `{350F}` or `{1 cup | 240ml}` for inline temperatures and quantities
+- YAML frontmatter for metadata, source attribution, and scale presets
 
-```bash
-bun install
-```
-
-## Build
-
-Build production bundles:
+## Programmatic Use
 
 ```bash
-bun run build
+bun add kniferoll
 ```
 
-This creates:
-- `dist/kniferoll.js` - Development bundle with inline source maps
-- `dist/kniferoll.min.js` - Minified production bundle (~154 KB)
+```typescript
+// Parse a recipe
+import { parseDocument } from "kniferoll/core";
+const result = parseDocument(markdown);
+
+// Import from text or images via LLM
+import { importRecipe } from "kniferoll/import";
+const result = await importRecipe({ text: html }, { apiKeys: { google: key } });
+
+// Register the web component
+import "kniferoll/component";
+```
+
+## CLI
+
+```bash
+bun run kr check recipe.md     # Lint a recipe
+bun run kr import recipe.jpg   # Import from image via LLM
+bun run kr eval                # Run import quality evaluations
+```
 
 ## Development
 
-### CLI linter
-
 ```bash
-bun run kr check recipes/granola.md
+bun install          # Install dependencies
+bun test             # Run tests
+bun run build        # Build dist/kniferoll.js and dist/kniferoll.min.js
+bun run typecheck    # TypeScript checking
 ```
 
-### Demo server
+## CSS Custom Properties
 
-```bash
-bun run demo
+Style the component to match your site:
+
+```css
+kr-recipe {
+  --kr-font-family: 'Inter', system-ui, sans-serif;
+  --kr-color-text: #1a1a1a;
+  --kr-color-accent: #2563eb;
+  --kr-color-surface: #fff;
+  --kr-card-radius: 0.5rem;
+  --kr-card-padding: 2rem;
+}
 ```
 
-Then open:
+## License
 
-- `http://127.0.0.1:5173/` - Interactive playground with live editing and theming
-- `http://127.0.0.1:5173/minimal` - Minimal embed example (script tag + inline markdown)
-
-### Testing
-
-```bash
-bun test                    # All tests
-bun test src/core          # Core tests only
-bun test tests/e2e         # E2E tests (requires browsers)
-```
-
-### Screenshots
-
-```bash
-bun run screenshot                  # Capture current playground state
-bun run screenshot --all-layouts   # Capture all layout variants
-```
-
----
-
-This project uses [Bun](https://bun.com), a fast all-in-one JavaScript runtime.
+MIT
