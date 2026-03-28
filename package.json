@@ -1,9 +1,13 @@
 {
-  "name": "kniferoll",
+  "name": "@kniferoll/kniferoll",
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
   "description": "A structured markdown format for recipes — parser, web component, and import engine",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kniferolldev/kniferoll.git"
+  },
   "exports": {
     ".": "./dist/kniferoll.min.js",
     "./core": "./src/core/index.ts",
@@ -12,25 +16,35 @@
     "./SCHEMA.md": "./SCHEMA.md"
   },
   "files": [
-    "dist/",
-    "src/",
-    "logo/",
-    "SCHEMA.md"
+    "dist/kniferoll.min.js",
+    "src/core/",
+    "src/import/",
+    "src/web/",
+    "src/types.ts",
+    "logo/*.svg",
+    "logo/*.png",
+    "logo/*.ico",
+    "SCHEMA.md",
+    "!**/*.test.ts"
   ],
   "scripts": {
     "kr": "bun src/kr.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
     "build": "bun scripts/build.ts",
-    "screenshot": "bun scripts/screenshot.ts"
+    "screenshot": "bun scripts/screenshot.ts",
+    "prepublishOnly": "bun run typecheck && bun run build && bun test"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "^1.3.11",
     "linkedom": "^0.18.12",
     "playwright": "^1.56.1"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "jpeg-js": "^0.4.4"

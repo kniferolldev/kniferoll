@@ -4,7 +4,8 @@
 
 import type { InferenceInput, ImportResult, ImportOptions, ExtractionResult, FormatResult, TwoStageMetrics, LoadedImage, InferenceMetrics, Provider } from "./types";
 import { parseModelSpec, formatModelSpec } from "./types";
-import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, loadSchema, getApiKey, getApiKeyEnvVar } from "./config";
+import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, getApiKey, getApiKeyEnvVar } from "./config";
+import { loadSchema } from "./load-schema";
 import { buildExtractionPrompt } from "./extract-prompt";
 import { buildTextExtractionPrompt } from "./text-extract-prompt";
 import { buildFormatPrompt } from "./format-prompt";

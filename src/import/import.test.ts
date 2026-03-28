@@ -7,7 +7,8 @@ import {
   blobToLoadedImage,
   resolveInput,
 } from "./index";
-import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, getApiKeyEnvVar, getApiKey, loadSchema, clearSchemaCache } from "./config";
+import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, getApiKeyEnvVar, getApiKey } from "./config";
+import { loadSchema, clearSchemaCache } from "./load-schema";
 import { buildExtractionPrompt } from "./extract-prompt";
 import { buildRotationDetectionPrompt } from "./rotation-prompt";
 import {
