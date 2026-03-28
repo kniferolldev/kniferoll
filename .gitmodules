@@ -1,0 +1,3 @@
+[submodule "evals"]
+	path = evals
+	url = https://github.com/kniferolldev/kniferoll-evals.git
