@@ -105,10 +105,11 @@ test("formatQuantity formats scaled compound parts independently", () => {
   expect(formatQuantity(q, { scaled })).toBe("2 cups + 6 tbsp");
 });
 
-test("formatQuantity expands unit-only quantities when scaling", () => {
+test("formatQuantity preserves unit-only quantities even with scaled option", () => {
   const q = quantity("pinch");
   const scaled = scaleQuantity(q, 2);
-  expect(formatQuantity(q, { scaled })).toBe("2 pinch");
+  // Unit-only quantities are implicitly noscale, so always display raw text
+  expect(formatQuantity(q, { scaled })).toBe("pinch");
 });
 
 test("formatQuantity caps precision for unknown units", () => {

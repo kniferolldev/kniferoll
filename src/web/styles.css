@@ -93,6 +93,18 @@
     font-style: italic;
   }
 
+  /* Yield */
+  .kr-yield {
+    margin-top: 0.25rem;
+    font-size: 0.85em;
+    color: var(--kr-color-muted, #6b7280);
+    line-height: 1.5;
+  }
+
+  .kr-yield__value {
+    font-weight: 500;
+  }
+
   /* Intro text */
   .kr-intro {
     margin-top: 0.75rem;

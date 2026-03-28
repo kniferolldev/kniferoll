@@ -102,7 +102,8 @@ H1.
   same unit family (e.g., both volume or both mass). Each part scales
   independently. Example: `- water - 1 cup + 3 tbsp :: also=285g`.
 - **Unit-only**: if a quantity consists only of a unit with no numeric amount
-  (e.g., `pinch`, `dash`), it is treated as having an implied amount of `1`.
+  (e.g., `pinch`, `dash`), it is treated as having an implied amount of `1`
+  and is implicitly `noscale` (non-scaling).
 
 ### 2.3 Attributes (after `::`)
 
@@ -300,6 +301,7 @@ If present, frontmatter must be the very first content in the file (opening
 ---
 version: 1
 source: Grandma
+yield: 12 cookies
 scales:
   - name: Family size
     anchor: oats
@@ -316,6 +318,10 @@ scales:
     `{ title: <string>, author?: <string>, pages?: <number|string>, isbn?: <string>, year?: <number> }`.
     - `pages` may be a single page (e.g., `123`) or a range string (e.g.,
       `"123–125"`).
+- **yield** (optional): how much the recipe produces. Accepts any quantity
+  expression: a single amount (`12 cookies`, `2 loaves`), a range
+  (`6-8 servings`), or a compound (`1 cup + 3 tbsp`). When the recipe is
+  scaled, the yield scales proportionally.
 - **scales** (optional): named presets. Each preset names an **anchor**
   ingredient (the same way ingredients are referenced elsewhere) and a target
   **amount** (a quantity, e.g. `900 g`). When a preset is selected, renderers
@@ -342,6 +348,11 @@ source:
     title: The Superiority Burger Cookbook
     author: Brooks Headley
     pages: "112–115"
+---
+
+---
+version: 1
+yield: 2 loaves
 ---
 ```
 

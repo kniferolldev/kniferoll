@@ -27,7 +27,7 @@ HARD RULES (violations will be rejected):
   sub-recipe's \`## Steps\`, not in the main recipe.
 
 CONVERSION GUIDELINES:
-1. Only include YAML frontmatter when there is real metadata (source attribution, scale presets).
+1. Only include YAML frontmatter when there is real metadata (source attribution, yield, scale presets).
    Do NOT add empty or version-only frontmatter.
    Source types:
    - Plain string for freeform attribution (person, restaurant, etc.): \`source: Momofuku\`
@@ -36,6 +36,10 @@ CONVERSION GUIDELINES:
    - Cookbook object (for books): \`source: { cookbook: { title: "Book Name", author: "Author" } }\`
      Note the required \`cookbook:\` wrapper.
    When in doubt, use a plain string.
+   Yield: If the recipe states how much it makes (servings, cookies, cups, loaves, etc.),
+   add \`yield:\` with a quantity expression. Examples: \`yield: 12 cookies\`, \`yield: 4 servings\`,
+   \`yield: 1 1/2 cups\`, \`yield: 6-8 servings\`. Keep the yield in the body text too —
+   frontmatter captures structure, body text preserves the author's voice.
 2. Wrap lines at approximately 80 characters for readability. Steps can span
    multiple lines. Preserve the source's step structure — each instruction
    paragraph in the input should become exactly one numbered step. Do NOT split

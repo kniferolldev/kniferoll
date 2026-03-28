@@ -1,9 +1,7 @@
 /**
  * Public API for kniferoll core.
  *
- * This barrel export defines the stable public surface. Internal modules
- * (units, scaling, formatting, edit-format, source-spans) are intentionally
- * excluded — they're implementation details consumed by the web component.
+ * This barrel export defines the stable public surface.
  *
  * The web component (src/web/) imports internal modules directly via file
  * paths and is not constrained by this boundary.
@@ -12,9 +10,18 @@
 // ── Functions ──────────────────────────────────────────────────────────
 
 export { parseDocument } from "./parser";
-export { extractFrontmatter } from "./frontmatter";
+export { extractFrontmatter, serializeFrontmatter } from "./frontmatter";
 export { slug } from "./slug";
 export { diffRecipes } from "./diff";
+export { parseQuantity } from "./quantity";
+export { rewrapMarkdown } from "./edit-format";
+export {
+  lookupUnit,
+  toBaseValue,
+  fromBaseValue,
+  choosePreferredUnit,
+  roundToProfile,
+} from "./units";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -39,12 +46,14 @@ export type {
   TextBlock,
 } from "./types";
 
-// Quantities
+// Quantities & units
 export type {
   Quantity,
   QuantitySingle,
   QuantityRange,
   QuantityKind,
+  UnitDefinition,
+  UnitMatch,
 } from "./types";
 
 // Frontmatter
@@ -70,3 +79,4 @@ export type { ReferenceToken, RecipeLink } from "./types";
 
 // Diff annotations
 export type { DiffAnnotation, DiffStatus, AttributeDiff } from "./diff";
+

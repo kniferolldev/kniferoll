@@ -70,3 +70,7 @@ export { buildTextExtractionPrompt } from "./text-extract-prompt";
 
 // Utilities (for consumers that need to convert Blobs)
 export { blobToLoadedImage, arrayBufferToBase64, resolveInput } from "./utils";
+
+// LLM call wrapper (for consumers that need direct provider access)
+export { callLlm } from "./call-llm";
+export type { CallLlmContent, CallLlmApiKeys } from "./call-llm";

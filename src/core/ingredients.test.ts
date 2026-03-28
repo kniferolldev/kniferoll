@@ -326,6 +326,7 @@ test("parses unit-only quantities with implied amount of 1", () => {
     expect(pepperFlakes.quantity.unit).toBe("pinch");
   }
   expect(pepperFlakes?.modifiers).toBe("optional");
+  expect(pepperFlakes?.attributes).toEqual([{ key: "noscale", value: null }]);
 
   expect(salt?.name).toBe("salt");
   expect(salt?.quantity?.kind).toBe("single");
@@ -333,6 +334,17 @@ test("parses unit-only quantities with implied amount of 1", () => {
     expect(salt.quantity.value).toBe(1);
     expect(salt.quantity.unit).toBe("dash");
   }
+  expect(salt?.attributes).toEqual([{ key: "noscale", value: null }]);
+});
+
+test("unit-only quantity with explicit noscale does not double-add", () => {
+  const { section, diagnostics } = getIngredientsSection(
+    withRecipe(["- salt - pinch :: noscale"]),
+  );
+
+  expect(diagnostics.map((diag) => diag.code)).toEqual([]);
+  const salt = section.ingredients[0];
+  expect(salt?.attributes.filter((a) => a.key === "noscale")).toHaveLength(1);
 });
 
 // ── also= duplicate system validation ────────────────────────────────

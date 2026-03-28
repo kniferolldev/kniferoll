@@ -746,3 +746,109 @@ test("serializeFrontmatter: scales round-trip through parser", () => {
   expect(parsed.frontmatter?.scales?.[0]?.amount).toMatchObject({ kind: "single", value: 500, unit: "g" });
 });
 
+// ── yield ──────────────────────────────────────────────────────────
+
+test("parses yield as single quantity", () => {
+  const result = extractFrontmatter(doc("version: 1\nyield: 12 cookies"));
+  expect(result.diagnostics).toEqual([]);
+  expect(result.frontmatter?.yield).toMatchObject({
+    kind: "single",
+    value: 12,
+    unit: "cookies",
+  });
+});
+
+test("parses yield as range quantity", () => {
+  const result = extractFrontmatter(doc("version: 1\nyield: 6-8 servings"));
+  expect(result.diagnostics).toEqual([]);
+  expect(result.frontmatter?.yield).toMatchObject({
+    kind: "range",
+    min: 6,
+    max: 8,
+    unit: "servings",
+  });
+});
+
+test("parses yield with fraction", () => {
+  const result = extractFrontmatter(doc("version: 1\nyield: 1 1/2 cups"));
+  expect(result.diagnostics).toEqual([]);
+  expect(result.frontmatter?.yield).toMatchObject({
+    kind: "single",
+    value: 1.5,
+    unit: "cups",
+  });
+});
+
+test("parses yield as numeric-only (YAML number)", () => {
+  const result = extractFrontmatter(doc("version: 1\nyield: 4"));
+  expect(result.diagnostics).toEqual([]);
+  expect(result.frontmatter?.yield).toMatchObject({
+    kind: "single",
+    value: 4,
+    unit: null,
+  });
+});
+
+test("parses yield with vulgar fraction", () => {
+  const result = extractFrontmatter(doc("version: 1\nyield: ½ loaf"));
+  expect(result.diagnostics).toEqual([]);
+  expect(result.frontmatter?.yield).toMatchObject({
+    kind: "single",
+    value: 0.5,
+    unit: "loaf",
+  });
+});
+
+test("yield rejects non-string non-number", () => {
+  const msgs = messagesFrom("version: 1\nyield: true");
+  expect(msgs.some((m) => m.includes("must be a quantity string"))).toBe(true);
+});
+
+test("yield rejects bare text without number", () => {
+  const msgs = messagesFrom("version: 1\nyield: cookies");
+  expect(msgs.some((m) => m.includes("not a valid quantity"))).toBe(true);
+});
+
+test("omitted yield is undefined", () => {
+  const result = extractFrontmatter(doc("version: 1"));
+  expect(result.diagnostics).toEqual([]);
+  expect(result.frontmatter?.yield).toBeUndefined();
+});
+
+test("serializeFrontmatter: yield round-trips", () => {
+  const fm: Frontmatter = {
+    version: 1,
+    yield: { kind: "single", raw: "12 cookies", value: 12, unit: "cookies" },
+  };
+  const serialized = serializeFrontmatter(fm) + "\n# Body\n";
+  const parsed = extractFrontmatter(serialized);
+  expect(parsed.diagnostics).toEqual([]);
+  expect(parsed.frontmatter?.yield).toMatchObject({
+    kind: "single",
+    value: 12,
+    unit: "cookies",
+  });
+});
+
+test("serializeFrontmatter: yield with range round-trips", () => {
+  const fm: Frontmatter = {
+    version: 1,
+    yield: { kind: "range", raw: "6-8 servings", min: 6, max: 8, unit: "servings" },
+  };
+  const serialized = serializeFrontmatter(fm) + "\n# Body\n";
+  const parsed = extractFrontmatter(serialized);
+  expect(parsed.diagnostics).toEqual([]);
+  expect(parsed.frontmatter?.yield).toMatchObject({
+    kind: "range",
+    min: 6,
+    max: 8,
+    unit: "servings",
+  });
+});
+
+test("serializeFrontmatter: yield omitted when undefined", () => {
+  const fm: Frontmatter = { version: 1 };
+  const serialized = serializeFrontmatter(fm);
+  expect(serialized).not.toContain("yield");
+});
+

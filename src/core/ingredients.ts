@@ -311,6 +311,13 @@ const parseIngredientLine = (
     parsedQuantity = result.quantity;
   }
 
+  // Auto-inject noscale for unit-only quantities (e.g., "pinch", "dash").
+  // These are subjective amounts that shouldn't scale.
+  if (parsedQuantity?.raw && !/[\d/]/.test(parsedQuantity.raw) && !hasNoscale) {
+    hasNoscale = true;
+    attributes.push({ key: "noscale", value: null });
+  }
+
   // Validate compound quantity: both parts must share a base unit (convertible)
   if (parsedQuantity?.kind === "compound") {
     const [p1, p2] = parsedQuantity.parts;

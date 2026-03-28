@@ -191,13 +191,10 @@ export const formatQuantity = (
     return null;
   }
 
-  // If not scaling or converting, use the original raw text for unit-only
-  // quantities (e.g., "pinch" instead of "1 pinch"). For quantities with
-  // explicit numbers, always go through the formatter for consistent spacing.
-  const isNotScaling = !options.scaled;
-  const isNotConverting = !options.targetUnit && !options.usePreferredUnit;
-  const hasExplicitNumber = original.raw ? HAS_EXPLICIT_NUMBER.test(original.raw) : false;
-  if (isNotScaling && isNotConverting && original.raw && !hasExplicitNumber) {
+  // Unit-only quantities (no explicit number, e.g., "pinch", "dash") always
+  // display as their raw text. These are implicitly noscale, so we never
+  // need to format a scaled value for them.
+  if (original.raw && !HAS_EXPLICIT_NUMBER.test(original.raw)) {
     return original.raw;
   }
 

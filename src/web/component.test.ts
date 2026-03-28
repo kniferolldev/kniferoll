@@ -1880,3 +1880,79 @@ test("scale attribute changes stay in anchor mode for anchor recipes", () => {
   expect(resetHtml).toContain('data-kr-quantity="1000 g"');
   expect(resetHtml).toContain('data-kr-quantity="20 g"');
 });
+
+// ── yield rendering ────────────────────────────────────────────────
+
+test("renderDocument renders yield in header", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const markdown = [
+    "---",
+    "version: 1",
+    "yield: 12 cookies",
+    "---",
+    "",
+    "# Cookies",
+    "",
+    "## Ingredients",
+    "",
+    "- flour - 2 cups",
+    "",
+    "## Steps",
+    "",
+    "1. Mix.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  expect(html).toContain('class="kr-yield"');
+  expect(html).toContain("12 cookies");
+});
+
+test("renderDocument scales yield when scale factor applied", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const markdown = [
+    "---",
+    "version: 1",
+    "yield: 12 cookies",
+    "---",
+    "",
+    "# Cookies",
+    "",
+    "## Ingredients",
+    "",
+    "- flour - 2 cups",
+    "",
+    "## Steps",
+    "",
+    "1. Mix.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown), { scaleFactor: 2 });
+  expect(html).toContain('class="kr-yield"');
+  expect(html).toContain("24 cookies");
+  expect(html).toContain('title="12 cookies"');
+});
+
+test("renderDocument does not render yield when not in frontmatter", () => {
+  if (!componentModule) throw new Error("Component module was not initialized");
+
+  const markdown = [
+    "---",
+    "version: 1",
+    "---",
+    "",
+    "# Cookies",
+    "",
+    "## Ingredients",
+    "",
+    "- flour - 2 cups",
+    "",
+    "## Steps",
+    "",
+    "1. Mix.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+  expect(html).not.toContain('class="kr-yield"');
+});
