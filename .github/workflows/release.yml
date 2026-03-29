@@ -54,9 +54,6 @@ jobs:
       - name: Test
         run: bun test
 
-      - name: Publish to npm
-        run: npm publish --provenance --access public
-
       - name: Deploy bundle to kniferoll.dev
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY_DEV_SITE }}
@@ -84,3 +81,6 @@ jobs:
           git add "kr@${VERSION}.js" "kr@${MAJOR}.js"
           git commit -m "Update bundle to v${VERSION}"
           git push
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
