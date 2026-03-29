@@ -74,14 +74,13 @@ jobs:
 
           # Clone kniferoll.dev, copy bundle, update symlink
           git clone --depth 1 git@github.com:kniferolldev/kniferoll.dev.git /tmp/kniferoll.dev
-          cp dist/kniferoll.min.js "/tmp/kniferoll.dev/static/kr@${VERSION}.js"
-          cd /tmp/kniferoll.dev/static
+          cp dist/kniferoll.min.js "/tmp/kniferoll.dev/kr@${VERSION}.js"
+          cd /tmp/kniferoll.dev
           ln -sf "kr@${VERSION}.js" "kr@${MAJOR}.js"
 
           # Commit and push
-          cd /tmp/kniferoll.dev
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "static/kr@${VERSION}.js" "static/kr@${MAJOR}.js"
+          git add "kr@${VERSION}.js" "kr@${MAJOR}.js"
           git commit -m "Update bundle to v${VERSION}"
           git push
