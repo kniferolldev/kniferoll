@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 #
-# Generate all raster logo assets from logo-black.svg
+# Generate all raster logo assets from an SVG source.
+# Usage: ./generate.sh [source.svg]
+# Default source: logo-black.svg
 # Requires: ImageMagick 7 (magick)
 #
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SRC="logo-black.svg"
+SRC="${1:-logo-black.svg}"
+
+if [[ ! -f "$SRC" ]]; then
+  echo "Error: $SRC not found" >&2
+  exit 1
+fi
 
 if ! command -v magick &>/dev/null; then
   echo "Error: ImageMagick 7 (magick) is required" >&2
   exit 1
 fi
+
+echo "Source: $SRC"
 
 echo "Generating favicon.ico (16x16 + 32x32)..."
 # The logo is ~723x757 (slightly taller than wide).
