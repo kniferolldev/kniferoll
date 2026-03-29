@@ -1,6 +1,6 @@
 {
   "name": "@kniferoll/kniferoll",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "license": "MIT",
   "description": "A structured markdown format for recipes — parser, web component, and import engine",
