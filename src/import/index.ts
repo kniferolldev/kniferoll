@@ -31,6 +31,9 @@
 // Main functions
 export { importRecipe, extractRecipe, extractRecipeFromText, formatRecipe, importRecipeTwoStage } from "./infer";
 
+// Schema loading (Node/Bun only — in browser/worker, pass schema via ImportOptions)
+export { loadSchema, clearSchemaCache } from "./load-schema";
+
 // Image rotation
 export { rotateImage } from "./rotate";
 export type { RotationAngle } from "./rotate";
