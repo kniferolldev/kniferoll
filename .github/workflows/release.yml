@@ -38,8 +38,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
+          node-version: lts/*
           registry-url: 'https://registry.npmjs.org'
 
+      - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
       - run: bunx playwright install chromium
 
@@ -53,9 +55,7 @@ jobs:
         run: bun test
 
       - name: Publish to npm
-        run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
 
       - name: Deploy bundle to kniferoll.dev
         env:
