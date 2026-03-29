@@ -41,6 +41,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - run: bun install --frozen-lockfile
+      - run: bunx playwright install chromium
 
       - name: Typecheck
         run: bun run typecheck
