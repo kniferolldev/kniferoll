@@ -107,6 +107,8 @@ kr-recipe {
 }
 ```
 
+See [AGENTS.md](AGENTS.md) for the full list of 26 custom properties covering typography, colors, spacing, and layout.
+
 ## License
 
 MIT

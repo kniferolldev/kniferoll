@@ -7,10 +7,8 @@
 # Rollback:
 #   1. npm unpublish @kniferoll/kniferoll@<version>  (within 72h; version
 #      number is burned for 24h — bump to next patch if re-releasing)
-#   2. In kniferoll.dev, repoint the major symlink to the previous version:
-#        cd static
-#        ln -sf kr@<previous>.js kr@1.js
-#        git add kr@1.js && git commit -m "Rollback to v<previous>" && git push
+#   2. Roll kniferoll.dev back to the previous version:
+#        gh workflow run update.yml -R kniferolldev/kniferoll.dev -f version=<previous>
 #   3. Delete the git tag:
 #        git tag -d v<version>
 #        git push origin :refs/tags/v<version>
@@ -54,33 +52,13 @@ jobs:
       - name: Test
         run: bun test
 
-      - name: Deploy bundle to kniferoll.dev
-        env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY_DEV_SITE }}
-        run: |
-          # Extract version from tag (v1.0.1 -> 1.0.1)
-          VERSION="${GITHUB_REF_NAME#v}"
-          MAJOR="${VERSION%%.*}"
-
-          # Set up SSH for cross-repo push
-          mkdir -p ~/.ssh
-          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-          export GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key"
-
-          # Clone kniferoll.dev, copy bundle, update symlink
-          git clone --depth 1 git@github.com:kniferolldev/kniferoll.dev.git /tmp/kniferoll.dev
-          cp dist/kniferoll.min.js "/tmp/kniferoll.dev/kr@${VERSION}.js"
-          cd /tmp/kniferoll.dev
-          ln -sf "kr@${VERSION}.js" "kr@${MAJOR}.js"
-
-          # Commit and push
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "kr@${VERSION}.js" "kr@${MAJOR}.js"
-          git commit -m "Update bundle to v${VERSION}"
-          git push
-
       - name: Publish to npm
         run: npm publish --provenance --access public
+
+      - name: Notify kniferoll.dev
+        run: |
+          gh api repos/kniferolldev/kniferoll.dev/dispatches \
+            -f event_type=release \
+            -f "client_payload[version]=${GITHUB_REF_NAME#v}"
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
