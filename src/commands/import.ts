@@ -27,6 +27,7 @@ interface ParsedArgs {
   model: string;
   output: string | null;
   help: boolean;
+  quiet: boolean;
 }
 
 interface ParseResult {
@@ -39,6 +40,7 @@ function parseArgs(args: string[]): ParseResult {
   let model = DEFAULT_IMPORT_MODEL;
   let output: string | null = null;
   let help = false;
+  let quiet = false;
   let error: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
@@ -46,6 +48,8 @@ function parseArgs(args: string[]): ParseResult {
 
     if (arg === "--help" || arg === "-h") {
       help = true;
+    } else if (arg === "--quiet" || arg === "-q") {
+      quiet = true;
     } else if (arg === "--model" || arg === "-m") {
       const value = args[++i];
       if (!value) {
@@ -73,7 +77,7 @@ function parseArgs(args: string[]): ParseResult {
     }
   }
 
-  return { args: { inputs, model, output, help }, error };
+  return { args: { inputs, model, output, help, quiet }, error };
 }
 
 const USAGE = `Usage: kr import [options] <input>...
@@ -87,6 +91,7 @@ Arguments:
 Options:
   -m, --model <provider/model>   Model to use (default: ${DEFAULT_IMPORT_MODEL})
   -o, --output <file>            Write output to file instead of stdout
+  -q, --quiet                    Suppress progress output
   -h, --help                     Show this help message
 
 Examples:
@@ -191,7 +196,7 @@ export async function runImport(args: string[], io: IO): Promise<number> {
     return 2;
   }
 
-  const { inputs, model, output, help } = parseResult.args;
+  const { inputs, model, output, help, quiet } = parseResult.args;
 
   if (help) {
     write(USAGE);
@@ -208,15 +213,23 @@ export async function runImport(args: string[], io: IO): Promise<number> {
     // Build input from files
     const input = await buildInput(inputs, io);
 
+    // Progress callback
+    const onProgress = quiet ? undefined : (stage: string, detail?: string) => {
+      writeErr(detail ? `${stage} (${detail})...\n` : `${stage}...\n`);
+    };
+
     // Run import
-    const result = await importRecipe(input, { model });
+    const start = performance.now();
+    const result = await importRecipe(input, { model, onProgress });
+    const elapsed = ((performance.now() - start) / 1000).toFixed(1);
 
     // Write output
     if (output) {
       await Bun.write(output, result.markdown);
-      writeErr(`Wrote ${output} (model: ${result.model})\n`);
+      if (!quiet) writeErr(`Wrote ${output} in ${elapsed}s (model: ${result.model})\n`);
     } else {
       write(result.markdown);
+      if (!quiet) writeErr(`Done in ${elapsed}s (model: ${result.model})\n`);
     }
 
     return 0;

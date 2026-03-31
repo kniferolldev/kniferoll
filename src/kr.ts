@@ -1,8 +1,21 @@
 import { runCheck } from "./commands/check";
 import { runEval } from "./commands/eval";
 import { runImport } from "./commands/import";
-import { runPromote } from "./commands/promote";
 import type { IO } from "./types";
+
+const HELP = `Usage: kr <command> [options]
+
+Commands:
+  check    Validate a kniferoll markdown file
+  import   Convert text or images to kniferoll markdown
+  eval     Run import quality evaluations
+
+Options:
+  -h, --help       Show help (or kr <command> --help)
+  -V, --version    Show version
+
+Run 'kr <command> --help' for command-specific help.
+`;
 
 const defaultReadFile = async (path: string): Promise<string> => {
   const file = Bun.file(path);
@@ -11,6 +24,11 @@ const defaultReadFile = async (path: string): Promise<string> => {
   }
   return await file.text();
 };
+
+async function getVersion(): Promise<string> {
+  const pkg = await Bun.file(new URL("../package.json", import.meta.url)).json();
+  return pkg.version;
+}
 
 export async function runCli(
   argv: string[] = Bun.argv,
@@ -24,19 +42,35 @@ export async function runCli(
   const args = argv.slice(2);
 
   if (args.length === 0) {
-    io.stderr.write("Usage: kr <command> <input>\n");
+    io.stderr.write(HELP);
     return 2;
   }
 
   const [command, ...rest] = args;
 
   switch (command) {
-    case "check": {
-      if (rest.length !== 1) {
-        io.stderr.write("Usage: kr check <path | ->\n");
-        return 2;
+    case "--help":
+    case "-h":
+      io.stdout.write(HELP);
+      return 0;
+
+    case "--version":
+    case "-V":
+      io.stdout.write(`kr ${await getVersion()}\n`);
+      return 0;
+
+    case "help": {
+      // kr help <command> → kr <command> --help
+      const subcommand = rest[0];
+      if (!subcommand) {
+        io.stdout.write(HELP);
+        return 0;
       }
-      return await runCheck(rest[0]!, io);
+      return runCli(["", "", subcommand, "--help"], io);
+    }
+
+    case "check": {
+      return await runCheck(rest, io);
     }
 
     case "eval": {
@@ -47,13 +81,9 @@ export async function runCli(
       return await runImport(rest, io);
     }
 
-    case "promote": {
-      return await runPromote(rest, io);
-    }
-
     default:
       io.stderr.write(`Unknown command: ${command}\n`);
-      io.stderr.write("Available commands: check, eval, import, promote\n");
+      io.stderr.write("Run 'kr --help' for available commands.\n");
       return 2;
   }
 }

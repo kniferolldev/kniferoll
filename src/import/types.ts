@@ -155,6 +155,8 @@ export interface ImportOptions {
   apiKeys?: Partial<Record<Provider, string>>;
   /** Schema content. Defaults to loading from SCHEMA.md */
   schema?: string;
+  /** Progress callback, called at each pipeline stage boundary */
+  onProgress?: (stage: string, detail?: string) => void;
 }
 
 // ============================================================================

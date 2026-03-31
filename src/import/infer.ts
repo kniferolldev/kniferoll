@@ -100,12 +100,19 @@ async function correctImageRotation(
 
   const apiKey = requireApiKey(modelSpec.provider, options);
 
+  const onProgress = options?.onProgress;
   const correctedImages: Array<Omit<LoadedImage, "kind">> = [];
   let totalDuration = 0;
   let totalInput = 0;
   let totalOutput = 0;
 
-  for (const image of images) {
+  for (let idx = 0; idx < images.length; idx++) {
+    const image = images[idx]!;
+    if (images.length > 1) {
+      onProgress?.("Checking image rotation", `${idx + 1}/${images.length}`);
+    } else {
+      onProgress?.("Checking image rotation");
+    }
     const { angle, metrics } = await detectImageRotation({ kind: "loaded", ...image }, apiKey);
 
     if (metrics) {
@@ -333,10 +340,14 @@ async function importRecipeTextTwoStage(
   input: InferenceInput,
   options?: ImportOptions & { formatModel?: string }
 ): Promise<ImportResult & { twoStageMetrics?: TwoStageMetrics; extractedJson?: string }> {
+  const onProgress = options?.onProgress;
+
   // Stage 1: Extract structured JSON from text
+  onProgress?.("Extracting recipe from text");
   const extractResult = await extractRecipeFromText(input, options);
 
   // Stage 2: Format into Kniferoll Markdown
+  onProgress?.("Formatting recipe");
   const formatOptions: ImportOptions = {
     ...options,
     model: options?.formatModel ?? DEFAULT_FORMAT_MODEL,
@@ -433,6 +444,8 @@ export async function importRecipeTwoStage(
   input: InferenceInput,
   options?: ImportOptions & { formatModel?: string }
 ): Promise<ImportResult & { twoStageMetrics?: TwoStageMetrics; extractedJson?: string }> {
+  const onProgress = options?.onProgress;
+
   // Resolve input first (load lazy images)
   const resolvedInput = await resolveInput(input);
 
@@ -445,12 +458,15 @@ export async function importRecipeTwoStage(
   const correctedImages = rotationResult.images;
 
   // Stage 1: Extract (using corrected images)
+  const imageCount = correctedImages.length;
+  onProgress?.("Extracting recipe", `${imageCount} image${imageCount === 1 ? "" : "s"}`);
   const extractResult = await extractRecipe(
     { images: correctedImages.map(img => ({ kind: "loaded" as const, ...img })) },
     options
   );
 
   // Stage 2: Format
+  onProgress?.("Formatting recipe");
   const formatOptions: ImportOptions = {
     ...options,
     model: options?.formatModel ?? DEFAULT_FORMAT_MODEL,

@@ -1,6 +1,25 @@
 import type { IO, StdinLike } from "../types";
 import { parseDocument } from "../core";
 
+const USAGE = `Usage: kr check <path | ->
+
+Validate a kniferoll markdown file and report diagnostics.
+
+Arguments:
+  <path>    Path to a kniferoll markdown file
+  -         Read from stdin
+
+Options:
+  -h, --help    Show this help message
+
+Output:
+  Diagnostics in compiler-style format: <file>:<line>:<col>  <severity>  <code>  <message>
+
+Examples:
+  kr check recipe.md
+  cat recipe.md | kr check -
+`;
+
 const readStdin = async (stdin: StdinLike): Promise<string> => {
   if (typeof (stdin as { text?: unknown }).text === "function") {
     return await (stdin as { text: () => Promise<string> }).text();
@@ -15,9 +34,23 @@ const readStdin = async (stdin: StdinLike): Promise<string> => {
 };
 
 export async function runCheck(
-  input: string,
+  input: string | string[],
   io: IO,
 ): Promise<number> {
+  // Handle array form (from kr.ts dispatcher)
+  if (Array.isArray(input)) {
+    if (input.includes("--help") || input.includes("-h") || input.length === 0) {
+      io.stdout.write(USAGE);
+      return 0;
+    }
+    if (input.length !== 1) {
+      io.stderr.write("Error: expected exactly one argument\n\n");
+      io.stderr.write(USAGE);
+      return 2;
+    }
+    input = input[0]!;
+  }
+
   try {
     const content =
       input === "-" ? await readStdin(io.stdin) : await io.readFile(input);

@@ -51,12 +51,38 @@ interface ParsedArgs {
   model: ModelSpec | null;
   evalsDir: string;
   only: string | null;
+  help: boolean;
 }
 
 interface ParseResult {
   args: ParsedArgs;
   error?: string;
 }
+
+const USAGE = `Usage: kr eval [options] [evalsDir]
+
+Run import quality evaluations against golden test cases.
+
+Arguments:
+  [evalsDir]                     Directory containing test cases (default: evals)
+
+Options:
+  --save                         Save results as new baseline
+  --diff                         Show detailed breakdown per test case
+  --explore                      Generate and open HTML visualization
+  --regenerate                   Re-run importer on all test cases (implies --save)
+  --extract-only                 Run extraction stage only (implies --regenerate)
+  --format-only                  Run formatting stage only (implies --save)
+  --model <provider/model>       Override import model
+  --only <test-name>             Run only matching test case(s)
+  -h, --help                     Show this help message
+
+Examples:
+  kr eval
+  kr eval --save
+  kr eval --regenerate --model google/gemini-3-flash-preview
+  kr eval --diff --only thai-curry
+`;
 
 function parseArgs(args: string[]): ParseResult {
   let save = false;
@@ -68,11 +94,13 @@ function parseArgs(args: string[]): ParseResult {
   let model: ModelSpec | null = null;
   let evalsDir = "evals";
   let only: string | null = null;
+  let help = false;
   let error: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
-    if (arg === "--save") save = true;
+    if (arg === "--help" || arg === "-h") help = true;
+    else if (arg === "--save") save = true;
     else if (arg === "--diff") diff = true;
     else if (arg === "--explore") explore = true;
     else if (arg === "--regenerate") {
@@ -101,7 +129,7 @@ function parseArgs(args: string[]): ParseResult {
     else if (!arg.startsWith("-")) evalsDir = arg;
   }
 
-  return { args: { save, diff, explore, regenerate, extractOnly, formatOnly, model, evalsDir, only }, error };
+  return { args: { save, diff, explore, regenerate, extractOnly, formatOnly, model, evalsDir, only, help }, error };
 }
 
 // ============================================================================
@@ -302,7 +330,12 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     return 2;
   }
 
-  const { save, diff, explore, regenerate, extractOnly, formatOnly, model, evalsDir, only } = parseResult.args;
+  const { save, diff, explore, regenerate, extractOnly, formatOnly, model, evalsDir, only, help } = parseResult.args;
+
+  if (help) {
+    write(USAGE);
+    return 0;
+  }
 
   // --explore: generate HTML visualization and open in browser
   if (explore) {
