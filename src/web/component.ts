@@ -125,6 +125,7 @@ const renderIntro = (
   options: RenderOptions,
   inlineValuesByLine: Map<number, DocumentInlineValueAny[]>,
   targetMeta?: Map<string, TargetInfo>,
+  recipeId?: string,
 ): string => {
   // Group lines into paragraphs separated by blank lines
   const paragraphs: { text: string; line: number; lines: SectionLine[] }[] = [];
@@ -158,7 +159,7 @@ const renderIntro = (
       const ann = getDiffAnnotation(options.diffMap, "intro", String(index));
       const content = ann?.status === "changed" && ann.tokens
         ? renderDiffTokens(ann.tokens)
-        : renderNotesInline(p.text, gatherTokensForJoinedLines(p.lines, inlineValuesByLine), options, targetMeta);
+        : renderNotesInline(p.text, gatherTokensForJoinedLines(p.lines, inlineValuesByLine), options, targetMeta, recipeId);
       return `<p class="kr-intro__p" data-kr-line="${p.line}">${content}</p>`;
     })
     .join("");
@@ -194,6 +195,7 @@ const renderTextBlocks = (
   options?: RenderOptions,
   targetMeta?: Map<string, TargetInfo>,
   diffSection?: "intro" | "notes",
+  recipeId?: string,
 ): string => {
   const renderInlineDiag = (lineNum: number, lineSpans?: [number, number][]) => {
     if (!options || options.diagnosticsMode !== "inline" || !options.diagnosticsMap) {
@@ -240,7 +242,7 @@ const renderTextBlocks = (
         const tokens = inlineValuesByLine.get(block.line);
         if (tokens) lineTokens.push(...tokens);
       }
-      return renderNotesInline(block.content, lineTokens, options, targetMeta);
+      return renderNotesInline(block.content, lineTokens, options, targetMeta, recipeId);
     }
     return renderMarkdownInline(block.content);
   };
@@ -314,6 +316,7 @@ const renderNotesInline = (
   tokens: DocumentInlineValueAny[],
   options: RenderOptions,
   targetMeta?: Map<string, TargetInfo>,
+  recipeId?: string,
 ): string => {
   type InlineToken = { start: number; end: number; html: string };
   const inlineTokens: InlineToken[] = [];
@@ -354,7 +357,14 @@ const renderNotesInline = (
       if (arrowIndex !== -1) {
         const displayPart = innerRaw.slice(0, arrowIndex).trim();
         const rhs = innerRaw.slice(arrowIndex + 2).trim();
-        targets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
+        const rawTargets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
+        targets = rawTargets.map((t) => {
+          if (recipeId) {
+            const qualified = `${recipeId}/${t}`;
+            if (targetMeta.has(qualified)) return qualified;
+          }
+          return t;
+        });
         if (displayPart) display = displayPart;
         if (!display && targets.length === 1) {
           const fallback = targetMeta.get(targets[0]!)?.name;
@@ -362,8 +372,17 @@ const renderNotesInline = (
         }
       } else {
         target = slug(innerRaw);
-        targets = target ? [target] : [];
-        const fallback = target ? targetMeta.get(target)?.name : undefined;
+        if (target) {
+          if (recipeId) {
+            const qualified = `${recipeId}/${target}`;
+            targets = [targetMeta.has(qualified) ? qualified : target];
+          } else {
+            targets = [target];
+          }
+        } else {
+          targets = [];
+        }
+        const fallback = targets.length > 0 ? targetMeta.get(targets[0]!)?.name : undefined;
         if (fallback) display = fallback;
       }
 
@@ -888,7 +907,11 @@ const renderStepLine = (
     if (arrowIndex !== -1) {
       const displayPart = innerRaw.slice(0, arrowIndex).trim();
       const rhs = innerRaw.slice(arrowIndex + 2).trim();
-      targets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
+      const rawTargets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
+      targets = rawTargets.map((t) => {
+        const qualified = `${context.recipeId}/${t}`;
+        return targetMeta.has(qualified) ? qualified : t;
+      });
       if (displayPart) {
         display = displayPart;
       }
@@ -900,8 +923,13 @@ const renderStepLine = (
       }
     } else {
       target = slug(innerRaw);
-      targets = target ? [target] : [];
-      const fallback = target ? targetMeta.get(target)?.name : undefined;
+      if (target) {
+        const qualified = `${context.recipeId}/${target}`;
+        targets = [targetMeta.has(qualified) ? qualified : target];
+      } else {
+        targets = [];
+      }
+      const fallback = targets.length > 0 ? targetMeta.get(targets[0]!)?.name : undefined;
       if (fallback) {
         display = fallback;
       }
@@ -994,10 +1022,11 @@ const renderStepLine = (
   return `<p class="kr-section__line${diagnosticClass}" data-kr-line="${line.line}"${diagnosticAttr}>${diagnosticContent}${content}</p>`;
 };
 
-const renderIngredient = (ingredient: Ingredient, options: RenderOptions): string => {
+const renderIngredient = (ingredient: Ingredient, recipeId: string, options: RenderOptions): string => {
+  const qualifiedId = `${recipeId}/${ingredient.id}`;
   const dataAttrs: string[] = [
     `data-kr-line="${String(ingredient.line)}"`,
-    `data-kr-id="${escapeAttr(ingredient.id)}"`,
+    `data-kr-id="${escapeAttr(qualifiedId)}"`,
   ];
 
   for (const attr of ingredient.attributes) {
@@ -1133,7 +1162,7 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
     });
   }
 
-  const elementId = `kr-ingredient-${ingredient.id}`;
+  const elementId = `kr-ingredient-${qualifiedId}`;
 
   // Use diff tokens for content redlining if available
   let wrapper: string;
@@ -1149,6 +1178,7 @@ const renderIngredient = (ingredient: Ingredient, options: RenderOptions): strin
 
 const renderIngredientsSection = (
   section: IngredientsSection,
+  recipeId: string,
   options: RenderOptions,
 ): string => {
   const heading = `<h3 class="kr-section__title">${escapeHtml(section.title)}</h3>`;
@@ -1156,7 +1186,7 @@ const renderIngredientsSection = (
     return `<section class="kr-section" data-kr-kind="ingredients">${heading}<div class="kr-section__body"><p class="kr-section__line kr-empty">No ingredients listed.</p></div></section>`;
   }
 
-  const items = section.ingredients.map((ingredient) => renderIngredient(ingredient, options)).join("");
+  const items = section.ingredients.map((ingredient) => renderIngredient(ingredient, recipeId, options)).join("");
   return `<section class="kr-section" data-kr-kind="ingredients">${heading}<ul class="kr-ingredient-list">${items}</ul></section>`;
 };
 
@@ -1231,10 +1261,10 @@ const renderRecipe = (
   presets?: ScalePreset[],
   yieldQuantity?: Quantity,
 ): string => {
-  const ingredientsHtml = renderIngredientsSection(recipe.ingredients, options);
+  const ingredientsHtml = renderIngredientsSection(recipe.ingredients, recipe.id, options);
   const stepsHtml = renderStepsSection(recipe.steps, recipe, options, targetMeta, inlineValuesByLine);
   const notesHtml = recipe.notes.length > 0
-    ? `<section class="kr-section" data-kr-kind="notes"><h3 class="kr-section__title">Notes</h3><div class="kr-section__body">${renderTextBlocks(recipe.notes, NOTES_CLASSES, inlineValuesByLine, options, targetMeta, "notes")}</div></section>`
+    ? `<section class="kr-section" data-kr-kind="notes"><h3 class="kr-section__title">Notes</h3><div class="kr-section__body">${renderTextBlocks(recipe.notes, NOTES_CLASSES, inlineValuesByLine, options, targetMeta, "notes", recipe.id)}</div></section>`
     : "";
   const sections = ingredientsHtml + stepsHtml + notesHtml;
   const roleAttr = index === 0 ? "main" : "secondary";
@@ -1249,7 +1279,7 @@ const renderRecipe = (
   const yieldHtml = yieldQuantity ? renderYield(yieldQuantity, options.scaleFactor) : "";
   let introHtml = "";
   if (recipe.introLines.length > 0) {
-    introHtml = renderIntro(recipe.introLines, options, inlineValuesByLine, targetMeta);
+    introHtml = renderIntro(recipe.introLines, options, inlineValuesByLine, targetMeta, recipe.id);
   }
 
   const scaleWidget = roleAttr === "main" && !options.hideScale ? renderScaleWidget(presets ?? []) : "";
@@ -1351,7 +1381,7 @@ export const renderDocument = (
   for (const recipe of doc.recipes) {
     targetMeta.set(recipe.id, { name: recipe.title, type: "recipe" });
     for (const ingredient of recipe.ingredients.ingredients) {
-      targetMeta.set(ingredient.id, { name: ingredient.name, type: "ingredient" });
+      targetMeta.set(`${recipe.id}/${ingredient.id}`, { name: ingredient.name, type: "ingredient" });
     }
   }
 

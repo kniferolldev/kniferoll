@@ -431,7 +431,7 @@ ${bundleMarkdown(markdown)}
         const host = document.querySelector("kr-recipe");
         if (!host?.shadowRoot) return false;
         const ingredient = host.shadowRoot.querySelector(
-          '.kr-ingredient[data-kr-id="dried-porcini-mushrooms"]',
+          '.kr-ingredient[data-kr-id="soup/dried-porcini-mushrooms"]',
         );
         return ingredient?.hasAttribute("data-kr-step-highlight") ?? false;
       });
@@ -442,7 +442,7 @@ ${bundleMarkdown(markdown)}
         const host = document.querySelector("kr-recipe");
         if (!host?.shadowRoot) return false;
         const ingredient = host.shadowRoot.querySelector(
-          '.kr-ingredient[data-kr-id="extra-virgin-olive-oil"]',
+          '.kr-ingredient[data-kr-id="soup/extra-virgin-olive-oil"]',
         );
         return ingredient?.hasAttribute("data-kr-step-highlight") ?? false;
       });
@@ -458,7 +458,7 @@ ${bundleMarkdown(markdown)}
           '.kr-step[data-kr-step-index="1"]',
         );
         const ref = step2?.querySelector(
-          '.kr-ref[data-kr-target="extra-virgin-olive-oil"]',
+          '.kr-ref[data-kr-target="soup/extra-virgin-olive-oil"]',
         ) as HTMLElement;
         if (!ref) return false;
 
@@ -467,7 +467,7 @@ ${bundleMarkdown(markdown)}
 
         // Check if ingredient gets highlighted
         const ingredient = host.shadowRoot.querySelector(
-          '.kr-ingredient[data-kr-id="extra-virgin-olive-oil"]',
+          '.kr-ingredient[data-kr-id="soup/extra-virgin-olive-oil"]',
         );
         return ingredient?.classList.contains("kr-target-highlight") ?? false;
       });

@@ -219,7 +219,7 @@ test("ingredients render quantity, modifiers, and attributes", () => {
   expect(html).toContain("finely ground");
   expect(html).toContain('data-kr-attr-also="200 g"');
   expect(html).toContain('data-kr-attr-noscale="true"');
-  expect(html).toContain('data-kr-id="super-sugar"');
+  expect(html).toContain('data-kr-id="salad/super-sugar"');
   expect(html).toContain('data-kr-quantity-mode="native"');
 });
 
@@ -328,9 +328,9 @@ test("step references include aria-controls and focusable targets", () => {
   ].join("\n");
 
   const html = componentModule.renderDocument(parseDocument(markdown));
-  expect(html).toContain('id="kr-ingredient-red-pepper-flakes"');
-  expect(html).toContain('aria-controls="kr-ingredient-red-pepper-flakes"');
-  expect(html).toContain('id="kr-ingredient-salt"');
+  expect(html).toContain('id="kr-ingredient-seasoning/red-pepper-flakes"');
+  expect(html).toContain('aria-controls="kr-ingredient-seasoning/red-pepper-flakes"');
+  expect(html).toContain('id="kr-ingredient-seasoning/salt"');
 
   const { KrRecipeElement } = componentModule;
   const element = new KrRecipeElement();
@@ -338,8 +338,8 @@ test("step references include aria-controls and focusable targets", () => {
   element.connectedCallback();
 
   const rendered = element.shadowRoot?.innerHTML ?? "";
-  expect(rendered).toContain('aria-controls="kr-ingredient-red-pepper-flakes"');
-  expect(rendered).toContain('id="kr-ingredient-red-pepper-flakes"');
+  expect(rendered).toContain('aria-controls="kr-ingredient-seasoning/red-pepper-flakes"');
+  expect(rendered).toContain('id="kr-ingredient-seasoning/red-pepper-flakes"');
   expect(rendered).toContain('tabindex="-1"');
 });
 
@@ -453,7 +453,7 @@ test("step references render as interactive targets", () => {
 
   const html = componentModule.renderDocument(parseDocument(markdown));
   expect(html).toContain('class="kr-ref"');
-  expect(html).toContain('data-kr-target="kosher-salt"');
+  expect(html).toContain('data-kr-target="soup/kosher-salt"');
   expect(html).toContain(">kosher salt<");
 });
 
@@ -500,12 +500,12 @@ test("ingredients render with wrapper div for highlight compatibility", () => {
   expect(html).toContain('class="kr-ingredient__wrapper"');
 
   // Check that ingredient references have aria-controls for accessibility
-  expect(html).toContain('aria-controls="kr-ingredient-salt"');
-  expect(html).toContain('aria-controls="kr-ingredient-pepper"');
+  expect(html).toContain('aria-controls="kr-ingredient-recipe/salt"');
+  expect(html).toContain('aria-controls="kr-ingredient-recipe/pepper"');
 
   // Check that ingredients have proper IDs for targeting
-  expect(html).toContain('id="kr-ingredient-salt"');
-  expect(html).toContain('id="kr-ingredient-pepper"');
+  expect(html).toContain('id="kr-ingredient-recipe/salt"');
+  expect(html).toContain('id="kr-ingredient-recipe/pepper"');
 });
 
 test("multi-ingredient reference renders with space-separated targets", () => {
@@ -526,9 +526,9 @@ test("multi-ingredient reference renders with space-separated targets", () => {
   ].join("\n");
 
   const html = componentModule.renderDocument(parseDocument(markdown));
-  expect(html).toContain('data-kr-target="kimchi rice ssam-sauce"');
+  expect(html).toContain('data-kr-target="bo-ssam/kimchi bo-ssam/rice bo-ssam/ssam-sauce"');
   expect(html).toContain(">accompaniments<");
-  expect(html).toContain('aria-controls="kr-ingredient-kimchi kr-ingredient-rice kr-ingredient-ssam-sauce"');
+  expect(html).toContain('aria-controls="kr-ingredient-bo-ssam/kimchi kr-ingredient-bo-ssam/rice kr-ingredient-bo-ssam/ssam-sauce"');
 });
 
 test("renderDocument includes intro text", () => {
@@ -780,9 +780,9 @@ test("renderDocument renders references in notes", () => {
 
   // References in notes should render as interactive spans, not bare text
   expect(html).toContain('class="kr-ref"');
-  expect(html).toContain('data-kr-target="brown-sugar"');
-  expect(html).toContain('data-kr-target="butter"');
-  expect(html).toContain('data-kr-target="cream"');
+  expect(html).toContain('data-kr-target="sticky-toffee-pudding/brown-sugar"');
+  expect(html).toContain('data-kr-target="sticky-toffee-pudding/butter"');
+  expect(html).toContain('data-kr-target="sticky-toffee-pudding/cream"');
   // Should NOT contain raw bracket syntax
   expect(html).not.toContain("[[brown sugar]]");
   expect(html).not.toContain("[[butter]]");
@@ -1073,11 +1073,11 @@ test("renderDocument emits data-kr-scalable on ingredients", () => {
   const html = componentModule.renderDocument(parseDocument(markdown));
 
   // flour has quantity, no noscale → scalable
-  expect(html).toMatch(/data-kr-id="flour"[^>]*data-kr-scalable="true"/);
+  expect(html).toMatch(/data-kr-id="r\/flour"[^>]*data-kr-scalable="true"/);
   // salt has no quantity → not scalable
-  expect(html).toMatch(/data-kr-id="salt"[^>]*data-kr-scalable="false"/);
+  expect(html).toMatch(/data-kr-id="r\/salt"[^>]*data-kr-scalable="false"/);
   // parmesan has quantity but noscale → not scalable
-  expect(html).toMatch(/data-kr-id="parmesan"[^>]*data-kr-scalable="false"/);
+  expect(html).toMatch(/data-kr-id="r\/parmesan"[^>]*data-kr-scalable="false"/);
 });
 
 test("renderDocument includes scale toggle button in main recipe header", () => {
@@ -1246,7 +1246,7 @@ test("steps inline formatting works alongside references and temperatures", () =
   const html = componentModule.renderDocument(parseDocument(markdown));
 
   expect(html).toContain('class="kr-ref"');
-  expect(html).toContain('data-kr-target="salt"');
+  expect(html).toContain('data-kr-target="test-recipe/salt"');
   expect(html).toContain("<strong>vigorously</strong>");
   expect(html).toContain('class="kr-temperature"');
 });
@@ -1830,8 +1830,8 @@ test("anchor attribute auto-activates scale-by-ingredient mode", () => {
   // The anchor ingredient should be rendered with anchor mode active
   // (data-kr-scaled won't appear since factor is 1× with default amount,
   //  but the anchor icon/class should be present in the scale bar state)
-  expect(html).toContain('data-kr-id="cabbage"');
-  expect(html).toContain('data-kr-id="salt"');
+  expect(html).toContain('data-kr-id="sauerkraut/cabbage"');
+  expect(html).toContain('data-kr-id="sauerkraut/salt"');
   // Scale factor should be 1 (anchor amount matches default)
   expect(html).toContain('data-kr-scale="1"');
 });
