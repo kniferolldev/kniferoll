@@ -44,7 +44,7 @@
 
   .kr-document-title {
     margin: 0;
-    font-size: 1.75em;
+    font-size: 1.5em;
     font-weight: 700;
     letter-spacing: -0.02em;
     line-height: 1.2;
@@ -927,13 +927,14 @@
       margin-bottom: 0.75rem;
     }
 
+    .kr-document-title,
     .kr-recipe__title {
       font-size: 1.3em;
     }
 
     .kr-step[aria-pressed="true"]::before {
       left: -1rem;
-      font-size: 0.75rem;
+      font-size: 0.75em;
     }
 
     .kr-edit-ingredient-content {
@@ -1019,11 +1020,11 @@
 }
 
 .kr-step[aria-pressed="true"]::before {
-  content: '▶';
+  content: '▶\FE0E';
   position: absolute;
   left: -1.5rem;
   color: var(--kr-color-accent, #2563eb);
-  font-size: 0.875rem;
+  font-size: 0.875em;
   animation: slideIn 0.2s ease;
 }
 

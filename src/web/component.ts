@@ -1422,8 +1422,12 @@ export const renderDocument = (
     const docIntroHtml = doc.documentTitle.introLines.length > 0
       ? renderIntro(doc.documentTitle.introLines, options, inlineValuesByLine)
       : "";
+    const docSource = doc.frontmatter?.source;
+    const docSourceHtml = docSource ? renderSource(docSource) : "";
+    const docYield = doc.frontmatter?.yield;
+    const docYieldHtml = docYield ? renderYield(docYield, options.scaleFactor) : "";
     parts.push(
-      `<header class="kr-document"><h1 class="kr-document-title${diagnosticClass}" data-kr-line="${doc.documentTitle.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(doc.documentTitle.text)}</h1>${docIntroHtml}</header>`,
+      `<header class="kr-document"><h1 class="kr-document-title${diagnosticClass}" data-kr-line="${doc.documentTitle.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(doc.documentTitle.text)}</h1>${docSourceHtml}${docYieldHtml}${docIntroHtml}</header>`,
     );
   }
 
@@ -1434,9 +1438,9 @@ export const renderDocument = (
   } else {
     const scalePresets = doc.frontmatter?.scales ?? [];
     doc.recipes.forEach((recipe, index) => {
-      // Only show source and yield on the main recipe (index 0)
-      const source = index === 0 ? doc.frontmatter?.source : undefined;
-      const yieldQuantity = index === 0 ? doc.frontmatter?.yield : undefined;
+      // Show source and yield on the main recipe (index 0), unless there's a document title
+      const source = index === 0 && !doc.documentTitle ? doc.frontmatter?.source : undefined;
+      const yieldQuantity = index === 0 && !doc.documentTitle ? doc.frontmatter?.yield : undefined;
       parts.push(renderRecipe(recipe, index, options, targetMeta, inlineValuesByLine, source, scalePresets, yieldQuantity));
     });
   }
