@@ -625,6 +625,31 @@ test("renderDocument handles multiple intro paragraphs", () => {
   expect(html).toContain("Second paragraph.");
 });
 
+test("renderDocument renders document-level intro text", () => {
+  if (!componentModule) {
+    throw new Error("Component module was not initialized");
+  }
+
+  const markdown = [
+    "# My Cookbook",
+    "",
+    "A collection of favorite recipes.",
+    "",
+    "# Test Recipe",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Cook.",
+  ].join("\n");
+
+  const html = componentModule.renderDocument(parseDocument(markdown));
+
+  expect(html).toContain("kr-document-title");
+  expect(html).toContain("My Cookbook");
+  expect(html).toContain('class="kr-intro"');
+  expect(html).toContain("A collection of favorite recipes.");
+});
+
 test("renderDocument renders notes with subsection headers", () => {
   if (!componentModule) {
     throw new Error("Component module was not initialized");

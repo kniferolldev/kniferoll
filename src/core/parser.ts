@@ -366,6 +366,8 @@ export const parseDocument = (
         sectionLines.push({ text: "", content: "", line: actualLine });
       } else if (currentRecipe) {
         currentRecipe.introLines.push({ text: "", content: "", line: actualLine });
+      } else if (documentTitle) {
+        documentTitle.introLines.push({ text: "", content: "", line: actualLine });
       }
       continue;
     }
@@ -382,6 +384,7 @@ export const parseDocument = (
             documentTitle = {
               text: headingText,
               line: actualLine,
+              introLines: [],
             };
           }
           continue;
@@ -448,7 +451,9 @@ export const parseDocument = (
       sectionLines.push({ text: line, content: line, line: actualLine });
     } else if (currentRecipe) {
       currentRecipe.introLines.push({ text: line, content: line, line: actualLine });
-    } else if (!documentTitle) {
+    } else if (documentTitle) {
+      documentTitle.introLines.push({ text: line, content: line, line: actualLine });
+    } else {
       diagnostics.push(
         warning("W0104", "Unexpected content before recipe heading.", actualLine),
       );

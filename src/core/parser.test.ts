@@ -132,6 +132,13 @@ test("no W0104 for prose after document title in multi-recipe doc", () => {
 
   expect(warnings).toHaveLength(0);
   expect(result.documentTitle?.text).toBe("My Recipe Collection");
+  const contentLines = result.documentTitle?.introLines.filter(
+    (l) => l.content.trim() !== "",
+  );
+  expect(contentLines).toHaveLength(1);
+  expect(contentLines?.[0]?.content).toBe(
+    "Some intro text about this recipe.",
+  );
 });
 
 test("no W0104 for blank lines before heading", () => {

@@ -286,6 +286,7 @@ export interface Recipe {
 export interface DocumentTitle {
   text: string;
   line: number;
+  introLines: SectionLine[];
 }
 
 export interface ReferenceToken {

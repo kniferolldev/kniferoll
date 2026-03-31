@@ -113,6 +113,10 @@
     line-height: var(--kr-line-height, 1.6);
   }
 
+  .kr-document .kr-intro {
+    margin-bottom: 0;
+  }
+
   .kr-intro__p {
     margin: 0 0 0.5em 0;
   }

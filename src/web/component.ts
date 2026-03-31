@@ -1389,8 +1389,11 @@ export const renderDocument = (
       ? ` data-kr-diagnostic-severity="${inlineDiagnostics.severity}" role="button" aria-expanded="false" aria-controls="${escapeAttr(inlineDiagnostics.controlsId)}" tabindex="0"`
       : "";
     const diagnosticContent = inlineDiagnostics ? inlineDiagnostics.popover : "";
+    const docIntroHtml = doc.documentTitle.introLines.length > 0
+      ? renderIntro(doc.documentTitle.introLines, options, inlineValuesByLine)
+      : "";
     parts.push(
-      `<header class="kr-document"><h1 class="kr-document-title${diagnosticClass}" data-kr-line="${doc.documentTitle.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(doc.documentTitle.text)}</h1></header>`,
+      `<header class="kr-document"><h1 class="kr-document-title${diagnosticClass}" data-kr-line="${doc.documentTitle.line}"${diagnosticAttr}>${diagnosticContent}${escapeHtml(doc.documentTitle.text)}</h1>${docIntroHtml}</header>`,
     );
   }
 
