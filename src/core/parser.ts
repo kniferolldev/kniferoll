@@ -680,15 +680,6 @@ export const parseDocument = (
             );
             continue;
           }
-          if (targets.length === 1 && slug(display) === targets[0]) {
-            diagnostics.push(
-              warning(
-                "W0304",
-                `Redundant display name in ${match[0]}.`,
-                resolvedLine,
-              ),
-            );
-          }
         } else {
           const t = slug(innerRaw);
           if (!t) {
@@ -732,6 +723,19 @@ export const parseDocument = (
             `Reference "${target}" does not match any known id.`,
             ref.line,
           ),
+        );
+      }
+    }
+
+    // W0304: display name is redundant if it exactly matches the resolved
+    // ingredient's original name (case-sensitive). If it matches, the author
+    // could just write [[Ingredient Name]] without the arrow.
+    const resolvedTarget = ref.resolvedTargets[0];
+    if (ref.display && ref.targets.length === 1 && ref.resolvedTargets.length === 1 && resolvedTarget) {
+      const record = idRegistry.get(resolvedTarget);
+      if (record && ref.display === record.name) {
+        diagnostics.push(
+          warning("W0304", `Redundant display name in ${ref.original}.`, ref.line),
         );
       }
     }

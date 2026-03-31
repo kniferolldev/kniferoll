@@ -306,6 +306,37 @@ test("W0304 does not fire for multi-ingredient references", () => {
   expect(byCode(result.diagnostics, "W0302").length).toBe(0);
 });
 
+test("W0304 is case-sensitive against ingredient name", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- Garden Salsa - 1 recipe",
+    "## Steps",
+    "1. Pour the [[garden salsa -> garden salsa]].",
+    "2. Pour the [[garden salsa -> garden-salsa]].",
+    "3. Pour the [[Garden Salsa -> garden salsa]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  const w0304 = byCode(result.diagnostics, "W0304");
+  // Only line 3 is redundant: display "Garden Salsa" matches the ingredient name exactly
+  expect(w0304.length).toBe(1);
+  expect(w0304[0]!.message).toContain("[[Garden Salsa -> garden salsa]]");
+});
+
+test("W0304 does not fire when display differs from ingredient name by case", () => {
+  const input = [
+    "# Recipe",
+    "## Ingredients",
+    "- Glaze - 1 recipe",
+    "## Steps",
+    "1. Prepare the [[glaze -> Glaze]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(byCode(result.diagnostics, "W0304").length).toBe(0);
+});
+
 test("extracts and resolves references in notes", () => {
   const input = [
     "# Sticky Toffee Pudding",

@@ -21,6 +21,7 @@ export type RegisterResult = RegisterSuccess | RegisterFailure;
 export interface IdRegistry {
   register(id: string, record: IdRecord): RegisterResult;
   has(id: string): boolean;
+  get(id: string): IdRecord | undefined;
   entries(): IterableIterator<[string, IdRecord]>;
 }
 
@@ -46,6 +47,9 @@ export const createIdRegistry = (): IdRegistry => {
         return false;
       }
       return state.has(id);
+    },
+    get(id: string) {
+      return state.get(id);
     },
     entries() {
       return state.entries();
