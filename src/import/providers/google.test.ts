@@ -1,4 +1,5 @@
 import { expect, test, describe, afterEach, mock } from "bun:test";
+import type { ProviderStreamEvent } from "../types";
 import { googleAdapter } from "./google";
 
 const originalFetch = globalThis.fetch;
@@ -6,6 +7,19 @@ const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
+
+/** Build an SSE Response from a sequence of JSON chunks. */
+function sseResponse(chunks: any[]): Response {
+  const lines = chunks.map(c => `data: ${JSON.stringify(c)}\n\n`).join("");
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(lines));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200 });
+}
 
 describe("googleAdapter request format", () => {
   test("sends correct request format for text input", async () => {
@@ -232,5 +246,168 @@ describe("googleAdapter RECITATION handling", () => {
         apiKey: "test-key",
       }),
     ).rejects.toThrow(/no input/i);
+  });
+});
+
+describe("googleAdapter streaming", () => {
+  test("calls onStream with accumulated text across chunks", async () => {
+    const chunk1 = {
+      candidates: [{ content: { parts: [{ text: "Hello " }] } }],
+      usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 5 },
+    };
+    const chunk2 = {
+      candidates: [{ content: { parts: [{ text: "World" }] }, finishReason: "STOP" }],
+      usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 10 },
+    };
+
+    globalThis.fetch = mock(async (url: string) => {
+      if (url.includes("streamGenerateContent")) return sseResponse([chunk1, chunk2]);
+      throw new Error("Expected streaming endpoint");
+    }) as any;
+
+    const events: ProviderStreamEvent[] = [];
+    const result = await googleAdapter.infer({
+      input: { text: "recipe" },
+      systemPrompt: "prompt",
+      model: "gemini-2.5-flash-lite",
+      apiKey: "key",
+      onStream: (e) => events.push({ ...e }),
+    });
+
+    expect(result.text).toBe("Hello World");
+    expect(result.metrics.inputTokens).toBe(100);
+    expect(result.metrics.outputTokens).toBe(10);
+
+    expect(events.length).toBe(2);
+    expect(events[0]!.text).toBe("Hello ");
+    expect(events[0]!.outputTokens).toBe(5);
+    expect(events[1]!.text).toBe("Hello World");
+    expect(events[1]!.outputTokens).toBe(10);
+  });
+
+  test("uses streaming endpoint when onStream is provided", async () => {
+    let capturedUrl = "";
+    globalThis.fetch = mock(async (url: string) => {
+      capturedUrl = url;
+      return sseResponse([{
+        candidates: [{ content: { parts: [{ text: "ok" }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2 },
+      }]);
+    }) as any;
+
+    await googleAdapter.infer({
+      input: { text: "recipe" },
+      systemPrompt: "prompt",
+      model: "gemini-2.5-flash-lite",
+      apiKey: "key",
+      onStream: () => {},
+    });
+
+    expect(capturedUrl).toContain("streamGenerateContent");
+    expect(capturedUrl).toContain("alt=sse");
+  });
+
+  test("uses non-streaming endpoint when onStream is not provided", async () => {
+    let capturedUrl = "";
+    globalThis.fetch = mock(async (url: string) => {
+      capturedUrl = url;
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: "ok" }] } }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2 },
+      }));
+    }) as any;
+
+    await googleAdapter.infer({
+      input: { text: "recipe" },
+      systemPrompt: "prompt",
+      model: "gemini-2.5-flash-lite",
+      apiKey: "key",
+    });
+
+    expect(capturedUrl).toContain("generateContent");
+    expect(capturedUrl).not.toContain("streamGenerateContent");
+  });
+
+  test("skips thinking parts in accumulated text", async () => {
+    globalThis.fetch = mock(async () => sseResponse([
+      {
+        candidates: [{ content: { parts: [{ text: "thinking...", thought: true }] } }],
+        usageMetadata: {},
+      },
+      {
+        candidates: [{ content: { parts: [{ text: "actual output" }] }, finishReason: "STOP" }],
+        usageMetadata: { candidatesTokenCount: 5 },
+      },
+    ])) as any;
+
+    const events: ProviderStreamEvent[] = [];
+    const result = await googleAdapter.infer({
+      input: { text: "recipe" },
+      systemPrompt: "prompt",
+      model: "gemini-2.5-flash-lite",
+      apiKey: "key",
+      onStream: (e) => events.push({ ...e }),
+    });
+
+    expect(result.text).toBe("actual output");
+    // First event has no accumulated text (thinking part skipped)
+    expect(events[0]!.text).toBe("");
+    expect(events[1]!.text).toBe("actual output");
+  });
+
+  test("streams during RECITATION retry", async () => {
+    let callCount = 0;
+    globalThis.fetch = mock(async (url: string) => {
+      callCount++;
+      if (callCount === 1) {
+        // First call: RECITATION
+        return sseResponse([{
+          candidates: [{ content: {}, finishReason: "RECITATION" }],
+          usageMetadata: { promptTokenCount: 100 },
+        }]);
+      }
+      // Retry: success via streaming
+      return sseResponse([
+        {
+          candidates: [{ content: { parts: [{ text: "Chicken ★" }] } }],
+          usageMetadata: { promptTokenCount: 200, candidatesTokenCount: 5 },
+        },
+        {
+          candidates: [{ content: { parts: [{ text: " Parm" }] }, finishReason: "STOP" }],
+          usageMetadata: { promptTokenCount: 200, candidatesTokenCount: 10 },
+        },
+      ]);
+    }) as any;
+
+    const events: ProviderStreamEvent[] = [];
+    const result = await googleAdapter.infer({
+      input: { text: "recipe" },
+      systemPrompt: "prompt",
+      model: "gemini-2.5-flash-lite",
+      apiKey: "key",
+      onStream: (e) => events.push({ ...e }),
+    });
+
+    expect(callCount).toBe(2);
+    // Markers stripped from final result
+    expect(result.text).toBe("Chicken Parm");
+    // onStream fired during both first attempt and retry
+    expect(events.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test("throws on streaming API error", async () => {
+    globalThis.fetch = mock(async () =>
+      new Response("Server error", { status: 500 }),
+    ) as any;
+
+    await expect(
+      googleAdapter.infer({
+        input: { text: "recipe" },
+        systemPrompt: "prompt",
+        model: "model",
+        apiKey: "key",
+        onStream: () => {},
+      }),
+    ).rejects.toThrow(/Gemini API error \(500\)/);
   });
 });

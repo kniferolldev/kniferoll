@@ -2,7 +2,7 @@
  * Main inference orchestration for recipe import
  */
 
-import type { InferenceInput, ImportResult, ImportOptions, ExtractionResult, FormatResult, TwoStageMetrics, LoadedImage, InferenceMetrics, Provider } from "./types";
+import type { InferenceInput, ImportResult, ImportOptions, ExtractionResult, FormatResult, TwoStageMetrics, LoadedImage, InferenceMetrics, Provider, StreamCallback, StreamStage, ProviderStreamCallback } from "./types";
 import { parseModelSpec, formatModelSpec } from "./types";
 import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, getApiKey, getApiKeyEnvVar } from "./config";
 import { loadSchema } from "./load-schema";
@@ -13,6 +13,14 @@ import { resolveInput } from "./utils";
 import { getProvider } from "./providers";
 import { rotateImage } from "./rotate";
 import { buildRotationDetectionPrompt, ROTATION_DETECTION_MODEL, type RotationAngle } from "./rotation-prompt";
+
+/**
+ * Wrap a StreamCallback with a fixed stage, producing a ProviderStreamCallback.
+ */
+function withStage(stage: StreamStage, cb?: StreamCallback): ProviderStreamCallback | undefined {
+  if (!cb) return undefined;
+  return (event) => cb({ ...event, stage });
+}
 
 /**
  * Resolve API key for a provider with fallback chain:
@@ -235,6 +243,7 @@ export async function extractRecipe(
     systemPrompt,
     model: modelSpec.model,
     apiKey,
+    onStream: withStage("extracting", options?.onStream),
   });
 
   // Strip code fences, then parse JSON
@@ -301,6 +310,7 @@ export async function extractRecipeFromText(
     systemPrompt,
     model: modelSpec.model,
     apiKey,
+    onStream: withStage("extracting", options?.onStream),
   });
 
   // Strip code fences, then parse JSON
@@ -421,6 +431,7 @@ export async function formatRecipe(
     model: modelSpec.model,
     apiKey,
     temperature: 0.2,
+    onStream: withStage("formatting", options?.onStream),
   });
 
   return {

@@ -56,6 +56,9 @@ export type {
   ExtractionResult,
   FormatResult,
   TwoStageMetrics,
+  StreamStage,
+  StreamEvent,
+  StreamCallback,
 } from "./types";
 
 // Type utilities

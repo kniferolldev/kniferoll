@@ -157,7 +157,40 @@ export interface ImportOptions {
   schema?: string;
   /** Progress callback, called at each pipeline stage boundary */
   onProgress?: (stage: string, detail?: string) => void;
+  /** Callback for streaming progress during LLM calls */
+  onStream?: StreamCallback;
 }
+
+// ============================================================================
+// Streaming
+// ============================================================================
+
+/** Pipeline stage for streaming progress */
+export type StreamStage = "rotating" | "extracting" | "formatting";
+
+/** Provider-level stream event (no stage — the pipeline wrapper adds that) */
+export interface ProviderStreamEvent {
+  /** Output tokens generated so far */
+  outputTokens: number;
+  /** Characters of text generated so far */
+  textLength: number;
+  /** Elapsed time in milliseconds */
+  elapsedMs: number;
+  /** The full accumulated text so far */
+  text: string;
+}
+
+/** Provider-level streaming callback */
+export type ProviderStreamCallback = (event: ProviderStreamEvent) => void;
+
+/** Progress event emitted during streaming inference */
+export interface StreamEvent extends ProviderStreamEvent {
+  /** Current pipeline stage */
+  stage: StreamStage;
+}
+
+/** Callback for streaming progress updates (includes stage context) */
+export type StreamCallback = (event: StreamEvent) => void;
 
 // ============================================================================
 // Provider Interface
@@ -180,5 +213,7 @@ export interface ProviderAdapter {
     model: string;
     apiKey: string;
     temperature?: number;
+    /** Optional callback for streaming progress */
+    onStream?: ProviderStreamCallback;
   }): Promise<InferenceResult>;
 }

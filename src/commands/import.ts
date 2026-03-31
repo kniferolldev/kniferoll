@@ -15,6 +15,7 @@ import {
   parseModelSpec,
   type InferenceInput,
   type LazyImage,
+  type StreamEvent,
 } from "../import";
 import { DEFAULT_IMPORT_MODEL } from "../import/config";
 
@@ -213,15 +214,69 @@ export async function runImport(args: string[], io: IO): Promise<number> {
     // Build input from files
     const input = await buildInput(inputs, io);
 
-    // Progress callback
-    const onProgress = quiet ? undefined : (stage: string, detail?: string) => {
+    // Progress feedback on stderr
+    const isTTY = typeof (io.stderr as any).isTTY === "boolean" ? (io.stderr as any).isTTY : true;
+    let lastLine = "";
+
+    // On TTY: live streaming status line. Non-TTY: stage-boundary log lines.
+    const onProgress = quiet || isTTY ? undefined : (stage: string, detail?: string) => {
       writeErr(detail ? `${stage} (${detail})...\n` : `${stage}...\n`);
+    };
+
+    const stageLabels = {
+      rotating: "Rotating",
+      extracting: "Extracting",
+      formatting: "Formatting",
+    } as const;
+
+    const cols = (process.stderr as any).columns ?? 80;
+
+    const onStream = quiet ? undefined : (event: StreamEvent) => {
+      if (!isTTY) return;
+
+      const label = stageLabels[event.stage];
+      const secs = (event.elapsedMs / 1000).toFixed(1);
+
+      // Find the last non-empty line of output to show as preview
+      let preview = "";
+      if (event.text) {
+        const lines = event.text.split("\n");
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const trimmed = lines[i]!.trim();
+          if (trimmed) {
+            preview = trimmed;
+            break;
+          }
+        }
+      }
+
+      const prefix = `  ${label} ${secs}s`;
+      let line: string;
+      if (preview) {
+        const maxPreview = cols - prefix.length - 4;
+        const truncated = preview.length > maxPreview
+          ? preview.slice(0, maxPreview - 1) + "…"
+          : preview;
+        line = `${prefix}  \x1b[2m${truncated}\x1b[22m`;
+      } else {
+        line = prefix;
+      }
+
+      if (line !== lastLine) {
+        writeErr(`\r\x1b[K${line}`);
+        lastLine = line;
+      }
     };
 
     // Run import
     const start = performance.now();
-    const result = await importRecipe(input, { model, onProgress });
+    const result = await importRecipe(input, { model, onProgress, onStream });
     const elapsed = ((performance.now() - start) / 1000).toFixed(1);
+
+    // Clear the streaming status line
+    if (isTTY && lastLine) {
+      writeErr(`\r\x1b[K`);
+    }
 
     // Write output
     if (output) {
@@ -234,6 +289,10 @@ export async function runImport(args: string[], io: IO): Promise<number> {
 
     return 0;
   } catch (error) {
+    // Clear streaming status line on error too
+    if (typeof (io.stderr as any).isTTY !== "undefined") {
+      writeErr(`\r\x1b[K`);
+    }
     const message = error instanceof Error ? error.message : String(error);
     writeErr(`Error: ${message}\n`);
     return 1;
