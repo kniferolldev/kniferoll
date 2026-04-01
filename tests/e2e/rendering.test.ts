@@ -83,6 +83,67 @@ ${bundleMarkdown(markdown)}
 );
 
 test(
+  "document-level intro renders inline values",
+  async () => {
+    const moduleCode = await loadComponentBundle();
+
+    const markdown = [
+      "# Chicken Wing Tacos",
+      "",
+      "This recipe makes about {12} tacos.",
+      "",
+      "# Sub-Recipe",
+      "## Ingredients",
+      "- salt",
+      "## Steps",
+      "1. Season.",
+    ].join("\n");
+
+    const ctx = await createTestContext();
+    try {
+      await ctx.page.setContent(
+        `
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <title>Doc Intro Inline Test</title>
+          </head>
+          <body>
+            <kr-recipe id="fixture">
+${bundleMarkdown(markdown)}
+            </kr-recipe>
+          </body>
+        </html>
+      `.trim(),
+      );
+
+      await ctx.page.addScriptTag({ type: "module", content: moduleCode });
+
+      await ctx.page.waitForFunction(
+        () => {
+          const host = document.querySelector("kr-recipe");
+          return !!host?.shadowRoot?.querySelector(".kr-intro");
+        },
+        undefined,
+        { timeout: 1000 },
+      );
+
+      const inlineQuantity = await ctx.page.evaluate(() => {
+        const host = document.querySelector("kr-recipe");
+        const span = host?.shadowRoot?.querySelector(
+          ".kr-intro .kr-inline-quantity",
+        );
+        return span?.textContent ?? null;
+      });
+      expect(inlineQuantity).toBe("12");
+    } finally {
+      await closeTestContext(ctx);
+    }
+  },
+);
+
+test(
   "step navigation with arrow keys",
   async () => {
     const moduleCode = await loadComponentBundle();

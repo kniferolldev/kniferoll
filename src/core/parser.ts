@@ -596,16 +596,17 @@ export const parseDocument = (
   const extractProseTokens = (
     lines: Pick<SectionLine, "content" | "line" | "lineSpans">[],
     label: string,
-    recipe: Recipe,
+    recipe?: Recipe,
   ) => {
     for (const line of lines) {
       const { tokens: extractedTokens, invalid } = extractInlineValues(line.content);
 
+      const context = recipe ? ` for recipe "${recipe.title}"` : "";
       for (const bad of invalid) {
         diagnostics.push(
           warning(
             "W0402",
-            `Unknown inline value "${bad.raw}" in ${label} for recipe "${recipe.title}".`,
+            `Unknown inline value "${bad.raw}" in ${label}${context}.`,
             resolveLineAt(line, bad.index),
           ),
         );
@@ -618,17 +619,17 @@ export const parseDocument = (
             ...token,
             line: tokenLine,
             column: token.index + 1,
-            recipeId: recipe.id,
-            recipeTitle: recipe.title,
-          } satisfies DocumentInlineTemperatureValue);
+            recipeId: recipe?.id,
+            recipeTitle: recipe?.title,
+          });
         } else {
           inlineValues.push({
             ...token,
             line: tokenLine,
             column: token.index + 1,
-            recipeId: recipe.id,
-            recipeTitle: recipe.title,
-          } satisfies DocumentInlineQuantityValue);
+            recipeId: recipe?.id,
+            recipeTitle: recipe?.title,
+          });
 
           // Validate: at most one metric and one imperial alternate
           if (token.alternates && token.alternates.length > 0) {
@@ -660,54 +661,66 @@ export const parseDocument = (
         }
       }
 
-      referencePattern.lastIndex = 0;
-      let match: RegExpExecArray | null;
-      while ((match = referencePattern.exec(line.content)) !== null) {
-        const innerRaw = match[1]?.trim() ?? "";
-        const column = match.index + 1;
-        const resolvedLine = resolveLineAt(line, match.index);
-        let display: string | undefined;
+      // References are scoped to a recipe's ingredients — skip when no recipe context
+      if (recipe) {
+        referencePattern.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = referencePattern.exec(line.content)) !== null) {
+          const innerRaw = match[1]?.trim() ?? "";
+          const column = match.index + 1;
+          const resolvedLine = resolveLineAt(line, match.index);
+          let display: string | undefined;
 
-        const arrowIndex = innerRaw.indexOf("->");
-        let targets: string[];
-        if (arrowIndex !== -1) {
-          display = innerRaw.slice(0, arrowIndex).trim();
-          const rhs = innerRaw.slice(arrowIndex + 2).trim();
-          targets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
-          if (!display || targets.length === 0) {
-            diagnostics.push(
-              warning("W0303", `Malformed reference token ${match[0]}.`, resolvedLine),
-            );
-            continue;
+          const arrowIndex = innerRaw.indexOf("->");
+          let targets: string[];
+          if (arrowIndex !== -1) {
+            display = innerRaw.slice(0, arrowIndex).trim();
+            const rhs = innerRaw.slice(arrowIndex + 2).trim();
+            targets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
+            if (!display || targets.length === 0) {
+              diagnostics.push(
+                warning("W0303", `Malformed reference token ${match[0]}.`, resolvedLine),
+              );
+              continue;
+            }
+          } else {
+            const t = slug(innerRaw);
+            if (!t) {
+              diagnostics.push(
+                warning("W0303", `Malformed reference token ${match[0]}.`, resolvedLine),
+              );
+              continue;
+            }
+            targets = [t];
           }
-        } else {
-          const t = slug(innerRaw);
-          if (!t) {
-            diagnostics.push(
-              warning("W0303", `Malformed reference token ${match[0]}.`, resolvedLine),
-            );
-            continue;
-          }
-          targets = [t];
+
+          references.push({
+            original: match[0],
+            display,
+            targets,
+            recipeId: recipe.id,
+            resolvedTargets: [],
+            line: resolvedLine,
+            column,
+          });
         }
-
-        references.push({
-          original: match[0],
-          display,
-          targets,
-          recipeId: recipe.id,
-          resolvedTargets: [],
-          line: resolvedLine,
-          column,
-        });
       }
     }
   };
 
+  // All prose-bearing fields in the document. Adding a new text field?
+  // Add it here so inline values and references are extracted.
+  const proseFields: { lines: Pick<SectionLine, "content" | "line" | "lineSpans">[]; label: string; recipe?: Recipe }[] = [];
+  if (documentTitle) {
+    proseFields.push({ lines: documentTitle.introLines, label: "document intro" });
+  }
   for (const recipe of recipes) {
-    extractProseTokens(recipe.introLines, "intro", recipe);
-    extractProseTokens(recipe.steps.lines, "steps", recipe);
-    extractProseTokens(recipe.notes, "notes", recipe);
+    proseFields.push({ lines: recipe.introLines, label: "intro", recipe });
+    proseFields.push({ lines: recipe.steps.lines, label: "steps", recipe });
+    proseFields.push({ lines: recipe.notes, label: "notes", recipe });
+  }
+  for (const field of proseFields) {
+    extractProseTokens(field.lines, field.label, field.recipe);
   }
 
   // Reference resolution: scoped to the current recipe's ingredients

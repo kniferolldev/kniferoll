@@ -141,6 +141,34 @@ test("no W0104 for prose after document title in multi-recipe doc", () => {
   );
 });
 
+test("inline values in document-level intro are extracted", () => {
+  const input = [
+    "# Chicken Wing Tacos",
+    "",
+    "This recipe makes about {12} tacos.",
+    "",
+    "# Sub-Recipe A",
+    "## Ingredients",
+    "- salt",
+    "## Steps",
+    "1. Preheat to {350F}.",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.diagnostics).toHaveLength(0);
+
+  // Document intro should produce one inline quantity token
+  const docIntroTokens = result.inlineValues.filter((v) => !v.recipeId);
+  expect(docIntroTokens).toHaveLength(1);
+  expect(docIntroTokens[0]?.kind).toBe("quantity");
+  expect(docIntroTokens[0]?.raw).toBe("{12}");
+
+  // Recipe step token should still have a recipeId
+  const recipeTokens = result.inlineValues.filter((v) => v.recipeId);
+  expect(recipeTokens).toHaveLength(1);
+  expect(recipeTokens[0]?.kind).toBe("temperature");
+});
+
 test("no W0104 for blank lines before heading", () => {
   const input = ["", "  ", "# Bread"].join("\n");
 

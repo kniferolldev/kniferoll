@@ -219,8 +219,8 @@ export type InvalidInlineValue = InlineValueBase;
 export type DocumentInlineValue<T extends InlineValue> = T & {
   line: number;
   column: number;
-  recipeId: string;
-  recipeTitle: string;
+  recipeId?: string;
+  recipeTitle?: string;
 };
 
 export type DocumentInlineTemperatureValue = DocumentInlineValue<InlineTemperatureValue>;
