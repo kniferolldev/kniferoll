@@ -1865,7 +1865,7 @@ test("scale=2 on anchor recipe stays in anchor mode", () => {
   // Must be in anchor mode, not fixed mode
   expect(events.length).toBeGreaterThan(0);
   expect(events[events.length - 1]!.mode).toBe("by-ingredient");
-  expect(events[events.length - 1]!.anchorId).toBe("cabbage");
+  expect(events[events.length - 1]!.anchorId).toBe("sauerkraut/cabbage");
 });
 
 test("scale attribute changes stay in anchor mode for anchor recipes", () => {
@@ -1897,7 +1897,7 @@ test("scale attribute changes stay in anchor mode for anchor recipes", () => {
   // Must still be in anchor mode
   const lastEvent = events[events.length - 1]!;
   expect(lastEvent.mode).toBe("by-ingredient");
-  expect(lastEvent.anchorId).toBe("cabbage");
+  expect(lastEvent.anchorId).toBe("sauerkraut/cabbage");
 
   // Reset back to 1×
   element.removeAttribute("scale");

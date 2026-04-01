@@ -1631,9 +1631,10 @@ export class KrRecipeElement extends HTMLElement {
   #resolveScaleFactor(doc: DocumentParseResult): { factor: number; presetIndex: number | null } {
     // Anchor mode: compute scale from anchor ingredient
     if (this.#scaleMode === "by-ingredient" && this.#anchorIngredientId && this.#anchorCustomAmount != null) {
+      const bareAnchorId = this.#anchorIngredientId.split("/").pop()!;
       const result = computeScaleFactor(doc, {
         anchor: {
-          id: this.#anchorIngredientId,
+          id: bareAnchorId,
           amount: this.#anchorCustomAmount,
           unit: this.#anchorUnit ?? "",
         },
@@ -1741,7 +1742,7 @@ export class KrRecipeElement extends HTMLElement {
           const scaleMultiplier = this.#parseScaleAttribute() ?? 1;
 
           this.#scaleMode = "by-ingredient";
-          this.#anchorIngredientId = ingredient.id;
+          this.#anchorIngredientId = `${recipe.id}/${ingredient.id}`;
           this.#anchorCustomAmount = target.amount * scaleMultiplier;
           this.#anchorDisplayText = numberToFractionText(this.#anchorCustomAmount);
           this.#anchorUnit = target.unit;
@@ -1938,7 +1939,7 @@ export class KrRecipeElement extends HTMLElement {
 
           for (const recipe of doc.recipes) {
             for (const ing of recipe.ingredients.ingredients) {
-              if (ing.id === id) {
+              if (`${recipe.id}/${ing.id}` === id) {
                 const target = resolveAnchorTarget(ing, quantityDisplay);
                 if (!target) return;
                 this.#anchorIngredientId = id;
