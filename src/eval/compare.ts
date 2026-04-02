@@ -13,8 +13,6 @@ import type {
   Frontmatter,
   IngredientsSection,
   StepsSection,
-  SectionLine,
-  ReferenceToken,
   TextBlock,
 } from "../core";
 import { DEFAULT_WEIGHTS, type ComparisonWeights } from "./weights";

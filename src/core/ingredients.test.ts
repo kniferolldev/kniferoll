@@ -52,7 +52,7 @@ test("parses ingredient with quantity, modifiers, and attributes", () => {
 });
 
 test("parses en dash delimiter between name and quantity", () => {
-  const { section, diagnostics } = getIngredientsSection(
+  const { section } = getIngredientsSection(
     withRecipe([
       "- red pepper flakes – pinch, optional",
     ]),

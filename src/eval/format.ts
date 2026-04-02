@@ -2,7 +2,7 @@
  * Output formatting for structured eval comparison
  */
 
-import type { ComparisonResult, RecipeComparison, IngredientComparison, StepComparison } from "./compare";
+import type { ComparisonResult } from "./compare";
 
 /**
  * Format as scalar score only (default view)

@@ -14,7 +14,7 @@ import type {
 import { DEFAULT_WEIGHTS } from "./weights";
 import { parseDocument } from "../core";
 import type { Recipe, Ingredient } from "../core";
-import { wordDiff, type InlineDiffToken } from "../core/diff";
+import { wordDiff } from "../core/diff";
 
 // ============================================================================
 // Data Preparation
@@ -89,12 +89,6 @@ function missingStepPenalty(numGolden: number): number {
   return perMissing * (DEFAULT_WEIGHTS.steps / TOTAL_WEIGHT) * 100;
 }
 
-function extraStepPenalty(numGolden: number): number {
-  if (numGolden === 0) return 0;
-  const perExtra = DEFAULT_WEIGHTS.extraStepPenalty / numGolden;
-  return perExtra * (DEFAULT_WEIGHTS.steps / TOTAL_WEIGHT) * 100;
-}
-
 // ============================================================================
 // HTML Rendering
 // ============================================================================
@@ -151,21 +145,6 @@ function esc(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function renderDiffTokens(tokens: InlineDiffToken[]): string {
-  return tokens
-    .map((t) => {
-      switch (t.kind) {
-        case "equal":
-          return esc(t.text);
-        case "insert":
-          return `<ins>${esc(t.text)}</ins>`;
-        case "delete":
-          return `<del>${esc(t.text)}</del>`;
-      }
-    })
-    .join("");
 }
 
 function penaltyBadge(pts: number): string {

@@ -1,5 +1,5 @@
 import { expect, test, beforeAll, afterAll } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 

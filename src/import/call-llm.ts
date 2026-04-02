@@ -21,13 +21,6 @@ export interface CallLlmApiKeys {
   openai?: string;
 }
 
-const keyMap: Record<string, Provider> = {
-  google: "google",
-  gemini: "google",
-  anthropic: "anthropic",
-  openai: "openai",
-};
-
 function resolveKey(apiKeys: CallLlmApiKeys, provider: Provider): string {
   // Check both "google" and "gemini" keys for the google provider
   const key = provider === "google"

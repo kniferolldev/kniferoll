@@ -7,9 +7,9 @@
 
 import { join } from "path";
 import { parseDocument } from "../core";
-import type { DocumentParseResult } from "../core";
+
 import type { IO } from "../types";
-import { compareDocuments, formatDetailed, type ComparisonResult } from "../eval";
+import { compareDocuments, formatDetailed } from "../eval";
 import type { TestCaseResult, Baseline, EvalMetadata } from "../eval/types";
 import {
   importRecipe,
@@ -654,7 +654,6 @@ export async function runEval(args: string[], io: IO): Promise<number> {
 
       results[tc.id] = result;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
       results[tc.id] = {
         id: tc.id,
         parsed: false,

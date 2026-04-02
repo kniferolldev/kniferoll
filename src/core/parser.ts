@@ -4,8 +4,6 @@ import { slug } from "./slug";
 import { extractInlineValues } from "./steps";
 import type {
   DocumentInlineValueAny,
-  DocumentInlineTemperatureValue,
-  DocumentInlineQuantityValue,
   DocumentParseResult,
   DocumentTitle,
   Diagnostic,

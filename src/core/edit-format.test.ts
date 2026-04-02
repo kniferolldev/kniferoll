@@ -409,7 +409,7 @@ describe("roundtrip: unwrap → edit → wrap", () => {
     expect(unwrapped).toBe(
       "1. Mix everything together until well combined.",
     );
-    const { prefix, content } = splitPrefix(unwrapped);
+    const { prefix } = splitPrefix(unwrapped);
     expect(prefix).toBe("1. ");
     // Simulate user editing the text
     const edited = "Mix everything together until very well combined.";
