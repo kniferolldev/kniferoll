@@ -15,6 +15,7 @@ const ENTRY_POINT = "index.ts";
 
 interface BuildVariant {
   name: string;
+  entrypoint?: string;
   minify: boolean;
   sourcemap: "none" | "inline" | "external";
 }
@@ -22,6 +23,9 @@ interface BuildVariant {
 const variants: BuildVariant[] = [
   { name: "kniferoll.js", minify: false, sourcemap: "inline" },
   { name: "kniferoll.min.js", minify: true, sourcemap: "none" },
+  { name: "core.js", entrypoint: "src/core/index.ts", minify: false, sourcemap: "none" },
+  { name: "import.js", entrypoint: "src/import/index.ts", minify: false, sourcemap: "none" },
+  { name: "component.js", entrypoint: "src/web/index.ts", minify: false, sourcemap: "none" },
 ];
 
 const main = async (): Promise<void> => {
@@ -31,11 +35,23 @@ const main = async (): Promise<void> => {
   await rm(DIST_DIR, { recursive: true, force: true });
   await mkdir(DIST_DIR, { recursive: true });
 
+  // Generate .d.ts declarations
+  console.log("📝 Generating type declarations...");
+  const tsc = Bun.spawnSync(["bun", "x", "tsc", "-p", "tsconfig.build.json"], {
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  if (tsc.exitCode !== 0) {
+    console.error("❌ Declaration generation failed");
+    process.exit(1);
+  }
+  console.log("✓ Type declarations generated\n");
+
   for (const variant of variants) {
     const startTime = performance.now();
 
     const result = await Bun.build({
-      entrypoints: [ENTRY_POINT],
+      entrypoints: [variant.entrypoint ?? ENTRY_POINT],
       target: "browser",
       format: "esm",
       splitting: false,

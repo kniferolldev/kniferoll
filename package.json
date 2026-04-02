@@ -9,23 +9,30 @@
     "url": "https://github.com/kniferolldev/kniferoll.git"
   },
   "exports": {
-    ".": "./dist/kniferoll.min.js",
-    "./core": "./src/core/index.ts",
-    "./import": "./src/import/index.ts",
-    "./component": "./src/web/index.ts",
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/kniferoll.min.js"
+    },
+    "./core": {
+      "types": "./dist/types/src/core/index.d.ts",
+      "default": "./dist/core.js"
+    },
+    "./import": {
+      "types": "./dist/types/src/import/index.d.ts",
+      "default": "./dist/import.js"
+    },
+    "./component": {
+      "types": "./dist/types/src/web/index.d.ts",
+      "default": "./dist/component.js"
+    },
     "./SCHEMA.md": "./SCHEMA.md"
   },
   "files": [
-    "dist/kniferoll.min.js",
-    "src/core/",
-    "src/import/",
-    "src/web/",
-    "src/types.ts",
+    "dist/",
     "logo/*.svg",
     "logo/*.png",
     "logo/*.ico",
-    "SCHEMA.md",
-    "!**/*.test.ts"
+    "SCHEMA.md"
   ],
   "scripts": {
     "kr": "bun src/kr.ts",

@@ -357,7 +357,7 @@ describe("googleAdapter streaming", () => {
 
   test("streams during RECITATION retry", async () => {
     let callCount = 0;
-    globalThis.fetch = mock(async (url: string) => {
+    globalThis.fetch = mock(async (_url: string) => {
       callCount++;
       if (callCount === 1) {
         // First call: RECITATION
