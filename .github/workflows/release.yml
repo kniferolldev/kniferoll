@@ -55,6 +55,21 @@ jobs:
       - name: Publish to npm
         run: npm publish --provenance --access public
 
+      - name: Wait for npm propagation
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Waiting for @kniferoll/kniferoll@$VERSION on npm..."
+          for i in $(seq 1 24); do
+            if npm view "@kniferoll/kniferoll@$VERSION" version 2>/dev/null | grep -qxF "$VERSION"; then
+              echo "Available."
+              exit 0
+            fi
+            echo "  attempt $i/24, retrying in 10s..."
+            sleep 10
+          done
+          echo "Timed out after ~4 minutes waiting for npm propagation"
+          exit 1
+
       - name: Notify kniferoll.dev
         run: |
           gh api repos/kniferolldev/kniferoll.dev/dispatches \
