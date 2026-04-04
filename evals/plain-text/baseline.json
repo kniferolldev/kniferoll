@@ -1,0 +1,179 @@
+{
+  "timestamp": "2026-04-04T04:03:05.803Z",
+  "metadata": {},
+  "results": {
+    "simple-tomato-sauce": {
+      "id": "simple-tomato-sauce",
+      "parsed": true,
+      "errorCount": 0,
+      "warningCount": 0,
+      "score": 100,
+      "comparison": {
+        "score": 100,
+        "parsed": true,
+        "ingredientScore": 1,
+        "stepScore": 1,
+        "referenceScore": 1,
+        "proseScore": 1,
+        "metadataScore": 1,
+        "structureScore": 1,
+        "recipes": [
+          {
+            "goldenTitle": "Simple Tomato Sauce",
+            "actualTitle": "Simple Tomato Sauce",
+            "ingredientScore": 1,
+            "stepScore": 1,
+            "ingredients": {
+              "comparisons": [
+                {
+                  "goldenId": "whole-peeled-tomatoes-28-oz-can",
+                  "goldenName": "whole peeled tomatoes (28-oz can)",
+                  "actualId": "whole-peeled-tomatoes-28-oz-can",
+                  "actualName": "whole peeled tomatoes (28-oz can)",
+                  "goldenLine": 15,
+                  "actualLine": 15,
+                  "nameScore": 1,
+                  "quantityScore": 1,
+                  "notesScore": 1,
+                  "attrsScore": 1,
+                  "totalScore": 1,
+                  "issues": []
+                },
+                {
+                  "goldenId": "yellow-onion",
+                  "goldenName": "yellow onion",
+                  "actualId": "yellow-onion",
+                  "actualName": "yellow onion",
+                  "goldenLine": 16,
+                  "actualLine": 16,
+                  "nameScore": 1,
+                  "quantityScore": 1,
+                  "notesScore": 1,
+                  "attrsScore": 1,
+                  "totalScore": 1,
+                  "issues": []
+                },
+                {
+                  "goldenId": "unsalted-butter",
+                  "goldenName": "unsalted butter",
+                  "actualId": "unsalted-butter",
+                  "actualName": "unsalted butter",
+                  "goldenLine": 17,
+                  "actualLine": 17,
+                  "nameScore": 1,
+                  "quantityScore": 1,
+                  "notesScore": 1,
+                  "attrsScore": 1,
+                  "totalScore": 1,
+                  "issues": []
+                },
+                {
+                  "goldenId": "kosher-salt",
+                  "goldenName": "kosher salt",
+                  "actualId": "kosher-salt",
+                  "actualName": "kosher salt",
+                  "goldenLine": 18,
+                  "actualLine": 18,
+                  "nameScore": 1,
+                  "quantityScore": 1,
+                  "notesScore": 1,
+                  "attrsScore": 1,
+                  "totalScore": 1,
+                  "issues": []
+                },
+                {
+                  "goldenId": "sugar",
+                  "goldenName": "sugar",
+                  "actualId": "sugar",
+                  "actualName": "sugar",
+                  "goldenLine": 19,
+                  "actualLine": 19,
+                  "nameScore": 1,
+                  "quantityScore": 1,
+                  "notesScore": 1,
+                  "attrsScore": 1,
+                  "totalScore": 1,
+                  "issues": []
+                }
+              ],
+              "missing": [],
+              "extra": []
+            },
+            "steps": {
+              "comparisons": [
+                {
+                  "index": 1,
+                  "goldenLine": 23,
+                  "actualLine": 23,
+                  "textScore": 1,
+                  "refsScore": 1,
+                  "totalScore": 1,
+                  "missingRefs": [],
+                  "extraRefs": []
+                },
+                {
+                  "index": 2,
+                  "goldenLine": 24,
+                  "actualLine": 24,
+                  "textScore": 1,
+                  "refsScore": 1,
+                  "totalScore": 1,
+                  "missingRefs": [],
+                  "extraRefs": []
+                },
+                {
+                  "index": 3,
+                  "goldenLine": 25,
+                  "actualLine": 25,
+                  "textScore": 1,
+                  "refsScore": 1,
+                  "totalScore": 1,
+                  "missingRefs": [],
+                  "extraRefs": []
+                },
+                {
+                  "index": 4,
+                  "goldenLine": 26,
+                  "actualLine": 26,
+                  "textScore": 1,
+                  "refsScore": 1,
+                  "totalScore": 1,
+                  "missingRefs": [],
+                  "extraRefs": []
+                }
+              ],
+              "missingCount": 0,
+              "extraCount": 0
+            }
+          }
+        ],
+        "metadata": {
+          "titleScore": 1,
+          "sourceScore": 1,
+          "overallScore": 1,
+          "issues": []
+        },
+        "references": {
+          "totalRefs": 5,
+          "brokenRefs": 0,
+          "score": 1,
+          "issues": []
+        },
+        "prose": {
+          "introScore": 1,
+          "notesScore": 1,
+          "overallScore": 1,
+          "issues": []
+        },
+        "missingRecipes": [],
+        "extraRecipes": [],
+        "issues": []
+      },
+      "actual": "---\nversion: 1\nsource: Adapted loosely from Marcella Hazan\nyield: 2 cups\n---\n\n# Simple Tomato Sauce\n\nThis is the sauce I make when I don't want to think. A can of good whole\ntomatoes, half an onion, butter, salt. That's basically it. Adapted loosely from\nMarcella Hazan.\n\n## Ingredients\n\n- whole peeled tomatoes (28-oz can) - 1 :: also=\"794 g\"\n- yellow onion - 1/2 medium, peeled and halved\n- unsalted butter - 4 tbsp\n- kosher salt - 1 tsp, plus more to taste\n- sugar - 1 pinch, optional\n\n## Steps\n\n1. Combine the [[tomatoes -> whole peeled tomatoes (28-oz can)]], [[onion -> yellow onion]], and [[butter -> unsalted butter]] in a medium saucepan. Crush the tomatoes lightly with your hands before adding, or use scissors to cut them up in the can. Add the [[salt -> kosher salt]].\n2. Bring to a gentle simmer over medium heat, then reduce to low. Cook uncovered for about 45 minutes, stirring occasionally and breaking up the tomatoes further as they soften. The sauce should thicken and the fat should separate and pool on the surface a bit — that's fine, stir it back in.\n3. Taste and adjust salt. Add a pinch of [[sugar]] if it tastes sharp.\n4. Remove the onion halves (discard or eat them, they're delicious) and serve over pasta. Makes about {2 cups}.\n\n## Notes\n\n- The sauce keeps refrigerated for 5 days or frozen for 3 months."
+    }
+  },
+  "summary": {
+    "parseRate": 100,
+    "avgScore": 100
+  }
+}

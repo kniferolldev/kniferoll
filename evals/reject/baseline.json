@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-04-04T04:03:08.292Z",
+  "metadata": {
+    "importerModel": "google/gemini-3-flash-preview"
+  },
+  "results": {
+    "food-article": {
+      "id": "food-article",
+      "parsed": true,
+      "errorCount": 0,
+      "warningCount": 0,
+      "score": 100,
+      "actual": "",
+      "isRejectionCase": true
+    },
+    "obvious-garbage": {
+      "id": "obvious-garbage",
+      "parsed": true,
+      "errorCount": 0,
+      "warningCount": 0,
+      "score": 100,
+      "actual": "",
+      "isRejectionCase": true
+    },
+    "shopping-list": {
+      "id": "shopping-list",
+      "parsed": true,
+      "errorCount": 0,
+      "warningCount": 0,
+      "score": 100,
+      "actual": "",
+      "isRejectionCase": true
+    }
+  },
+  "summary": {
+    "parseRate": 0,
+    "avgScore": 0
+  }
+}

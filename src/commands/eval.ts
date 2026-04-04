@@ -817,5 +817,7 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     write(`\n  Saved to ${evalsDir}/baseline.json\n`);
   }
 
-  return parsedCount > 0 ? 0 : 1;
+  const rejectionFailed = rejectionResults.filter(r => !r.parsed).length;
+  const qualityFailed = qualityResults.length - parsedCount;
+  return (qualityFailed > 0 || rejectionFailed > 0) ? 1 : 0;
 }

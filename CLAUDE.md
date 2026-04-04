@@ -61,7 +61,7 @@ bun test                     # Run all tests
 bun run typecheck            # TypeScript type checking
 bun run kr check <file>      # Lint a kniferoll markdown file
 bun run kr import <file>     # Import a recipe via LLM
-bun run kr eval              # Run import quality evaluations
+bun run kr eval evals/web    # Run import quality evaluations (see Evals section)
 ```
 
 ## Environment Variables

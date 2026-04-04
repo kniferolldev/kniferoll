@@ -1,0 +1,47 @@
+---
+version: 1
+source: Jess Morgan, Weeknight Kitchen
+yield: 4 servings
+---
+
+# Roast Chicken with Herb Butter
+
+I've been making this roast chicken every Sunday for three years. It started as a
+way to use up herbs from my overgrown garden, and now it's the thing my family
+requests more than anything else. The butter goes under the skin and bastes the
+meat from the inside as it roasts — the result is incredibly juicy with
+crackling crisp skin.
+
+The key is to let the chicken air-dry in the fridge uncovered for at least a few
+hours, ideally overnight. Dry skin = crispy skin. Don't skip this.
+
+## Ingredients
+
+- whole chicken - 1 :: also="3 1/2–4 lbs"
+- unsalted butter - 4 tbsp, at room temperature
+- fresh thyme leaves - 2 tbsp
+- fresh rosemary - 1 tbsp, finely chopped
+- garlic - 2 cloves, minced
+- lemon zest - 1 tsp
+- kosher salt - 1 1/2 tsp, divided
+- freshly ground black pepper - 1/2 tsp
+- lemon - 1, halved
+- head of garlic - 1, halved crosswise
+
+## Steps
+
+1. The night before (or at least 2 hours ahead), pat the [[chicken -> whole chicken]] dry with paper towels, inside and out. Set it on a rack over a baking sheet and refrigerate uncovered. This dries out the skin for maximum crispiness.
+2. When ready to cook, take the chicken out of the fridge 30 minutes before roasting. Preheat the oven to {425F} with a rack in the lower-middle position.
+3. Make the herb butter: mash together the softened [[butter -> unsalted butter]], [[thyme -> fresh thyme leaves]], [[rosemary -> fresh rosemary]], minced [[garlic]], [[lemon zest]], {1 tsp} of the [[salt -> kosher salt]], and the [[pepper -> freshly ground black pepper]] until well combined.
+4. Loosen the skin over the breasts and thighs by gently sliding your fingers underneath it. Push about two-thirds of the herb butter under the skin and spread it over the meat. Rub the remaining butter all over the outside of the bird. Season the outside with the remaining {1/2 tsp} salt.
+5. Stuff the cavity with the halved [[lemon]] and halved [[garlic head -> head of garlic]]. Tie the legs together with kitchen twine if you like, or leave them loose for crispier thighs.
+6. Place the chicken breast-side up in a cast iron skillet or roasting pan. Roast for 50–60 minutes, until the skin is deep golden brown and the juices run clear when you pierce the thigh, or until a thermometer inserted in the thickest part of the thigh reads {165F}.
+7. Transfer to a cutting board and rest for 10–15 minutes before carving.
+
+## Notes
+
+- Use a {3.5–4 lb} chicken. Larger birds take longer and the skin can overbrown.
+- Room temperature butter blends much more easily with the herbs.
+- Let the chicken rest before carving — at least 10 minutes.
+- The pan drippings are wonderful. After resting the chicken, tilt the skillet and spoon off most of the fat, then add a splash of white wine or chicken stock and scrape up the browned bits over medium heat for a quick pan sauce.
+- Leftovers keep well for 3 days. The carcass makes excellent stock.
