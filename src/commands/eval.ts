@@ -35,6 +35,8 @@ interface TestCase {
   id: string;
   input: { kind: "text"; text: string } | { kind: "images"; paths: string[] };
   expected: string;
+  /** If true, the importer should reject this input as not-a-recipe */
+  expectedRejection?: boolean;
 }
 
 // ============================================================================
@@ -222,26 +224,42 @@ interface LoadedTestCase extends TestCase {
 async function loadTestCases(evalsDir: string): Promise<LoadedTestCase[]> {
   const testCases: LoadedTestCase[] = [];
 
-  const entries = await Array.fromAsync(
+  // Collect all test case directories (any dir with golden.md OR expected_error.txt)
+  const goldenEntries = await Array.fromAsync(
     new Bun.Glob("**/golden.md").scan({ cwd: evalsDir })
   );
+  const rejectionEntries = await Array.fromAsync(
+    new Bun.Glob("**/expected_error.txt").scan({ cwd: evalsDir })
+  );
 
-  for (const entry of entries) {
-    const id = entry.replace("/golden.md", "");
+  const allIds = new Set([
+    ...goldenEntries.map(e => e.replace("/golden.md", "")),
+    ...rejectionEntries.map(e => e.replace("/expected_error.txt", "")),
+  ]);
+
+  for (const id of allIds) {
     const testCaseDir = join(evalsDir, id);
 
-    const goldenFile = Bun.file(join(testCaseDir, "golden.md"));
-    if (!(await goldenFile.exists())) continue;
-    const expected = await goldenFile.text();
+    const expectedRejectionFile = Bun.file(join(testCaseDir, "expected_error.txt"));
+    const expectedRejection = await expectedRejectionFile.exists();
 
-    // Load cached actual.md if it exists
-    const actualFile = Bun.file(join(testCaseDir, "actual.md"));
-    const actualCached = (await actualFile.exists()) ? await actualFile.text() : undefined;
+    let expected = "";
+    if (!expectedRejection) {
+      const goldenFile = Bun.file(join(testCaseDir, "golden.md"));
+      if (!(await goldenFile.exists())) continue;
+      expected = await goldenFile.text();
+    }
+
+    // Rejection cases never cache actual.md (they run live every time)
+    const actualCached = expectedRejection ? undefined : await (async () => {
+      const actualFile = Bun.file(join(testCaseDir, "actual.md"));
+      return (await actualFile.exists()) ? await actualFile.text() : undefined;
+    })();
 
     const inputTextFile = Bun.file(join(testCaseDir, "input.txt"));
     if (await inputTextFile.exists()) {
       const text = await inputTextFile.text();
-      testCases.push({ id, input: { kind: "text", text }, expected, actualCached });
+      testCases.push({ id, input: { kind: "text", text }, expected, expectedRejection, actualCached });
     } else {
       const imageFiles = await Array.fromAsync(
         new Bun.Glob("image*.{jpg,jpeg,png,webp}").scan({ cwd: testCaseDir })
@@ -251,6 +269,7 @@ async function loadTestCases(evalsDir: string): Promise<LoadedTestCase[]> {
           id,
           input: { kind: "images", paths: imageFiles.sort().map(f => join(testCaseDir, f)) },
           expected,
+          expectedRejection,
           actualCached,
         });
       }
@@ -355,7 +374,12 @@ export async function runEval(args: string[], io: IO): Promise<number> {
   }
 
   // Resolve models: use defaults when not specified
-  const importModel = regenerate
+  // Rejection cases always run live, so they also need a model; pre-scan to detect them
+  const rejectionFiles = await Array.fromAsync(
+    new Bun.Glob("**/expected_error.txt").scan({ cwd: evalsDir })
+  );
+  const hasRejectionCases = rejectionFiles.length > 0;
+  const importModel = (regenerate || hasRejectionCases)
     ? (model ?? parseModelSpec(DEFAULT_IMPORT_MODEL)!)
     : null;
 
@@ -388,8 +412,8 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     testCases = filtered;
   }
 
-  // Check for missing actual.md files
-  const missingActual = testCases.filter(tc => !tc.actualCached);
+  // Check for missing actual.md files (rejection cases never cache, so exclude them)
+  const missingActual = testCases.filter(tc => !tc.actualCached && !tc.expectedRejection);
   if (missingActual.length > 0 && !regenerate) {
     writeErr(`Missing actual.md for: ${missingActual.map(tc => tc.id).join(", ")}\n`);
     writeErr(`Run with --regenerate to generate them.\n`);
@@ -632,6 +656,42 @@ export async function runEval(args: string[], io: IO): Promise<number> {
   const results: Record<string, TestCaseResult> = {};
 
   for (const tc of testCases) {
+    if (tc.expectedRejection) {
+      // Rejection case: run importer and expect it to throw "Not a recipe"
+      try {
+        const importResult = await runImporter(importModel!, tc.input);
+        // If we get here, the importer did NOT reject — that's a failure
+        results[tc.id] = {
+          id: tc.id,
+          parsed: false,
+          errorCount: 1,
+          warningCount: 0,
+          score: 0,
+          actual: importResult.markdown,
+          importMetrics: importResult.metrics,
+          isRejectionCase: true,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const correctlyRejected = msg.includes("Not a recipe");
+        results[tc.id] = {
+          id: tc.id,
+          parsed: correctlyRejected,
+          errorCount: correctlyRejected ? 0 : 1,
+          warningCount: 0,
+          score: correctlyRejected ? 100 : 0,
+          actual: "",
+          isRejectionCase: true,
+        };
+      }
+
+      const r = results[tc.id]!;
+      const scoreStr = r.parsed ? "PASS" : "FAIL";
+      const detail = r.parsed ? "(correctly rejected)" : "(should have rejected)";
+      write(`  ${tc.id.padEnd(maxIdLen)}  ${scoreStr}  ${detail}\n`);
+      continue;
+    }
+
     try {
       let actual: string;
       let importMetrics: InferenceMetrics | undefined;
@@ -693,23 +753,26 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     }
   }
 
-  // Calculate summary
+  // Calculate summary — rejection cases are tallied separately from quality scores
   const resultList = Object.values(results);
-  const parsedCount = resultList.filter(r => r.parsed).length;
+  const qualityResults = resultList.filter(r => !r.isRejectionCase);
+  const rejectionResults = resultList.filter(r => r.isRejectionCase);
+
+  const parsedCount = qualityResults.filter(r => r.parsed).length;
   const avgScore = Math.round(
-    resultList.filter(r => r.parsed).reduce((sum, r) => sum + r.score, 0) /
+    qualityResults.filter(r => r.parsed).reduce((sum, r) => sum + r.score, 0) /
     Math.max(parsedCount, 1)
   );
 
   // Calculate aggregate metrics
-  const resultsWithMetrics = resultList.filter(r => r.importMetrics);
+  const resultsWithMetrics = qualityResults.filter(r => r.importMetrics);
   const totalDurationMs = resultsWithMetrics.reduce((sum, r) => sum + (r.importMetrics?.durationMs ?? 0), 0);
   const totalInputTokens = resultsWithMetrics.reduce((sum, r) => sum + (r.importMetrics?.inputTokens ?? 0), 0);
   const totalOutputTokens = resultsWithMetrics.reduce((sum, r) => sum + (r.importMetrics?.outputTokens ?? 0), 0);
 
   // Summary line
   write("\n");
-  const failCount = resultList.length - parsedCount;
+  const failCount = qualityResults.length - parsedCount;
   let summaryLine = `  avg ${avgScore}%`;
   if (baseline) {
     summaryLine += `  ${formatDelta(avgScore, baseline.summary.avgScore, "%")}`;
@@ -724,8 +787,14 @@ export async function runEval(args: string[], io: IO): Promise<number> {
     write(`  ${totalDurationSec}s | ${totalInputTokens.toLocaleString()} in / ${totalOutputTokens.toLocaleString()} out\n`);
   }
 
+  // Rejection case summary
+  if (rejectionResults.length > 0) {
+    const rejectionPassed = rejectionResults.filter(r => r.parsed).length;
+    write(`  Rejection: ${rejectionPassed}/${rejectionResults.length} correctly rejected\n`);
+  }
+
   // Save baseline if requested
-  const parseRate = Math.round((parsedCount / resultList.length) * 100);
+  const parseRate = Math.round((parsedCount / Math.max(qualityResults.length, 1)) * 100);
   if (save) {
     const metadata: EvalMetadata = {};
     if (importModel) {

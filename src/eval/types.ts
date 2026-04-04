@@ -17,6 +17,8 @@ export interface TestCaseResult {
   comparison?: ComparisonResult;
   actual: string;
   importMetrics?: InferenceMetrics;
+  /** If true, this case tests that non-recipe input is correctly rejected */
+  isRejectionCase?: boolean;
 }
 
 /** Metadata about the eval run */

@@ -14,6 +14,11 @@
 export function buildExtractionPrompt(): string {
   return `You are a recipe extraction assistant. Your job is to extract recipe content from images into structured JSON, copying the source text exactly.
 
+If the image does not appear to contain a recipe (e.g. it is a news article, terms of service, shopping list, instruction manual, product page, or social media post), output ONLY the exact text:
+NOT_A_RECIPE
+
+Otherwise, apply the rules below and extract the recipe.
+
 CRITICAL RULES:
 - Copy text EXACTLY as it appears — preserve the author's wording, spelling, and punctuation
 - NEVER paraphrase, condense, or rephrase the source text

@@ -10,11 +10,13 @@ import {
 import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, getApiKeyEnvVar, getApiKey } from "./config";
 import { loadSchema, clearSchemaCache } from "./load-schema";
 import { buildExtractionPrompt } from "./extract-prompt";
+import { buildTextExtractionPrompt } from "./text-extract-prompt";
 import { buildRotationDetectionPrompt } from "./rotation-prompt";
 import {
   importRecipe,
   extractRecipe,
   formatRecipe,
+  parseExtractedJson,
 } from "./infer";
 import { getProvider } from "./providers";
 
@@ -247,8 +249,112 @@ describe("buildExtractionPrompt", () => {
     expect(prompt).toContain("NEVER");
     expect(prompt.toLowerCase()).toContain("guess");
   });
+
+  test("includes NOT_A_RECIPE sentinel for non-recipe detection", () => {
+    const prompt = buildExtractionPrompt();
+
+    expect(prompt).toContain("NOT_A_RECIPE");
+  });
 });
 
+describe("buildTextExtractionPrompt", () => {
+  test("returns a non-empty string", () => {
+    const prompt = buildTextExtractionPrompt();
+
+    expect(typeof prompt).toBe("string");
+    expect(prompt.length).toBeGreaterThan(100);
+  });
+
+  test("mentions verbatim copying", () => {
+    const prompt = buildTextExtractionPrompt();
+
+    expect(prompt).toContain("exactly");
+  });
+
+  test("includes JSON output format fields", () => {
+    const prompt = buildTextExtractionPrompt();
+
+    expect(prompt).toContain("title");
+    expect(prompt).toContain("sections");
+    expect(prompt).toContain("content");
+  });
+
+  test("includes NOT_A_RECIPE sentinel for non-recipe detection", () => {
+    const prompt = buildTextExtractionPrompt();
+
+    expect(prompt).toContain("NOT_A_RECIPE");
+  });
+});
+
+describe("parseExtractedJson", () => {
+  test("parses valid recipe JSON", () => {
+    const json = JSON.stringify({
+      title: "Chocolate Cake",
+      sections: [
+        { type: "ingredients", content: ["2 cups flour"] },
+        { type: "instructions", content: ["Mix ingredients"] },
+      ],
+    });
+
+    const result = parseExtractedJson(json);
+
+    expect(result.title).toBe("Chocolate Cake");
+    expect(result.sections).toHaveLength(2);
+  });
+
+  test("parses code-fenced JSON", () => {
+    const inner = JSON.stringify({
+      is_recipe: true,
+      sections: [{ type: "instructions", content: ["Bake at 350°F"] }],
+    });
+
+    const result = parseExtractedJson("```json\n" + inner + "\n```");
+
+    expect(result.sections).toHaveLength(1);
+  });
+
+  test("passes through optional fields", () => {
+    const json = JSON.stringify({
+      title: "Test",
+      source: "Test Kitchen",
+      servings: "4",
+      time: "30 min",
+      sections: [],
+    });
+
+    const result = parseExtractedJson(json);
+
+    expect(result.source).toBe("Test Kitchen");
+    expect(result.servings).toBe("4");
+    expect(result.time).toBe("30 min");
+  });
+
+  test("throws on NOT_A_RECIPE sentinel", () => {
+    expect(() => parseExtractedJson("NOT_A_RECIPE")).toThrow("Not a recipe");
+  });
+
+  test("throws on NOT_A_RECIPE sentinel with trailing explanation", () => {
+    expect(() => parseExtractedJson("NOT_A_RECIPE: this is a news article")).toThrow("Not a recipe");
+  });
+
+  test("throws on invalid JSON", () => {
+    expect(() => parseExtractedJson("this is not json at all")).toThrow(
+      "non-JSON output"
+    );
+  });
+
+  test("throws when sections is missing", () => {
+    const json = JSON.stringify({ is_recipe: true, title: "Something" });
+
+    expect(() => parseExtractedJson(json)).toThrow("missing required 'sections'");
+  });
+
+  test("throws when sections is not an array", () => {
+    const json = JSON.stringify({ sections: "flat string" });
+
+    expect(() => parseExtractedJson(json)).toThrow("missing required 'sections'");
+  });
+});
 
 describe("buildRotationDetectionPrompt", () => {
   test("returns a non-empty string", () => {

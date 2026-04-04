@@ -58,6 +58,41 @@ function stripCodeFences(text: string): string {
 }
 
 /**
+ * Parse and validate the JSON output from an extraction LLM call.
+ *
+ * Throws if the output is not valid JSON, not a JSON object, signals
+ * that the input is not a recipe (is_recipe === false), or is missing
+ * the required sections array.
+ */
+export function parseExtractedJson(rawText: string): ExtractionResult["extracted"] {
+  const cleaned = stripCodeFences(rawText);
+
+  // Sentinel: model signals non-recipe input before attempting JSON
+  if (cleaned.startsWith("NOT_A_RECIPE")) {
+    throw new Error("Not a recipe: the input does not appear to contain a recipe");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    throw new Error(`Extraction returned non-JSON output: ${cleaned.slice(0, 200)}`);
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("Extraction returned unexpected JSON type (expected object)");
+  }
+
+  const obj = parsed as Record<string, unknown>;
+
+  if (!Array.isArray(obj["sections"])) {
+    throw new Error("Extraction result is missing required 'sections' array");
+  }
+
+  return obj as ExtractionResult["extracted"];
+}
+
+/**
  * Detect if an image needs rotation and return the angle.
  * Returns 0, 90, 180, or 270 degrees clockwise.
  */
@@ -246,20 +281,9 @@ export async function extractRecipe(
     onStream: withStage("extracting", options?.onStream),
   });
 
-  // Strip code fences, then parse JSON
+  // Parse and validate the JSON, then store the cleaned raw string for stage 2
+  const extracted = parseExtractedJson(result.text);
   const cleanedJson = stripCodeFences(result.text);
-  let extracted: ExtractionResult["extracted"];
-  try {
-    extracted = JSON.parse(cleanedJson);
-  } catch {
-    // If parsing fails, return a minimal structure with the raw text
-    extracted = {
-      sections: [{
-        type: "other",
-        content: [result.text],
-      }],
-    };
-  }
 
   return {
     extracted,
@@ -313,20 +337,9 @@ export async function extractRecipeFromText(
     onStream: withStage("extracting", options?.onStream),
   });
 
-  // Strip code fences, then parse JSON
+  // Parse and validate the JSON, then store the cleaned raw string for stage 2
+  const extracted = parseExtractedJson(result.text);
   const cleanedJson = stripCodeFences(result.text);
-  let extracted: ExtractionResult["extracted"];
-  try {
-    extracted = JSON.parse(cleanedJson);
-  } catch {
-    // If parsing fails, return a minimal structure with the raw text
-    extracted = {
-      sections: [{
-        type: "other",
-        content: [result.text],
-      }],
-    };
-  }
 
   return {
     extracted,

@@ -29,7 +29,7 @@
  */
 
 // Main functions
-export { importRecipe, extractRecipe, extractRecipeFromText, formatRecipe, importRecipeTwoStage } from "./infer";
+export { importRecipe, extractRecipe, extractRecipeFromText, formatRecipe, importRecipeTwoStage, parseExtractedJson } from "./infer";
 
 // Schema loading (Node/Bun only — in browser/worker, pass schema via ImportOptions)
 export { loadSchema, clearSchemaCache } from "./load-schema";

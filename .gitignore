@@ -31,4 +31,5 @@ logs
 
 # eval artifacts (generated)
 evals/explorer.html
+evals/private
 screenshots
