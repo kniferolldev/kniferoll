@@ -334,6 +334,25 @@ test("W0304 does not fire for multi-ingredient references", () => {
   expect(byCode(result.diagnostics, "W0302").length).toBe(0);
 });
 
+test("arrow ref with commas in ingredient name resolves as single target", () => {
+  const input = [
+    "# Salsa Macha",
+    "## Ingredients",
+    "- raw, shelled, unsalted peanuts - 1/2 cup",
+    "- vegetable oil - 1/2 cup",
+    "## Steps",
+    "1. Add the [[peanuts -> raw, shelled, unsalted peanuts]] to the [[vegetable oil]].",
+  ].join("\n");
+
+  const result = parseDocument(input);
+  expect(result.references).toHaveLength(2);
+  const ref = result.references[0]!;
+  expect(ref.display).toBe("peanuts");
+  expect(ref.targets).toEqual(["raw-shelled-unsalted-peanuts"]);
+  expect(ref.resolvedTargets).toHaveLength(1);
+  expect(byCode(result.diagnostics, "W0302").length).toBe(0);
+});
+
 test("W0304 is case-sensitive against ingredient name", () => {
   const input = [
     "# Recipe",

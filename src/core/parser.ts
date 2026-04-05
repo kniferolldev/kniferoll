@@ -674,7 +674,16 @@ export const parseDocument = (
           if (arrowIndex !== -1) {
             display = innerRaw.slice(0, arrowIndex).trim();
             const rhs = innerRaw.slice(arrowIndex + 2).trim();
-            targets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
+            // Try the full RHS as a single ingredient first — handles names
+            // with commas (e.g. "raw, shelled, unsalted peanuts"). Fall back
+            // to comma-split for multi-ingredient refs.
+            const fullSlug = slug(rhs);
+            const scopedFull = recipe ? `${recipe.id}/${fullSlug}` : null;
+            if (fullSlug && scopedFull && idRegistry.has(scopedFull)) {
+              targets = [fullSlug];
+            } else {
+              targets = rhs.split(",").map((s) => slug(s.trim())).filter(Boolean);
+            }
             if (!display || targets.length === 0) {
               diagnostics.push(
                 warning("W0303", `Malformed reference token ${match[0]}.`, resolvedLine),
