@@ -1332,7 +1332,7 @@ test("W0502 negative: referenced recipe does not trigger orphan warning", () => 
 
 // ── Inline alternate validation ──────────────────────────────────────
 
-test("inline alternate with duplicate metric units emits E0208", () => {
+test("inline alternate with duplicate metric units emits W0208 warning", () => {
   const input = [
     "# Recipe",
     "## Ingredients",
@@ -1342,10 +1342,12 @@ test("inline alternate with duplicate metric units emits E0208", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  expect(byCode(result.diagnostics, "E0208").length).toBe(1);
+  const w = byCode(result.diagnostics, "W0208");
+  expect(w.length).toBe(1);
+  expect(w[0]!.severity).toBe("warning");
 });
 
-test("inline alternate with different systems does not emit E0208", () => {
+test("inline alternate with different systems does not emit W0208", () => {
   const input = [
     "# Recipe",
     "## Ingredients",
@@ -1355,5 +1357,5 @@ test("inline alternate with different systems does not emit E0208", () => {
   ].join("\n");
 
   const result = parseDocument(input);
-  expect(byCode(result.diagnostics, "E0208").length).toBe(0);
+  expect(byCode(result.diagnostics, "W0208").length).toBe(0);
 });
