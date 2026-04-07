@@ -35,6 +35,34 @@ const UNIT_DEFINITIONS: readonly UnitDefinition[] = [
     toBase: 1000,
     system: "metric",
   }),
+  // Mass - imperial
+  define({
+    canonical: "oz",
+    display: "oz",
+    aliases: ["oz", "ounce", "ounces"],
+    dimension: "mass",
+    rounding: { increment: 0.25, precision: 2 },
+    base: "g",
+    toBase: 28.3495,
+    system: "imperial",
+    preferred: {
+      thresholds: [
+        { unit: "lb", min: 453.592 }, // >= 16 oz (1 lb) in grams
+        { unit: "oz", min: 0 },
+      ],
+    },
+  }),
+  define({
+    canonical: "lb",
+    display: "lb",
+    pluralDisplay: "lbs",
+    aliases: ["lb", "lbs", "pound", "pounds"],
+    dimension: "mass",
+    rounding: { increment: 0.25, precision: 2 },
+    base: "g",
+    toBase: 453.592,
+    system: "imperial",
+  }),
   // Volume - metric
   define({
     canonical: "ml",

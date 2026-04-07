@@ -63,3 +63,43 @@ test("isMetric identifies metric unit system", () => {
   expect(isMetric("imperial")).toBe(false);
   expect(isMetric(undefined)).toBe(false);
 });
+
+// Imperial mass units
+
+test("lookupUnit resolves oz aliases", () => {
+  for (const alias of ["oz", "ounce", "ounces"]) {
+    const unit = lookupUnit(alias);
+    expect(unit).toBeTruthy();
+    expect(unit?.canonical).toBe("oz");
+  }
+});
+
+test("lookupUnit resolves lb aliases", () => {
+  for (const alias of ["lb", "lbs", "pound", "pounds"]) {
+    const unit = lookupUnit(alias);
+    expect(unit).toBeTruthy();
+    expect(unit?.canonical).toBe("lb");
+  }
+});
+
+test("16 oz = 1 lb = 453.592 g", () => {
+  const oz = lookupUnit("oz")!;
+  const lb = lookupUnit("lb")!;
+  const ozInGrams = toBaseValue(16, oz);
+  const lbInGrams = toBaseValue(1, lb);
+  expect(ozInGrams).toBeCloseTo(453.592);
+  expect(lbInGrams).toBeCloseTo(453.592);
+});
+
+test("preferred unit promotion: large oz values display as lb", () => {
+  const oz = lookupUnit("oz")!;
+  // 24 oz in base (grams) should promote to lb
+  const baseValue = toBaseValue(24, oz);
+  const preferred = choosePreferredUnit(baseValue, oz.base, oz.system);
+  expect(preferred?.canonical).toBe("lb");
+
+  // 8 oz should stay as oz
+  const smallBase = toBaseValue(8, oz);
+  const smallPreferred = choosePreferredUnit(smallBase, oz.base, oz.system);
+  expect(smallPreferred?.canonical).toBe("oz");
+});
