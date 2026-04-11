@@ -13,6 +13,7 @@ import { resolveInput } from "./utils";
 import { getProvider } from "./providers";
 import { rotateImage } from "./rotate";
 import { buildRotationDetectionPrompt, ROTATION_DETECTION_MODEL, type RotationAngle } from "./rotation-prompt";
+import { postprocessMarkdown } from "./postprocess";
 
 /**
  * Wrap a StreamCallback with a fixed stage, producing a ProviderStreamCallback.
@@ -448,7 +449,7 @@ export async function formatRecipe(
   });
 
   return {
-    markdown: result.text,
+    markdown: postprocessMarkdown(result.text),
     model: formatModelSpec(modelSpec),
     metrics: result.metrics,
   };

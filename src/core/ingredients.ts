@@ -288,9 +288,9 @@ const parseIngredientLine = (
       }
       if (metricCount > 1 || imperialCount > 1) {
         diagnostics.push(
-          error(
-            "E0208",
-            "Multiple also= alternates in the same unit system.",
+          warning(
+            "W0208",
+            "Multiple also= alternates in the same unit system; renderer will use the first.",
             lineNumber,
           ),
         );

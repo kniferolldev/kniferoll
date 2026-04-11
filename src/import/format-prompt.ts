@@ -17,6 +17,18 @@ export function buildFormatPrompt(schema: string): string {
 
 IMPORTANT: Output the Kniferoll Markdown directly. Do not wrap it in code fences like \`\`\`markdown or \`\`\`yaml.
 
+TEXT FIDELITY RULES:
+- Copy the recipe text EXACTLY as it appears in the input — preserve the author's
+  wording, spelling, and punctuation. This is a conversion task, not a rewriting task.
+- NEVER paraphrase, condense, rename, or rephrase ingredient names or step text.
+- Ingredient names in \`## Ingredients\` must use the EXACT wording from the source.
+- Step text must preserve the author's original prose. Wrap ingredient mentions in
+  \`[[ ]]\` references but do NOT change the surrounding words.
+- Preserve ALL modifiers from the source (e.g. "cut into tablespoons",
+  "not quick-cooking", "cold from the refrigerator"). Do not drop or shorten them.
+- When a step has a bold sub-heading (e.g. "Brown the butter:"), preserve it
+  using \`**Bold heading:**\` markdown syntax within the step.
+
 HARD RULES (violations will be rejected):
 - ONE input paragraph = ONE numbered step. NEVER split or merge paragraphs.
 - The display text (left of \`->\`) must ALWAYS be shorter than the ingredient
@@ -47,10 +59,11 @@ CONVERSION GUIDELINES:
    into one step.
 3. Normalize ALL CAPS titles to title case (capitalize major words).
    Apply to section headings too. Example: "SPICY CHICKEN TACOS" → "Spicy Chicken Tacos".
-4. When the source recipe gives a parenthetical alternate quantity, move it to \`also=\`.
-   The original measurement stays in the quantity; the alternate goes to \`also=\`.
-   Example: source says "1/2 stick (4 tablespoons) butter" →
-   \`- butter - 1/2 stick :: also="4 tbsp"\`.
+4. When the source recipe gives parenthetical alternate quantities, move each to a
+   separate \`also=\`. The original measurement stays in the quantity. Preserve ALL
+   alternates — if the source gives oz AND grams, include both.
+   Example: source says "2 sticks unsalted butter (8 oz / 227g), cut into tablespoons" →
+   \`- unsalted butter - 2 sticks, cut into tablespoons :: also="8 oz" also="227g"\`.
 5. When a recipe defines quantities relative to a variable-weight base ingredient
    (e.g., "2% salt by weight of cabbage", "salt to 3% of the meat"), mark the base
    ingredient with \`:: anchor\`. Express all quantities as concrete values computed
@@ -99,6 +112,8 @@ CONVERSION GUIDELINES:
    If the source has subsections (e.g. "For the sauce", "Scald", "Accompaniments"),
    just list all ingredients in order without headers.
    Ingredient names must be unique within a recipe — never repeat the same name.
+   If the same ingredient appears twice (e.g. flour in both a scald and a dough),
+   disambiguate with a parenthetical: \`- flour (for the scald)\`, \`- flour (for the dough)\`.
 11. Modifiers (", finely diced") MUST come BEFORE the \`::\` attribute separator.
     WRONG: \`- carrots - 2 bunches :: also="1 lb", peeled and chopped\`
     RIGHT: \`- carrots - 2 bunches, peeled and chopped :: also="1 lb"\`
@@ -112,9 +127,12 @@ CONVERSION GUIDELINES:
     (e.g. "PECAN BRITTLE", "COOKIES"), or "For the X:" prefixes within an
     ingredient list (e.g. "For the Roasted Chile Oil Vinaigrette:").
     When creating a sub-recipe, move its instruction steps there — do not
-    leave them in the main recipe. If a step says "For the Vinaigrette:
-    Combine...", that step belongs in the vinaigrette sub-recipe, not the
-    main recipe's steps.
+    leave them in the main recipe. Match steps to sub-recipes by what
+    ingredients they use, not just by explicit labels. If a step uses only
+    ingredients from the sub-recipe's list (e.g. "toast the pecans",
+    "make the brittle"), it belongs in that sub-recipe's \`## Steps\`.
+    If a step says "For the Vinaigrette: Combine...", that step belongs
+    in the vinaigrette sub-recipe, not the main recipe's steps.
     NAMING: the main recipe keeps the document's overall title (the JSON "title"
     field). Sub-recipes get their component name. Example: title is "Oat and
     Pecan Brittle Cookies" with sections "PECAN BRITTLE" and "COOKIES" →
@@ -126,11 +144,28 @@ CONVERSION GUIDELINES:
 13. When "salt and pepper" are listed together as a single seasoning line
     (e.g., "salt and pepper, to taste"), split them into separate ingredient lines:
     \`- salt, to taste\` and \`- pepper, to taste\`.
+14. ONLY list ingredients that appear in the source's ingredient list. If salt,
+    pepper, or other seasonings are mentioned only in the instructions (e.g. "add a
+    pinch of salt"), do NOT promote them to the ingredient list. Leave them as plain
+    text in the step.
+15. The ingredient NAME is what the thing IS. Units, counts, and size descriptors
+    belong in the QUANTITY, not the name:
+    - "3 celery stalks" → \`- celery - 3 stalks\` (NOT \`- celery stalks - 3\`)
+    - "2 large onions" → \`- onions - 2 large\` (NOT \`- large onions - 2\`)
+    - "4 slices bacon" → \`- bacon - 4 slices\` (NOT \`- slices bacon - 4\`)
+    - "Zest of 2 oranges" → \`- oranges - 2, zested\` (NOT \`- orange zest - 2 oranges\`)
+16. Parenthetical asides in ingredient lines are MODIFIERS or NOTES, not part of
+    the ingredient name. Place them after the quantity, separated by a comma:
+    - "2 tablespoons fish sauce (Red Boat preferred)" → \`- fish sauce - 2 tablespoons (Red Boat preferred)\`
+    - "1 pound spinach (or Swiss chard)" → \`- spinach - 1 pound (or Swiss chard)\`
+    Drop cookbook page cross-references entirely — "(page 205)" is navigation
+    metadata, not part of the ingredient or recipe name.
 
 Below is the complete specification for Kniferoll Markdown. Follow this specification exactly when formatting:
 
 ${schema}
 
-Convert the recipe content accurately following the specification above. You may have to do some
-reordering/reformatting of ingredient names in order to comply with the schema.`;
+Convert the recipe content accurately following the specification above. Preserve the author's
+original wording — use display names in references to bridge between step prose and ingredient
+names rather than changing either one.`;
 }

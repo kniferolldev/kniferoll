@@ -180,7 +180,7 @@ for (const definition of UNIT_DEFINITIONS) {
 }
 
 const normalizeUnit = (unit: string): string | null => {
-  const trimmed = unit.trim();
+  const trimmed = unit.trim().replace(/\.$/, "");
   if (trimmed === "") {
     return null;
   }

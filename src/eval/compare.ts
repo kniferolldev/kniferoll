@@ -14,7 +14,9 @@ import type {
   IngredientsSection,
   StepsSection,
   TextBlock,
+  Quantity,
 } from "../core";
+import { lookupUnit } from "../core/units";
 import { DEFAULT_WEIGHTS, type ComparisonWeights } from "./weights";
 
 // ============================================================================
@@ -30,6 +32,8 @@ export interface IngredientComparison {
   actualLine: number | null;
   nameScore: number;
   quantityScore: number;
+  /** True when the quantity was compared numerically (same dimension). */
+  numericQtyComparison: boolean;
   notesScore: number;
   attrsScore: number;
   totalScore: number;
@@ -181,6 +185,73 @@ function normalize(s: string): string {
     .replace(/\s+/g, " ");
 }
 
+/**
+ * Normalize a quantity string for comparison. Strips all whitespace since the
+ * renderer ignores spacing in quantities ("227 g" and "227g" are identical).
+ */
+function normalizeQty(s: string): string {
+  return normalize(s).replace(/\s/g, "");
+}
+
+/**
+ * Normalize unit aliases in a quantity string to their canonical form.
+ * "1 1/2 tablespoons" → "1 1/2 tbsp", "2 teaspoons" → "2 tsp", etc.
+ * This allows scoring to treat equivalent unit forms as near-matches.
+ */
+function normalizeUnits(s: string): string {
+  return normalizeQty(s).replace(/[a-z][a-z.]+/g, (word) => {
+    const unit = lookupUnit(word);
+    return unit ? unit.canonical : word;
+  });
+}
+
+/** Max penalty for using an equivalent but non-source unit form. */
+const UNIT_EQUIV_CEILING = 0.95;
+
+/**
+ * Extract a representative numeric value from a structured Quantity, in its
+ * canonical base unit if available. Returns null for non-comparable quantities
+ * (counts with no unit, compound quantities, etc.). Ranges use the midpoint.
+ */
+function quantityValue(q: Quantity | null): { value: number; dimension: string } | null {
+  if (!q) return null;
+  if (q.kind === "compound") return null;
+
+  const unit = q.unit;
+  const unitInfo = unit ? lookupUnit(unit) : null;
+  // Unitless counts: just use the raw value, tag as "count"
+  const dimension = unitInfo?.dimension ?? (unit ? "unknown" : "count");
+
+  // Convert to base unit so values are comparable across unit forms
+  const toBase = unitInfo?.toBase ?? 1;
+
+  if (q.kind === "single") {
+    return { value: q.value * toBase, dimension };
+  }
+  if (q.kind === "range") {
+    return { value: ((q.min + q.max) / 2) * toBase, dimension };
+  }
+  return null;
+}
+
+/**
+ * Score two numeric quantities by ratio, with a squared penalty so large
+ * errors drop off sharply. A 2x error scores 0.25, 4x scores ~0.06, 10x ~0.01.
+ * Returns null if the quantities aren't numerically comparable.
+ */
+function numericQtyScore(golden: Quantity | null, actual: Quantity | null): number | null {
+  const g = quantityValue(golden);
+  const a = quantityValue(actual);
+  if (!g || !a) return null;
+  // Different dimensions (e.g. "1 clove" vs "1") — fall back to string comparison
+  if (g.dimension !== a.dimension) return null;
+  if (g.value === 0 && a.value === 0) return 1;
+  if (g.value === 0 || a.value === 0) return 0;
+  const ratio = Math.min(g.value, a.value) / Math.max(g.value, a.value);
+  return ratio * ratio;
+}
+
+
 // ============================================================================
 // Ingredient Comparison
 // ============================================================================
@@ -299,6 +370,7 @@ function compareIngredients(
         actualLine: null,
         nameScore: 0,
         quantityScore: 0,
+        numericQtyComparison: false,
         notesScore: 0,
         attrsScore: 0,
         totalScore: 0,
@@ -311,13 +383,31 @@ function compareIngredients(
     const actual = match.actual;
     const nameScore = match.nameScore;
 
-    // Compare quantity
+    // Compare quantity. When both quantities parse to numeric values in the
+    // same dimension, use a squared-ratio score so wrong numbers score near
+    // zero. Otherwise fall back to string-based scoring.
     const goldenQty = golden.quantityText ?? "";
     const actualQty = actual.quantityText ?? "";
-    const quantityScore = levenshteinRatio(
-      normalize(goldenQty),
-      normalize(actualQty)
-    );
+    const numScore = numericQtyScore(golden.quantity, actual.quantity);
+    // Track whether we have a confident numeric comparison for the veto
+    const hasNumericComparison = numScore !== null;
+    let quantityScore: number;
+    if (hasNumericComparison) {
+      quantityScore = numScore;
+    } else {
+      const rawQtyScore = levenshteinRatio(
+        normalizeQty(goldenQty),
+        normalizeQty(actualQty)
+      );
+      const unitNormScore = levenshteinRatio(
+        normalizeUnits(goldenQty),
+        normalizeUnits(actualQty)
+      );
+      quantityScore = Math.max(
+        rawQtyScore,
+        unitNormScore * UNIT_EQUIV_CEILING
+      );
+    }
 
     // Compare modifiers/notes
     const goldenNotes = golden.modifiers ?? "";
@@ -327,20 +417,29 @@ function compareIngredients(
       normalize(actualNotes)
     );
 
-    // Compare attributes (excluding id=)
-    const goldenAttrs = serializeAttrs(golden.attributes);
-    const actualAttrs = serializeAttrs(actual.attributes);
+    // Compare attributes (excluding id=) — strip spaces in values since
+    // also= contains quantities where spacing is cosmetic ("227 g" = "227g").
+    const goldenAttrs = normalizeQty(serializeAttrs(golden.attributes));
+    const actualAttrs = normalizeQty(serializeAttrs(actual.attributes));
     const attrsScore =
       goldenAttrs || actualAttrs
         ? levenshteinRatio(goldenAttrs, actualAttrs)
         : 1.0;
 
-    // Calculate total score for this ingredient
-    const totalScore =
+    // Calculate total score. The veto multiplier uses only confident
+    // same-dimension numeric comparisons. When quantities parse to different
+    // dimensions (e.g. "2 cloves" vs "2", or "1 whole 8-10-pound" vs
+    // "8-10 pounds"), it's a field-placement issue — the information is there
+    // but in the wrong slot. That gets penalized through the weighted average
+    // but doesn't trigger the catastrophic veto. Only genuine numeric errors
+    // in the same dimension (5g vs 50g) cascade.
+    const weightedAvg =
       weights.ingredientName * nameScore +
       weights.ingredientQuantity * quantityScore +
       weights.ingredientNotes * notesScore +
       weights.ingredientAttrs * attrsScore;
+    const veto = numScore ?? 1;
+    const totalScore = weightedAvg * veto;
 
     const issues: string[] = [];
     if (nameScore < 0.95) {
@@ -365,6 +464,7 @@ function compareIngredients(
       actualLine: actual.line,
       nameScore,
       quantityScore,
+      numericQtyComparison: hasNumericComparison,
       notesScore,
       attrsScore,
       totalScore,
@@ -380,17 +480,27 @@ function compareIngredients(
     }
   }
 
-  // Calculate overall score with penalties
-  const matchedScore = comparisons
-    .filter((c) => c.actualId !== null)
-    .reduce((sum, c) => sum + c.totalScore, 0);
+  // Calculate overall score with penalties. Multiply the average by the worst
+  // individual ingredient score so one catastrophic error propagates upward.
+  const matched = comparisons.filter((c) => c.actualId !== null);
+  const matchedScore = matched.reduce((sum, c) => sum + c.totalScore, 0);
 
   const missingPenalty = missing.length * weights.missingIngredientPenalty;
   const extraPenalty = extra.length * weights.extraIngredientPenalty;
 
   const maxPossible = goldenIngredients.length;
   const rawScore = Math.max(0, matchedScore - missingPenalty - extraPenalty);
-  const score = maxPossible > 0 ? rawScore / maxPossible : 1;
+  const avgScore = maxPossible > 0 ? rawScore / maxPossible : 1;
+
+  // Worst-case numeric veto: multiply the section score by the worst
+  // same-dimension numeric score. Only fires when we're confident both
+  // quantities are measuring the same thing — different dimensions (field
+  // placement issues) don't cascade.
+  const numericMatches = matched.filter((c) => c.numericQtyComparison);
+  const worstVeto = numericMatches.length > 0
+    ? Math.min(...numericMatches.map((c) => c.quantityScore))
+    : 1;
+  const score = avgScore * worstVeto;
 
   return { comparisons, missing, extra, score: Math.max(0, Math.min(1, score)) };
 }
@@ -1018,10 +1128,12 @@ export function compareDocuments(
   const prose = compareProse(golden.recipes, actual.recipes);
   issues.push(...prose.issues);
 
-  // Calculate final weighted score
+  // Calculate final weighted score. Multiply by the worst major category
+  // (ingredients, steps) so a catastrophic failure in one area propagates
+  // to the overall score. Minor categories (metadata, prose) don't veto.
   const totalWeight =
     w.ingredients + w.steps + w.references + w.metadata + w.structure + w.prose;
-  const weightedScore =
+  const weightedAvgScore =
     (w.ingredients * avgIngredientScore +
       w.steps * avgStepScore +
       w.references * references.score +
@@ -1029,6 +1141,8 @@ export function compareDocuments(
       w.structure * structure.score +
       w.prose * prose.overallScore) /
     totalWeight;
+  const worstMajor = Math.min(avgIngredientScore, avgStepScore, references.score);
+  const weightedScore = weightedAvgScore * worstMajor;
 
   return {
     score: Math.round(weightedScore * 100),

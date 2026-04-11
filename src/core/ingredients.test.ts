@@ -349,16 +349,18 @@ test("unit-only quantity with explicit noscale does not double-add", () => {
 
 // ── also= duplicate system validation ────────────────────────────────
 
-test("also= with duplicate metric units emits E0208", () => {
+test("also= with duplicate metric units emits W0208 warning", () => {
   const input = withRecipe(["- flour - 2 cups :: also=240g also=480g"]);
   const { diagnostics } = getIngredientsSection(input);
-  expect(diagnostics.some((d) => d.code === "E0208")).toBe(true);
+  const w = diagnostics.find((d) => d.code === "W0208");
+  expect(w).toBeDefined();
+  expect(w!.severity).toBe("warning");
 });
 
-test("also= with different systems does not emit E0208", () => {
+test("also= with different systems does not emit W0208", () => {
   const input = withRecipe(['- flour - 2 cups :: also=240g also="1 cup"']);
   const { diagnostics } = getIngredientsSection(input);
-  expect(diagnostics.some((d) => d.code === "E0208")).toBe(false);
+  expect(diagnostics.some((d) => d.code === "W0208")).toBe(false);
 });
 
 // ── anchor attribute ──────────────────────────────────────────────────

@@ -590,9 +590,11 @@ export async function runEval(args: string[], io: IO): Promise<number> {
 
     const parsedCount = resultList.filter(r => r.parsed).length;
     const parseRate = Math.round((parsedCount / resultList.length) * 100);
+    // Parse failures count as 0 — a broken output is a real failure,
+    // not something to exclude from the metric.
     const avgScore = Math.round(
-      resultList.filter(r => r.parsed).reduce((sum, r) => sum + r.score, 0) /
-      Math.max(parsedCount, 1)
+      resultList.reduce((sum, r) => sum + (r.parsed ? r.score : 0), 0) /
+      Math.max(resultList.length, 1)
     );
 
     write("\nSummary:\n");
@@ -759,9 +761,11 @@ export async function runEval(args: string[], io: IO): Promise<number> {
   const rejectionResults = resultList.filter(r => r.isRejectionCase);
 
   const parsedCount = qualityResults.filter(r => r.parsed).length;
+  // Parse failures count as 0 — a broken output is a real failure,
+  // not something to exclude from the metric.
   const avgScore = Math.round(
-    qualityResults.filter(r => r.parsed).reduce((sum, r) => sum + r.score, 0) /
-    Math.max(parsedCount, 1)
+    qualityResults.reduce((sum, r) => sum + (r.parsed ? r.score : 0), 0) /
+    Math.max(qualityResults.length, 1)
   );
 
   // Calculate aggregate metrics
