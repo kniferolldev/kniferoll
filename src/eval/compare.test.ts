@@ -533,24 +533,26 @@ describe("compareDocuments", () => {
 ## Ingredients
 
 - flour - 1 cup :: id=flour
+- sugar - 1 cup :: id=sugar
 
 ## Steps
 
-1. Mix.
+1. Mix the flour and sugar.
 `));
       const actual = parseDocument(makeDoc(`
 # Test Recipe
 
 ## Ingredients
 
-- flour - 2 cups :: id=flour
+- flour - 1 cup :: id=flour
+- sugar - 2 cups :: id=sugar
 
 ## Steps
 
-1. Mix well and thoroughly.
+1. Mix the flour and sugar.
 `));
 
-      // With ingredients weighted much higher
+      // With ingredients weighted much higher, the quantity error hurts more
       const ingredientHeavy = compareDocuments(golden, actual, {
         ingredients: 10.0,
         steps: 1.0,
@@ -558,7 +560,7 @@ describe("compareDocuments", () => {
         structure: 0.1,
       });
 
-      // With steps weighted much higher
+      // With steps weighted much higher, the perfect steps compensate
       const stepHeavy = compareDocuments(golden, actual, {
         ingredients: 1.0,
         steps: 10.0,
@@ -566,9 +568,9 @@ describe("compareDocuments", () => {
         structure: 0.1,
       });
 
-      // The weighted scores should differ based on category weights
-      // Since ingredients have quantity mismatch and steps have text mismatch
-      expect(ingredientHeavy.score).not.toBe(stepHeavy.score);
+      // Both should be penalized (ingredient error propagates) but the
+      // ingredient-heavy version should be penalized more
+      expect(ingredientHeavy.score).toBeLessThan(stepHeavy.score);
     });
 
     it("allows overriding penalty values", () => {

@@ -29,9 +29,14 @@ const VULGAR_FRACTIONS: Record<string, string> = {
 };
 
 const replaceVulgarFractions = (input: string): string => {
+  // Insert a space before the fraction when glued to a preceding digit
+  // ("1½" → "1 1/2") so the number parser sees a mixed number, not "11/2".
   return input.replace(
-    /[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g,
-    (char) => VULGAR_FRACTIONS[char] ?? char,
+    /(\d)?([¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])/g,
+    (_, digit, char) => {
+      const replacement = VULGAR_FRACTIONS[char] ?? char;
+      return digit ? `${digit} ${replacement}` : replacement;
+    },
   );
 };
 

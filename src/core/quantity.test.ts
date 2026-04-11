@@ -41,6 +41,26 @@ test("parses vulgar fraction", () => {
   expect(quantity.unit).toBe("tsp");
 });
 
+test("parses mixed number with glued vulgar fraction", () => {
+  // "1½" (no space) should parse as 1.5, not as 11/2 = 5.5
+  const cases: [string, number][] = [
+    ["1½ cups", 1.5],
+    ["2½ cups", 2.5],
+    ["1¼ cups", 1.25],
+    ["1¾ cups", 1.75],
+    ["3⅓ cups", 3 + 1/3],
+  ];
+  for (const [input, expected] of cases) {
+    const result = run(input);
+    const quantity = result.quantity;
+    if (!quantity || quantity.kind !== "single") {
+      throw new Error(`expected single quantity for "${input}"`);
+    }
+    expect(quantity.value).toBeCloseTo(expected);
+    expect(quantity.unit).toBe("cups");
+  }
+});
+
 test("parses range with hyphen", () => {
   const result = run("3-4 pieces");
   const range = result.quantity;

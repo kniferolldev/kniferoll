@@ -59,6 +59,7 @@ describe("generateExplorerHtml", () => {
                     actualLine: 5,
                     nameScore: 1,
                     quantityScore: 0.8,
+                    numericQtyComparison: false,
                     notesScore: 1,
                     attrsScore: 1,
                     totalScore: 0.9,
