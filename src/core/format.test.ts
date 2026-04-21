@@ -124,3 +124,39 @@ test("formatQuantity shows 1 decimal for unknown units when needed", () => {
   const scaled = scaleQuantity(q, 1.4);
   expect(formatQuantity(q, { scaled })).toBe("4.2 egg");
 });
+
+test("formatQuantity preserves author precision finer than unit rounding increment", () => {
+  // `ml` has rounding increment 1 for scaled output, but author-specified
+  // sub-integer values (e.g. `{1.25mL}` in the Champagne Glacid recipe)
+  // must render with their original precision.
+  const q = quantity("1.25 ml");
+  expect(formatQuantity(q, { usePreferredUnit: true })).toBe("1.25 ml");
+  expect(formatQuantity(q)).toBe("1.25 ml");
+});
+
+test("formatQuantity preserves sub-integer precision when scaling small ml values", () => {
+  // A 1.25 ml value scaled to 2x is 2.5 ml — not 3 ml. The ml increment of 1
+  // is appropriate for typical volumes but obliterates precision at the small
+  // end. Scaled output should still carry meaningful digits.
+  const q = quantity("1.25 ml");
+  const scaled = scaleQuantity(q, 2);
+  expect(formatQuantity(q, { scaled, usePreferredUnit: true })).toBe("2.5 ml");
+});
+
+test("formatQuantity carries author decimal precision through scaling", () => {
+  // The author wrote "1.25" (two decimal places). Scaling by 3 gives 3.75,
+  // not 3.8 or 4 — the display should honor the precision the source stated.
+  const q = quantity("1.25 ml");
+  const scaled = scaleQuantity(q, 3);
+  expect(formatQuantity(q, { scaled, usePreferredUnit: true })).toBe("3.75 ml");
+});
+
+test("formatQuantity respects the unit grid when author used clean values", () => {
+  // When the author's value already snaps to the unit's rounding grid
+  // (0.25 tsp on tsp's quarter-teaspoon grid), we treat their decimal
+  // places as incidental and round scaled output to the grid. This keeps
+  // a scaled 0.375 tsp rendering as "½ tsp" rather than "0.38 tsp".
+  const q = quantity("0.25-0.75 tsp");
+  const scaled = scaleQuantity(q, 1.5);
+  expect(formatQuantity(q, { scaled })).toBe("½-1¼ tsp");
+});

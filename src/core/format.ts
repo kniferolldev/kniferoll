@@ -10,11 +10,12 @@ import type {
   UnitMatch,
 } from "./types";
 import {
+  authorDecimalPlaces,
   choosePreferredUnit,
   fromBaseValue,
   isMetric,
   lookupUnit,
-  roundToProfile,
+  roundPreservingAuthor,
   toBaseValue,
 } from "./units";
 
@@ -67,7 +68,13 @@ const nearestFraction = (value: number): { whole: number; fraction: string | nul
   return { whole, fraction: null };
 };
 
-const formatNumber = (value: number, unitInfo: UnitMatch | null, _allowFractions = false): string => {
+const formatNumber = (
+  value: number,
+  unitInfo: UnitMatch | null,
+  _allowFractions: boolean,
+  authorValue: number,
+  authorDecimals: number,
+): string => {
   const isMetricUnit = unitInfo && isMetric(unitInfo.system);
   const fractionEnabled = !isMetricUnit;
   const absValue = Math.abs(value);
@@ -85,11 +92,14 @@ const formatNumber = (value: number, unitInfo: UnitMatch | null, _allowFractions
     }
   }
 
-  // Apply rounding only if we didn't use a fraction
-  const rounded = unitInfo?.rounding ? roundToProfile(value, unitInfo.rounding) : value;
-  const precision = unitInfo?.rounding.precision;
+  const rounded = unitInfo?.rounding
+    ? roundPreservingAuthor(value, unitInfo.rounding, authorValue, authorDecimals)
+    : value;
+  const profilePrecision = unitInfo?.rounding.precision;
   // For unknown units (no rounding profile), cap at 1 decimal place
-  const effectivePrecision = precision ?? (unitInfo?.rounding ? undefined : 1);
+  const basePrecision = profilePrecision ?? (unitInfo?.rounding ? undefined : 1);
+  const effectivePrecision =
+    basePrecision !== undefined ? Math.max(basePrecision, authorDecimals) : undefined;
   const fixed = effectivePrecision !== undefined ? rounded.toFixed(effectivePrecision) : rounded.toString();
 
   return fixed.replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1");
@@ -146,13 +156,22 @@ const formatQuantitySingle = (
   allowFractions: boolean,
   originalUnit: string | null,
 ): string => {
-  const rawValue = "scaledValue" in quantity ? quantity.scaledValue : (quantity as QuantitySingle).value;
+  const isScaled = "scaledValue" in quantity;
+  const rawValue = isScaled ? quantity.scaledValue : (quantity as QuantitySingle).value;
   const targetUnit = displayUnit ?? sourceUnit;
   const value = convertValue(rawValue, sourceUnit, targetUnit);
+  const authorValue = (quantity as QuantitySingle).value;
+  const authorDecimals = authorDecimalPlaces(quantity.raw);
   const unit = targetUnit
     ? pluralizeUnit(targetUnit, value, originalUnit ?? quantity.unit)
     : originalUnit ?? quantity.unit ?? "";
-  const formattedNumber = formatNumber(value, targetUnit ?? sourceUnit, allowFractions);
+  const formattedNumber = formatNumber(
+    value,
+    targetUnit ?? sourceUnit,
+    allowFractions,
+    authorValue,
+    authorDecimals,
+  );
   return unit ? `${formattedNumber} ${unit}`.trim() : formattedNumber;
 };
 
@@ -163,17 +182,33 @@ const formatQuantityRange = (
   allowFractions: boolean,
   originalUnit: string | null,
 ): string => {
-  const rawMin = "scaledMin" in quantity ? quantity.scaledMin : (quantity as QuantityRange).min;
-  const rawMax = "scaledMax" in quantity ? quantity.scaledMax : (quantity as QuantityRange).max;
+  const isScaled = "scaledMin" in quantity;
+  const rawMin = isScaled ? quantity.scaledMin : (quantity as QuantityRange).min;
+  const rawMax = isScaled ? quantity.scaledMax : (quantity as QuantityRange).max;
   const targetUnit = displayUnit ?? sourceUnit;
   const min = convertValue(rawMin, sourceUnit, targetUnit);
   const max = convertValue(rawMax, sourceUnit, targetUnit);
+  const authorMin = (quantity as QuantityRange).min;
+  const authorMax = (quantity as QuantityRange).max;
+  const authorDecimals = authorDecimalPlaces(quantity.raw);
   // Ranges are always plural (a range implies quantity > 1)
   const unit = targetUnit
     ? pluralizeUnit(targetUnit, max, originalUnit ?? quantity.unit)
     : originalUnit ?? quantity.unit ?? "";
-  const formattedMin = formatNumber(min, targetUnit ?? sourceUnit, allowFractions);
-  const formattedMax = formatNumber(max, targetUnit ?? sourceUnit, allowFractions);
+  const formattedMin = formatNumber(
+    min,
+    targetUnit ?? sourceUnit,
+    allowFractions,
+    authorMin,
+    authorDecimals,
+  );
+  const formattedMax = formatNumber(
+    max,
+    targetUnit ?? sourceUnit,
+    allowFractions,
+    authorMax,
+    authorDecimals,
+  );
   return unit ? `${formattedMin}-${formattedMax} ${unit}`.trim() : `${formattedMin}-${formattedMax}`;
 };
 

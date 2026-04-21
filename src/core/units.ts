@@ -236,6 +236,61 @@ export const roundToProfile = (value: number, profile: RoundingProfile): number 
   return rounded;
 };
 
+const EPSILON = 1e-9;
+
+const isOnGrid = (value: number, increment: number): boolean => {
+  if (!Number.isFinite(increment) || increment <= 0) return false;
+  const ratio = value / increment;
+  return Math.abs(ratio - Math.round(ratio)) < EPSILON;
+};
+
+/**
+ * Extract the author's decimal precision from a quantity's raw source text.
+ * Returns the largest number of digits after a decimal point among the
+ * numeric tokens in the string — 2 for "1.25 ml", 1 for "0.2-0.75 tsp",
+ * 0 for "250 g" or "1/4 cup".
+ */
+export const authorDecimalPlaces = (raw: string | undefined | null): number => {
+  if (!raw) return 0;
+  let max = 0;
+  for (const match of raw.matchAll(/\d\.(\d+)/g)) {
+    max = Math.max(max, match[1]!.length);
+  }
+  return max;
+};
+
+/**
+ * Round a derived (scaled or converted) value using the unit's profile, but
+ * fall back to a finer increment when the author's source value carried
+ * precision the profile would destroy. Example: the author writes
+ * {1.25 mL}; scaling by 3 yields 3.75, which ml's increment of 1 would
+ * snap to 4. We detect that 1.25 is off the ml grid and use a 0.01
+ * increment instead, preserving 3.75.
+ *
+ * When the author's value already sits on the profile's grid (e.g.
+ * "0.25 tsp" on tsp's quarter-teaspoon grid), we treat their decimal
+ * places as incidental formatting and stay on the grid.
+ */
+export const roundPreservingAuthor = (
+  value: number,
+  profile: RoundingProfile,
+  authorValue: number,
+  authorDecimals: number,
+): number => {
+  if (!Number.isFinite(profile.increment) || profile.increment <= 0) {
+    return value;
+  }
+  const authorIncrement = authorDecimals > 0 ? 10 ** -authorDecimals : 1;
+  const authorOnGrid = isOnGrid(authorValue, profile.increment);
+  if (authorIncrement >= profile.increment || authorOnGrid) {
+    return roundToProfile(value, profile);
+  }
+  return roundToProfile(value, {
+    increment: authorIncrement,
+    precision: Math.max(profile.precision ?? 0, authorDecimals),
+  });
+};
+
 export const isMetric = (system: UnitSystem | undefined): boolean =>
   system === "metric";
 

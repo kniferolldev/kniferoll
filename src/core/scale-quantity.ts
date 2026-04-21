@@ -9,11 +9,19 @@ import type {
   ScaledQuantitySingle,
   UnitMatch,
 } from "./types";
-import { lookupUnit, roundToProfile } from "./units";
+import { authorDecimalPlaces, lookupUnit, roundPreservingAuthor } from "./units";
 
-const scaleValue = (value: number, factor: number, unit: UnitMatch | null) => {
+const scaleValue = (
+  value: number,
+  factor: number,
+  unit: UnitMatch | null,
+  authorValue: number,
+  authorDecimals: number,
+) => {
   const raw = value * factor;
-  const rounded = unit?.rounding ? roundToProfile(raw, unit.rounding) : raw;
+  const rounded = unit?.rounding
+    ? roundPreservingAuthor(raw, unit.rounding, authorValue, authorDecimals)
+    : raw;
   return {
     raw,
     rounded,
@@ -25,7 +33,8 @@ const scaleSingle = (
   factor: number,
   unitMatch: UnitMatch | null,
 ): ScaledQuantitySingle => {
-  const { raw, rounded } = scaleValue(quantity.value, factor, unitMatch);
+  const decimals = authorDecimalPlaces(quantity.raw);
+  const { raw, rounded } = scaleValue(quantity.value, factor, unitMatch, quantity.value, decimals);
 
   return {
     ...quantity,
@@ -40,8 +49,9 @@ const scaleRange = (
   factor: number,
   unitMatch: UnitMatch | null,
 ): ScaledQuantityRange => {
-  const scaledMin = scaleValue(quantity.min, factor, unitMatch);
-  const scaledMax = scaleValue(quantity.max, factor, unitMatch);
+  const decimals = authorDecimalPlaces(quantity.raw);
+  const scaledMin = scaleValue(quantity.min, factor, unitMatch, quantity.min, decimals);
+  const scaledMax = scaleValue(quantity.max, factor, unitMatch, quantity.max, decimals);
 
   return {
     ...quantity,
