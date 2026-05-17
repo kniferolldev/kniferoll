@@ -71,6 +71,19 @@ const result = parseDocument(markdown);
 import { importRecipe } from "kniferoll/import";
 const result = await importRecipe({ text: html }, { apiKeys: { google: key } });
 
+// Or plug in a host-provided inference adapter (no provider API keys needed)
+const result = await importRecipe(
+  { text: html },
+  {
+    inference: {
+      infer: async ({ stage, systemPrompt, input, responseFormat, signal }) => {
+        const text = await myHostLlm({ stage, systemPrompt, input, responseFormat, signal });
+        return { text };
+      },
+    },
+  },
+);
+
 // Register the web component
 import "kniferoll/component";
 ```

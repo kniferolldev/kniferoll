@@ -46,6 +46,11 @@ export type {
   LazyImage,
   ImageSource,
   InferenceInput,
+  InferenceStage,
+  InferenceResponseFormat,
+  InferenceAdapterRequest,
+  InferenceAdapterResult,
+  InferenceAdapter,
   InferenceMetrics,
   InferenceResult,
   ImportResult,
@@ -76,4 +81,4 @@ export { blobToLoadedImage, arrayBufferToBase64, resolveInput } from "./utils";
 
 // LLM call wrapper (for consumers that need direct provider access)
 export { callLlm } from "./call-llm";
-export type { CallLlmContent, CallLlmApiKeys } from "./call-llm";
+export type { CallLlmContent, CallLlmApiKeys, CallLlmOptions } from "./call-llm";

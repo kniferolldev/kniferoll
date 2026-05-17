@@ -84,6 +84,26 @@ export interface InferenceResult {
   metrics: InferenceMetrics;
 }
 
+/** Result from a host-provided inference adapter. */
+export interface InferenceAdapterResult {
+  /** Generated text */
+  text: string;
+  /** Metrics from the inference, if surfaced by the host runtime */
+  metrics?: InferenceMetrics;
+  /** Model that actually handled the request, if known */
+  model?: string;
+  /** Provider finish reason, if surfaced by the adapter */
+  finishReason?: string;
+  /** Billing/accounting metadata, if surfaced by the host runtime */
+  billing?: {
+    unit: string;
+    amount: number;
+    correlationId?: string;
+  };
+  /** Adapter-specific diagnostics for logs/debugging */
+  diagnostics?: Record<string, unknown>;
+}
+
 /** Result of recipe import */
 export interface ImportResult {
   /** Generated Kniferoll Markdown */
@@ -149,6 +169,10 @@ export interface TwoStageMetrics {
 export interface ImportOptions {
   /** Model to use, e.g. "google/gemini-3-flash-preview". Defaults to DEFAULT_IMPORT_MODEL */
   model?: string;
+  /** Host-provided inference adapter. When present, Kniferoll does not resolve provider API keys. */
+  inference?: InferenceAdapter;
+  /** Abort signal propagated to the inference adapter. */
+  signal?: AbortSignal;
   /** API key (single provider). Defaults to environment variable based on provider */
   apiKey?: string;
   /** API keys keyed by provider. Takes precedence over apiKey for matching provider */
@@ -191,6 +215,61 @@ export interface StreamEvent extends ProviderStreamEvent {
 
 /** Callback for streaming progress updates (includes stage context) */
 export type StreamCallback = (event: StreamEvent) => void;
+
+// ============================================================================
+// Inference Adapter Interface
+// ============================================================================
+
+/**
+ * Semantic inference stage requested by Kniferoll.
+ *
+ * `rotation`, `extract`, and `format` are emitted by the import pipeline.
+ * `doctor` is emitted by the low-level `callLlm` wrapper (used by external
+ * doctor-handler workers); it is the default when no stage is supplied.
+ */
+export type InferenceStage = "rotation" | "extract" | "format" | "doctor";
+
+/** Requested response shape for adapters that can constrain output. */
+export type InferenceResponseFormat =
+  | { type: "text" }
+  | { type: "json"; schema?: unknown };
+
+/** Host-provided model inference request. */
+export interface InferenceAdapterRequest {
+  /** Pipeline stage making the request. */
+  stage: InferenceStage;
+  /** Opaque model identifier or alias. Built-in providers expect provider/model strings; adapters may not. */
+  model?: string;
+  /** System/developer prompt authored by Kniferoll. */
+  systemPrompt: string;
+  /** Resolved text and image input for the model. */
+  input: ResolvedInput;
+  /** Optional response shape hint. */
+  responseFormat?: InferenceResponseFormat;
+  /** Caller cancellation signal. */
+  signal?: AbortSignal;
+}
+
+/**
+ * Host-provided inference implementation.
+ *
+ * When supplied via `ImportOptions.inference` (or `CallLlmOptions.inference`),
+ * Kniferoll skips its own provider/API-key plumbing and delegates each model
+ * call to the host. This lets embedding apps route through a managed AI gateway,
+ * apply their own auth/billing, or substitute mocks in tests.
+ *
+ * Contract:
+ * - `request.model` is the string Kniferoll would otherwise parse as
+ *   `<provider>/<model>`. Adapters may treat it as an opaque alias.
+ * - Returning `metrics` is optional; if omitted, `twoStageMetrics` will be
+ *   undefined for that import.
+ * - Streaming events (`onStream`) are not currently propagated to adapters.
+ *   Use `onProgress` for stage-level UI updates instead.
+ * - Implementations should respect `request.signal` for cancellation.
+ */
+export interface InferenceAdapter {
+  infer(request: InferenceAdapterRequest): Promise<InferenceAdapterResult>;
+}
 
 // ============================================================================
 // Provider Interface

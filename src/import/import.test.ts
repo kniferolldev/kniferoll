@@ -19,6 +19,7 @@ import {
   parseExtractedJson,
 } from "./infer";
 import { getProvider } from "./providers";
+import type { InferenceAdapterRequest } from "./types";
 
 describe("parseModelSpec", () => {
   test("parses openai model", () => {
@@ -472,6 +473,205 @@ describe("importRecipe", () => {
     await expect(
       importRecipe({}, { model: "google/gemini-3-flash-preview", schema: "test schema" })
     ).rejects.toThrow("No text provided for extraction");
+  });
+
+  test("uses inference adapter for text imports without API keys", async () => {
+    delete process.env.GEMINI_API_KEY;
+
+    const calls: InferenceAdapterRequest[] = [];
+    const result = await importRecipe(
+      { text: "1 cup flour\nBake it." },
+      {
+        schema: "test schema",
+        inference: {
+          infer: async (request) => {
+            calls.push(request);
+            if (request.stage === "extract") {
+              return {
+                text: JSON.stringify({
+                  title: "Adapter Recipe",
+                  sections: [
+                    { type: "ingredients", content: ["1 cup flour"] },
+                    { type: "instructions", content: ["Bake it."] },
+                  ],
+                }),
+                metrics: { durationMs: 10, inputTokens: 20, outputTokens: 5 },
+              };
+            }
+            if (request.stage === "format") {
+              return {
+                text: "# Adapter Recipe\n\n## Ingredients\n\n- flour - 1 cup\n\n## Steps\n\n1. Bake it.\n",
+                metrics: { durationMs: 5, inputTokens: 12, outputTokens: 8 },
+              };
+            }
+            throw new Error(`unexpected stage: ${request.stage}`);
+          },
+        },
+      },
+    );
+
+    expect(result.markdown).toContain("# Adapter Recipe");
+    expect(result.extractedJson).toContain("Adapter Recipe");
+    expect(result.metrics).toEqual({
+      durationMs: 15,
+      inputTokens: 32,
+      outputTokens: 13,
+    });
+    expect(calls.map((call) => call.stage)).toEqual(["extract", "format"]);
+    expect(calls[0]?.responseFormat).toEqual({ type: "json" });
+    expect(calls[0]?.input.text).toBe("1 cup flour\nBake it.");
+    expect(calls[1]?.responseFormat).toEqual({ type: "text" });
+  });
+
+  test("uses inference adapter for image imports without API keys", async () => {
+    delete process.env.GEMINI_API_KEY;
+
+    const image = new ArrayBuffer(4);
+    const calls: InferenceAdapterRequest[] = [];
+    const result = await importRecipe(
+      { images: [{ kind: "loaded", data: image, mimeType: "image/png" }] },
+      {
+        schema: "test schema",
+        inference: {
+          infer: async (request) => {
+            calls.push(request);
+            if (request.stage === "rotation") {
+              return {
+                text: "0",
+                metrics: { durationMs: 1, inputTokens: 2, outputTokens: 1 },
+              };
+            }
+            if (request.stage === "extract") {
+              return {
+                text: JSON.stringify({
+                  title: "Photo Recipe",
+                  sections: [
+                    { type: "ingredients", content: ["2 eggs"] },
+                    { type: "instructions", content: ["Whisk."] },
+                  ],
+                }),
+                metrics: { durationMs: 20, inputTokens: 30, outputTokens: 6 },
+              };
+            }
+            if (request.stage === "format") {
+              return {
+                text: "# Photo Recipe\n\n## Ingredients\n\n- eggs - 2\n\n## Steps\n\n1. Whisk.\n",
+                metrics: { durationMs: 6, inputTokens: 10, outputTokens: 7 },
+              };
+            }
+            throw new Error(`unexpected stage: ${request.stage}`);
+          },
+        },
+      },
+    );
+
+    expect(result.markdown).toContain("# Photo Recipe");
+    expect(calls.map((call) => call.stage)).toEqual(["rotation", "extract", "format"]);
+    expect(calls[0]?.responseFormat).toEqual({ type: "text" });
+    expect(calls[0]?.input.images?.[0]?.mimeType).toBe("image/png");
+    expect(calls[1]?.responseFormat).toEqual({ type: "json" });
+    expect(calls[1]?.input.images?.[0]?.data).toBe(image);
+  });
+
+  test("passes opaque (non-provider/model) model alias through to adapter", async () => {
+    delete process.env.GEMINI_API_KEY;
+
+    const seenModels: Array<string | undefined> = [];
+    const result = await importRecipe(
+      { text: "1 cup flour\nBake it." },
+      {
+        model: "my-host-alias",
+        formatModel: "my-host-format-alias",
+        schema: "test schema",
+        inference: {
+          infer: async (request) => {
+            seenModels.push(request.model);
+            if (request.stage === "extract") {
+              return {
+                text: JSON.stringify({
+                  title: "Alias Recipe",
+                  sections: [
+                    { type: "ingredients", content: ["1 cup flour"] },
+                    { type: "instructions", content: ["Bake it."] },
+                  ],
+                }),
+              };
+            }
+            return { text: "# Alias Recipe\n" };
+          },
+        },
+      },
+    );
+
+    expect(result.markdown).toContain("# Alias Recipe");
+    expect(seenModels).toEqual(["my-host-alias", "my-host-format-alias"]);
+  });
+
+  test("propagates abort signal to adapter", async () => {
+    delete process.env.GEMINI_API_KEY;
+
+    const controller = new AbortController();
+    const seenSignals: Array<AbortSignal | undefined> = [];
+
+    await importRecipe(
+      { text: "1 cup flour\nBake it." },
+      {
+        schema: "test schema",
+        signal: controller.signal,
+        inference: {
+          infer: async (request) => {
+            seenSignals.push(request.signal);
+            if (request.stage === "extract") {
+              return {
+                text: JSON.stringify({
+                  title: "Signal Recipe",
+                  sections: [
+                    { type: "ingredients", content: ["1 cup flour"] },
+                    { type: "instructions", content: ["Bake it."] },
+                  ],
+                }),
+              };
+            }
+            return { text: "# Signal Recipe\n" };
+          },
+        },
+      },
+    );
+
+    expect(seenSignals).toHaveLength(2);
+    expect(seenSignals[0]).toBe(controller.signal);
+    expect(seenSignals[1]).toBe(controller.signal);
+  });
+
+  test("adapter-returned model overrides the requested model string", async () => {
+    delete process.env.GEMINI_API_KEY;
+
+    const result = await importRecipe(
+      { text: "1 cup flour\nBake it." },
+      {
+        model: "my-host-alias",
+        schema: "test schema",
+        inference: {
+          infer: async (request) => {
+            if (request.stage === "extract") {
+              return {
+                text: JSON.stringify({
+                  title: "Resolved Recipe",
+                  sections: [
+                    { type: "ingredients", content: ["1 cup flour"] },
+                    { type: "instructions", content: ["Bake it."] },
+                  ],
+                }),
+                model: "host-resolved/extract-model-v2",
+              };
+            }
+            return { text: "# Resolved Recipe\n", model: "host-resolved/format-model-v2" };
+          },
+        },
+      },
+    );
+
+    expect(result.model).toBe("host-resolved/extract-model-v2");
   });
 });
 

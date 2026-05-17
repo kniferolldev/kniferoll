@@ -1,5 +1,6 @@
 import { expect, test, describe, afterEach, mock } from "bun:test";
 import { callLlm } from "./call-llm";
+import type { InferenceAdapterRequest } from "./types";
 
 const originalFetch = globalThis.fetch;
 
@@ -43,5 +44,33 @@ describe("callLlm", () => {
     await expect(
       callLlm("noSlash", "prompt", { text: "input" }, {}),
     ).rejects.toThrow(/Invalid model format/);
+  });
+
+  test("uses inference adapter without provider parsing or API keys", async () => {
+    const requests: InferenceAdapterRequest[] = [];
+
+    const result = await callLlm(
+      "thinking",
+      "prompt",
+      { text: "input" },
+      {},
+      {
+        inference: {
+          infer: async (request) => {
+            requests.push(request);
+            return { text: "adapter result" };
+          },
+        },
+      },
+    );
+
+    expect(result.text).toBe("adapter result");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      stage: "doctor",
+      model: "thinking",
+      systemPrompt: "prompt",
+      input: { text: "input" },
+    });
   });
 });

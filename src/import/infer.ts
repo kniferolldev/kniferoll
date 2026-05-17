@@ -2,7 +2,24 @@
  * Main inference orchestration for recipe import
  */
 
-import type { InferenceInput, ImportResult, ImportOptions, ExtractionResult, FormatResult, TwoStageMetrics, LoadedImage, InferenceMetrics, Provider, StreamCallback, StreamStage, ProviderStreamCallback } from "./types";
+import type {
+  InferenceInput,
+  ImportResult,
+  ImportOptions,
+  ExtractionResult,
+  FormatResult,
+  TwoStageMetrics,
+  LoadedImage,
+  InferenceMetrics,
+  InferenceAdapterResult,
+  InferenceStage,
+  InferenceResponseFormat,
+  Provider,
+  ResolvedInput,
+  StreamCallback,
+  StreamStage,
+  ProviderStreamCallback,
+} from "./types";
 import { parseModelSpec, formatModelSpec } from "./types";
 import { DEFAULT_IMPORT_MODEL, DEFAULT_FORMAT_MODEL, getApiKey, getApiKeyEnvVar } from "./config";
 import { loadSchema } from "./load-schema";
@@ -43,6 +60,70 @@ function requireApiKey(provider: Provider, options?: ImportOptions): string {
     );
   }
   return key;
+}
+
+/**
+ * Run a single inference call, dispatching to either a host-provided adapter
+ * (when `options.inference` is set) or the built-in provider registry.
+ *
+ * The adapter path skips `parseModelSpec` and API-key resolution entirely — the
+ * model string is passed through opaquely. The built-in path parses the string
+ * as `<provider>/<model>`, looks up an API key, and forwards `onStream` so the
+ * caller's `options.onStream` receives token-level events stamped with
+ * `streamStage`. The adapter path does not propagate `onStream` today.
+ */
+async function runInference(params: {
+  stage: InferenceStage;
+  modelString: string;
+  input: ResolvedInput;
+  systemPrompt: string;
+  options?: ImportOptions;
+  responseFormat?: InferenceResponseFormat;
+  streamStage?: StreamStage;
+  temperature?: number;
+}): Promise<{ result: InferenceAdapterResult; model: string }> {
+  const {
+    stage,
+    modelString,
+    input,
+    systemPrompt,
+    options,
+    responseFormat,
+    streamStage,
+    temperature,
+  } = params;
+
+  if (options?.inference) {
+    const result = await options.inference.infer({
+      stage,
+      model: modelString,
+      systemPrompt,
+      input,
+      responseFormat,
+      signal: options.signal,
+    });
+    return { result, model: result.model ?? modelString };
+  }
+
+  const modelSpec = parseModelSpec(modelString);
+  if (!modelSpec) {
+    throw new Error(
+      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., google/gemini-3-flash-preview)`
+    );
+  }
+
+  const apiKey = requireApiKey(modelSpec.provider, options);
+  const provider = getProvider(modelSpec.provider);
+  const result = await provider.infer({
+    input,
+    systemPrompt,
+    model: modelSpec.model,
+    apiKey,
+    temperature,
+    onStream: streamStage ? withStage(streamStage, options?.onStream) : undefined,
+  });
+
+  return { result, model: formatModelSpec(modelSpec) };
 }
 
 /**
@@ -99,21 +180,17 @@ export function parseExtractedJson(rawText: string): ExtractionResult["extracted
  */
 async function detectImageRotation(
   image: LoadedImage,
-  apiKey: string
+  options?: ImportOptions
 ): Promise<{ angle: RotationAngle; metrics?: InferenceMetrics }> {
-  const modelSpec = parseModelSpec(ROTATION_DETECTION_MODEL);
-  if (!modelSpec) {
-    throw new Error(`Invalid rotation detection model: ${ROTATION_DETECTION_MODEL}`);
-  }
-
-  const provider = getProvider(modelSpec.provider);
   const prompt = buildRotationDetectionPrompt();
 
-  const result = await provider.infer({
-    input: { images: [image] },
+  const { result } = await runInference({
+    stage: "rotation",
+    modelString: ROTATION_DETECTION_MODEL,
+    input: { images: [{ data: image.data, mimeType: image.mimeType }] },
     systemPrompt: prompt,
-    model: modelSpec.model,
-    apiKey,
+    options,
+    responseFormat: { type: "text" },
   });
 
   // Parse the response - should be just a number
@@ -136,14 +213,6 @@ async function correctImageRotation(
   images: Array<Omit<LoadedImage, "kind">>,
   options?: ImportOptions
 ): Promise<{ images: Array<Omit<LoadedImage, "kind">>; metrics?: InferenceMetrics }> {
-  // Get API key for rotation detection model
-  const modelSpec = parseModelSpec(ROTATION_DETECTION_MODEL);
-  if (!modelSpec) {
-    throw new Error(`Invalid rotation detection model: ${ROTATION_DETECTION_MODEL}`);
-  }
-
-  const apiKey = requireApiKey(modelSpec.provider, options);
-
   const onProgress = options?.onProgress;
   const correctedImages: Array<Omit<LoadedImage, "kind">> = [];
   let totalDuration = 0;
@@ -157,7 +226,7 @@ async function correctImageRotation(
     } else {
       onProgress?.("Checking image rotation");
     }
-    const { angle, metrics } = await detectImageRotation({ kind: "loaded", ...image }, apiKey);
+    const { angle, metrics } = await detectImageRotation({ kind: "loaded", ...image }, options);
 
     if (metrics) {
       totalDuration += metrics.durationMs;
@@ -249,17 +318,7 @@ export async function extractRecipe(
   input: InferenceInput,
   options?: Omit<ImportOptions, "schema">
 ): Promise<ExtractionResult> {
-  // Parse model specification
   const modelString = options?.model ?? DEFAULT_IMPORT_MODEL;
-  const modelSpec = parseModelSpec(modelString);
-  if (!modelSpec) {
-    throw new Error(
-      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., google/gemini-3-flash-preview)`
-    );
-  }
-
-  // Get API key
-  const apiKey = requireApiKey(modelSpec.provider, options);
 
   // Build extraction prompt
   const systemPrompt = buildExtractionPrompt();
@@ -272,14 +331,14 @@ export async function extractRecipe(
     throw new Error("No images provided for extraction");
   }
 
-  // Get provider and run inference
-  const provider = getProvider(modelSpec.provider);
-  const result = await provider.infer({
+  const { result, model } = await runInference({
+    stage: "extract",
+    modelString,
     input: resolvedInput,
     systemPrompt,
-    model: modelSpec.model,
-    apiKey,
-    onStream: withStage("extracting", options?.onStream),
+    options,
+    responseFormat: { type: "json" },
+    streamStage: "extracting",
   });
 
   // Parse and validate the JSON, then store the cleaned raw string for stage 2
@@ -289,7 +348,7 @@ export async function extractRecipe(
   return {
     extracted,
     rawJson: cleanedJson,
-    model: formatModelSpec(modelSpec),
+    model,
     metrics: result.metrics,
   };
 }
@@ -308,17 +367,7 @@ export async function extractRecipeFromText(
   input: InferenceInput,
   options?: Omit<ImportOptions, "schema">
 ): Promise<ExtractionResult> {
-  // Parse model specification
   const modelString = options?.model ?? DEFAULT_IMPORT_MODEL;
-  const modelSpec = parseModelSpec(modelString);
-  if (!modelSpec) {
-    throw new Error(
-      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., google/gemini-3-flash-preview)`
-    );
-  }
-
-  // Get API key
-  const apiKey = requireApiKey(modelSpec.provider, options);
 
   // Build text extraction prompt
   const systemPrompt = buildTextExtractionPrompt();
@@ -328,14 +377,14 @@ export async function extractRecipeFromText(
     throw new Error("No text provided for extraction");
   }
 
-  // Get provider and run inference (text-only, no images)
-  const provider = getProvider(modelSpec.provider);
-  const result = await provider.infer({
+  const { result, model } = await runInference({
+    stage: "extract",
+    modelString,
     input: { text: input.text },
     systemPrompt,
-    model: modelSpec.model,
-    apiKey,
-    onStream: withStage("extracting", options?.onStream),
+    options,
+    responseFormat: { type: "json" },
+    streamStage: "extracting",
   });
 
   // Parse and validate the JSON, then store the cleaned raw string for stage 2
@@ -345,7 +394,7 @@ export async function extractRecipeFromText(
   return {
     extracted,
     rawJson: cleanedJson,
-    model: formatModelSpec(modelSpec),
+    model,
     metrics: result.metrics,
   };
 }
@@ -418,17 +467,7 @@ export async function formatRecipe(
   extractedJson: string,
   options?: ImportOptions
 ): Promise<FormatResult> {
-  // Parse model specification - use format model by default
   const modelString = options?.model ?? DEFAULT_FORMAT_MODEL;
-  const modelSpec = parseModelSpec(modelString);
-  if (!modelSpec) {
-    throw new Error(
-      `Invalid model format: "${modelString}". Expected format: <provider>/<model> (e.g., google/gemini-3-flash-preview)`
-    );
-  }
-
-  // Get API key
-  const apiKey = requireApiKey(modelSpec.provider, options);
 
   // Get schema
   const schema = options?.schema ?? (await loadSchema());
@@ -436,21 +475,20 @@ export async function formatRecipe(
   // Build format prompt
   const systemPrompt = buildFormatPrompt(schema);
 
-  // Get provider and run inference (text-only, no images)
-  // Low temperature: formatting is transcription, not creative writing
-  const provider = getProvider(modelSpec.provider);
-  const result = await provider.infer({
+  const { result, model } = await runInference({
+    stage: "format",
+    modelString,
     input: { text: extractedJson },
     systemPrompt,
-    model: modelSpec.model,
-    apiKey,
+    options,
+    responseFormat: { type: "text" },
+    streamStage: "formatting",
     temperature: 0.2,
-    onStream: withStage("formatting", options?.onStream),
   });
 
   return {
     markdown: postprocessMarkdown(result.text),
-    model: formatModelSpec(modelSpec),
+    model,
     metrics: result.metrics,
   };
 }

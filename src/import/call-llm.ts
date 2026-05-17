@@ -5,20 +5,41 @@
  * signature so callers (like doctor-handler) can migrate with minimal changes.
  */
 
-import type { InferenceResult, Provider } from "./types";
+import type {
+  InferenceAdapter,
+  InferenceAdapterResult,
+  InferenceResponseFormat,
+  InferenceResult,
+  InferenceStage,
+  Provider,
+} from "./types";
 import { parseModelSpec } from "./types";
 import { getProvider } from "./providers";
 import { getApiKeyEnvVar } from "./config";
 
 export interface CallLlmContent {
   text?: string;
-  images?: Array<{ data: ArrayBuffer; mimeType: "image/jpeg" | "image/png" | "image/webp" }>;
+  images?: Array<{
+    data: ArrayBuffer;
+    mimeType: "image/jpeg" | "image/png" | "image/webp";
+  }>;
 }
 
 export interface CallLlmApiKeys {
   google?: string;
   anthropic?: string;
   openai?: string;
+}
+
+export interface CallLlmOptions {
+  /** Host-provided inference adapter. When present, no provider API key is required. */
+  inference?: InferenceAdapter;
+  /** Semantic stage for the adapter. Defaults to "doctor" for this low-level wrapper. */
+  stage?: InferenceStage;
+  /** Optional response shape hint for the adapter. */
+  responseFormat?: InferenceResponseFormat;
+  /** Caller cancellation signal. */
+  signal?: AbortSignal;
 }
 
 function resolveKey(apiKeys: CallLlmApiKeys, provider: Provider): string {
@@ -37,12 +58,37 @@ function resolveKey(apiKeys: CallLlmApiKeys, provider: Provider): string {
  *
  * Drop-in replacement for the worker's old `callLlm` from `./llm.ts`.
  */
+export function callLlm(
+  providerModel: string,
+  systemPrompt: string,
+  content: CallLlmContent,
+  apiKeys: CallLlmApiKeys,
+): Promise<InferenceResult>;
+export function callLlm(
+  providerModel: string,
+  systemPrompt: string,
+  content: CallLlmContent,
+  apiKeys: CallLlmApiKeys,
+  options: CallLlmOptions & { inference: InferenceAdapter },
+): Promise<InferenceAdapterResult>;
 export async function callLlm(
   providerModel: string,
   systemPrompt: string,
   content: CallLlmContent,
   apiKeys: CallLlmApiKeys,
-): Promise<InferenceResult> {
+  options?: CallLlmOptions,
+): Promise<InferenceResult | InferenceAdapterResult> {
+  if (options?.inference) {
+    return options.inference.infer({
+      stage: options.stage ?? "doctor",
+      model: providerModel,
+      systemPrompt,
+      input: content,
+      responseFormat: options.responseFormat,
+      signal: options.signal,
+    });
+  }
+
   const spec = parseModelSpec(providerModel);
   if (!spec) {
     throw new Error(`Invalid model format: "${providerModel}"`);
